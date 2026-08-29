@@ -72,9 +72,6 @@ No `npm install`, no build step.
 5. In `index.html`, swap `SUPABASE_URL` / `SUPABASE_KEY` for your project's values. The publishable/anon key is meant to be public client-side; the security boundary is RLS, not the key.
 6. Open `index.html` directly in a browser, or point GitHub Pages at the repo root for a stable URL.
 
-## Demo
-
-*(Add screenshots or a short screen recording here — login screen, the RRHH pipeline board, and the Familias margin view are the three that tell the story fastest.)*
 
 ## What I'd change next
 
