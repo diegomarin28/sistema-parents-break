@@ -2,7 +2,7 @@
 
 A staffing operations platform built for a real childcare/transport business, replacing a WhatsApp-and-spreadsheets workflow with a single system: candidate intake → structured interviews → active roster → per-family billing, deployed as an installable PWA with zero infrastructure cost.
 
-**Live:** `https://<your-username>.github.io/sistema-parents-break/`
+**Live:** `https://diegomarin28.github.io/sistema-parents-break/`
 **Stack:** Vanilla JS · Supabase (Postgres, Auth, RLS) · GitHub Pages · PWA
 
 ---
