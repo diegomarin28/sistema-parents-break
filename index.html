@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema Parents Break</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
+:root{
+  --bg:#F3F6F0; --paper:#FBFAF5; --ink:#223629; --ink-soft:#52655A; --line:#DCD9C9;
+  --accent:#35604A; --accent-soft:#E4ECE2; --clay:#C97D42; --clay-soft:#F6E5D6;
+  --good:#3E7D4F; --good-soft:#E3EFE3; --warn:#B9862E; --warn-soft:#F7EBD4; --bad:#AB4B41; --bad-soft:#F5E1DD;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+h1,h2,h3{font-family:'Fraunces',serif;margin:0;}
+.wrap{max-width:980px;margin:0 auto;padding:24px 20px 100px;}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--clay);margin-bottom:6px;}
+h1{font-size:27px;font-weight:600;}
+.sub{color:var(--ink-soft);font-size:14px;margin-top:5px;max-width:640px;line-height:1.5;}
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}
+.who{font-size:12.5px;color:var(--ink-soft);text-align:right;}
+.who button{background:none;border:none;color:var(--accent);font-weight:600;cursor:pointer;font-size:12.5px;padding:0;margin-top:3px;}
+.modnav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0;}
+.modbtn{font-weight:600;font-size:13.5px;padding:9px 15px;border-radius:100px;border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer;font-family:'Inter',sans-serif;}
+.modbtn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.subnav{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:6px 0 20px;flex-wrap:wrap;}
+.subtab{font-weight:600;font-size:13.5px;color:var(--ink-soft);background:none;border:none;padding:9px 4px;cursor:pointer;border-bottom:2px solid transparent;margin-right:16px;font-family:'Inter',sans-serif;}
+.subtab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:16px;}
+.card h2{font-size:16.5px;font-weight:600;}
+.helper{color:var(--ink-soft);font-size:13px;margin:4px 0 12px;line-height:1.5;}
+label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+input[type=text],input[type=tel],input[type=date],input[type=number],input[type=email],input[type=password],select,textarea{
+  width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fff;color:var(--ink);font-family:'Inter',sans-serif;
+}
+textarea{resize:vertical;min-height:54px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.field{margin-bottom:12px;}
+.q{background:var(--accent-soft);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:13.5px;color:#2C4A38;line-height:1.45;}
+.scorebar{display:flex;gap:6px;margin-top:10px;}
+.scorebtn{flex:1;text-align:center;padding:9px 0;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);}
+.scorebtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
+.scorelabels{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-soft);margin-top:4px;}
+.flag-row{display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-bottom:1px dashed var(--line);}
+.flag-row:last-child{border-bottom:none;}
+.flag-row input{margin-top:3px;}
+.flag-row span{font-size:13.5px;line-height:1.4;}
+.flag-row.critical span::after{content:" · crítico";color:var(--bad);font-size:11px;font-weight:600;}
+.refrow{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center;}
+.refrow .chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);white-space:nowrap;}
+.smallbtn{background:none;border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:12.5px;cursor:pointer;color:var(--ink-soft);font-family:'Inter',sans-serif;}
+.smallbtn:hover{border-color:var(--accent);color:var(--accent);}
+.smallbtn.danger:hover{border-color:var(--bad);color:var(--bad);}
+.resultcard{display:flex;gap:20px;align-items:center;flex-wrap:wrap;}
+.gauge{width:88px;height:88px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.gauge .inner{width:68px;height:68px;border-radius:50%;background:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.gauge .num{font-family:'Fraunces',serif;font-size:20px;font-weight:600;}
+.gauge .max{font-size:10px;color:var(--ink-soft);}
+.badge{display:inline-block;padding:5px 12px;border-radius:100px;font-size:12.5px;font-weight:700;}
+.badge.good{background:var(--good-soft);color:var(--good);}
+.badge.warn{background:var(--warn-soft);color:var(--warn);}
+.badge.bad{background:var(--bad-soft);color:var(--bad);}
+.resultnote{font-size:13px;color:var(--ink-soft);margin-top:6px;line-height:1.5;}
+.actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;}
+.btn{font-weight:600;font-size:14px;border-radius:9px;padding:11px 20px;border:none;cursor:pointer;font-family:'Inter',sans-serif;}
+.btn.primary{background:var(--accent);color:#fff;}
+.btn.primary:disabled{background:#B7C4BB;cursor:not-allowed;}
+.btn.ghost{background:none;border:1px solid var(--line);color:var(--ink-soft);}
+.warnbox{background:var(--warn-soft);border:1px solid #E4C888;border-radius:9px;padding:10px 13px;font-size:13px;color:#7A5A16;margin-top:14px;line-height:1.5;}
+.okbox{background:var(--good-soft);border:1px solid #B9D9BE;border-radius:9px;padding:10px 13px;font-size:13px;color:var(--good);margin-top:14px;line-height:1.5;}
+.cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;}
+.pcard{background:var(--paper);border:1px solid var(--line);border-radius:13px;padding:16px;}
+.pcard .ph{width:100%;aspect-ratio:1;border-radius:10px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent);font-family:'Fraunces',serif;font-size:26px;font-weight:600;margin-bottom:10px;overflow:hidden;}
+.pcard .ph img{width:100%;height:100%;object-fit:cover;}
+.pcard .name{font-family:'Fraunces',serif;font-size:16px;font-weight:600;}
+.pcard .meta{font-size:12.5px;color:var(--ink-soft);margin:3px 0 10px;line-height:1.5;}
+.pcard .rowbtns{display:flex;gap:6px;flex-wrap:wrap;}
+.empty{color:var(--ink-soft);font-size:14px;text-align:center;padding:40px 0;}
+.candlist .item{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer;}
+.candlist .item:hover{border-color:var(--accent);}
+.candlist .item .name{font-family:'Fraunces',serif;font-size:16px;font-weight:600;}
+.candlist .item .meta{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+.candlist .item .sc{margin-left:auto;text-align:right;}
+.candlist .item .sc .n{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px;}
+.detailback{background:none;border:none;color:var(--accent);font-weight:600;font-size:13.5px;cursor:pointer;padding:0;margin-bottom:14px;}
+.psico-img{width:100%;max-width:260px;border:1px solid var(--line);border-radius:10px;background:#fff;margin-bottom:10px;}
+details.crit{margin-top:8px;font-size:13px;color:var(--ink-soft);}
+details.crit summary{cursor:pointer;font-weight:600;color:var(--accent);}
+details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
+.importtable{width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0;}
+.importtable th,.importtable td{border:1px solid var(--line);padding:5px 7px;text-align:left;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;}
+.maprow{display:grid;grid-template-columns:180px 1fr;gap:10px;align-items:center;margin-bottom:8px;}
+.placeholder{text-align:center;padding:50px 20px;color:var(--ink-soft);}
+.placeholder h2{font-size:19px;margin-bottom:8px;color:var(--ink);}
+.placeholder p{max-width:440px;margin:0 auto;line-height:1.6;font-size:14px;}
+.fichadl{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-size:13px;}
+.fichadl div{padding:4px 0;border-bottom:1px dashed var(--line);}
+.fichadl b{color:var(--ink-soft);font-weight:600;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.02em;}
+.asigtable{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;}
+.asigtable th,.asigtable td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;}
+.margenpos{color:var(--good);font-weight:600;}
+.margenneg{color:var(--bad);font-weight:600;}
+.loginwrap{max-width:360px;margin:80px auto;text-align:center;}
+.loginwrap .card{text-align:left;}
+@media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}}
+@media print{.modnav,.subnav,.actions,button{display:none !important;}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+const SUPABASE_URL = 'https://wvewzamdohrpfhpccvcz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_NX4E4FfAkwFQSFo4Rgl0Jg_IcebuaaI';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage }
+});
+
+function normaliza(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+
+/* columnas de candidatas que vienen del form / ficha (nombres = columnas reales de la tabla) */
+const FICHA_CAMPOS = [
+  {key:'nombre', label:'Nombre', hints:['nombre']},
+  {key:'apellido', label:'Apellido', hints:['apellido']},
+  {key:'edad', label:'Edad / fecha de nacimiento', hints:['edad']},
+  {key:'disponibilidad', label:'Disponibilidad', hints:['disponibilidad para hacer']},
+  {key:'zona_sitting', label:'Zona en la que puede hacer sitting', hints:['que puede hacer sitting']},
+  {key:'disponible_tipo', label:'Disponible para', hints:['disponible para realizar']},
+  {key:'fechas_punta', label:'Fechas en Punta del Este', hints:['punta del este']},
+  {key:'primeros_auxilios', label:'Curso primeros auxilios', hints:['primeros auxilio']},
+  {key:'trabaja_actualmente', label:'Trabaja actualmente', hints:['trabajas actualmente']},
+  {key:'cambia_panales', label:'Cambia pañales', hints:['panales']},
+  {key:'dispone_traslados', label:'Dispuesta a traslados', hints:['traslado']},
+  {key:'patologias', label:'Patologías / condiciones declaradas', hints:['patolog']},
+  {key:'capacitacion_extra', label:'Capacitación extra', hints:['capacitacion']},
+  {key:'comentarios', label:'Comentarios', hints:['comentario']},
+  {key:'licencia', label:'Licencia de conducir', hints:['licencia']},
+  {key:'mail', label:'Mail', hints:['mail','correo']},
+  {key:'telefono', label:'Teléfono', hints:['telefono','celular']},
+  {key:'universidad', label:'Universidad / qué estudia', hints:['universidad']},
+  {key:'bachillerato', label:'Bachillerato / colegio', hints:['bachillerato']},
+  {key:'cocina', label:'Cocina', hints:['cocina']},
+  {key:'idiomas', label:'Idiomas', hints:['idioma']},
+  {key:'experiencia', label:'Experiencia con niños', hints:['experiencia']},
+  {key:'zona', label:'Zona en la que vive', hints:['vive']},
+];
+
+const COMPETENCIAS = [
+  {key:'presentacion', titulo:'Presentación', preguntas:[], helper:'Impresión general: puntualidad, prolijidad, primera impresión.'},
+  {key:'comunicacion', titulo:'Comunicación', preguntas:[], helper:'Claridad para expresarse, fluidez, cómo responde en la charla.'},
+  {key:'responsabilidad', titulo:'Responsabilidad y puntualidad', preguntas:['Contame de una vez que tuviste que cambiar un plan personal porque te llamaron para cubrir un turno de urgencia. ¿Qué hiciste?','¿Cómo avisás si sabés que vas a llegar tarde o no vas a poder ir a un turno?']},
+  {key:'seguridad', titulo:'Seguridad y manejo de imprevistos', preguntas:['Si un nene se cae y se lastima mientras estás sola con él, ¿qué es lo primero que hacés?','¿Qué harías si no podés comunicarte con los padres en una emergencia?']},
+  {key:'limites', titulo:'Límites y disciplina positiva', preguntas:['Contame cómo manejás una rabieta fuerte de un nene de 3-4 años.','¿Qué opinás de poner límites firmes sin gritar ni castigar?']},
+  {key:'experiencia', titulo:'Experiencia práctica y logística', preguntas:['Contame tu experiencia con nenes de la edad que buscamos. ¿Manejaste rutinas de sueño o comida?','Si el rol incluye traslados: ¿tenés carné vigente y experiencia manejando con niños en el auto?']},
+  {key:'actitud', titulo:'Actitud y calidez', preguntas:['¿Qué te gusta de cuidar niños? Contame una anécdota linda.','¿Cómo te llevás con coordinar horarios por WhatsApp día a día?']},
+];
+const REDFLAGS = [
+  {key:'tarde', texto:'Llegó tarde a la entrevista sin avisar', critico:false},
+  {key:'malhabla', texto:'Habla mal de familias o trabajos anteriores sin matices', critico:false},
+  {key:'sinref', texto:'No puede dar ni un contacto de referencia', critico:true},
+  {key:'evade', texto:'Evade preguntas directas sobre por qué dejó el último trabajo', critico:false},
+  {key:'inseguraseg', texto:'Se muestra insegura o evasiva ante preguntas básicas de seguridad', critico:true},
+  {key:'despectiva', texto:'Actitud despectiva hacia límites o reglas puestas por la familia', critico:false},
+];
+const PSICO_IMGS = [
+  {id:'p1', svg:`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#fff"/><path d="M100 20 C60 40 40 80 60 110 C30 120 20 160 60 175 C90 190 110 170 100 150 C140 165 175 130 150 100 C180 85 170 45 135 45 C130 20 110 15 100 20Z" fill="#2C4A38" opacity="0.85"/></svg>`},
+  {id:'p2', svg:`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#fff"/><ellipse cx="100" cy="70" rx="55" ry="35" fill="#C97D42" opacity="0.85"/><ellipse cx="100" cy="140" rx="70" ry="40" fill="#35604A" opacity="0.7"/><circle cx="60" cy="60" r="14" fill="#B9862E"/><circle cx="140" cy="60" r="14" fill="#B9862E"/></svg>`},
+  {id:'p3', svg:`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#fff"/><path d="M100 15 L130 80 L190 90 L145 130 L160 190 L100 155 L40 190 L55 130 L10 90 L70 80 Z" fill="#52655A" opacity="0.8"/></svg>`},
+];
+
+/* ================= AUTH ================= */
+let session = null;
+async function boot(){
+  const { data } = await sb.auth.getSession();
+  session = data.session;
+  sb.auth.onAuthStateChange((_event, s) => { session = s; renderRoot(); });
+  renderRoot();
+}
+function renderRoot(){
+  if(!session){ renderLogin(); return; }
+  renderApp();
+}
+function renderLogin(){
+  document.getElementById('app').innerHTML = `
+    <div class="loginwrap">
+      <div class="eyebrow">Parents Break</div>
+      <h1 style="margin-bottom:18px;">Sistema Parents Break</h1>
+      <div class="card">
+        <div class="field"><label>Mail</label><input type="email" id="login-mail"></div>
+        <div class="field"><label>Contraseña</label><input type="password" id="login-pass"></div>
+        <label class="chk" style="display:flex;align-items:center;gap:7px;margin-bottom:14px;"><input type="checkbox" id="login-recordar" checked> Recordarme en este dispositivo</label>
+        <button class="btn primary" style="width:100%;" onclick="login()">Entrar</button>
+        <div id="loginwarn"></div>
+      </div>
+    </div>`;
+  document.getElementById('login-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') login(); });
+}
+async function login(){
+  const email = document.getElementById('login-mail').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const recordar = document.getElementById('login-recordar').checked;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ document.getElementById('loginwarn').innerHTML = `<div class="warnbox">${error.message==='Invalid login credentials' ? 'Mail o contraseña incorrectos.' : error.message}</div>`; return; }
+  if(!recordar){ window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); }); }
+}
+async function logout(){ await sb.auth.signOut(); }
+
+/* ================= APP SHELL ================= */
+const MODULOS = [
+  {key:'rrhh', label:'RR.HH.'},
+  {key:'familias', label:'Familias'},
+  {key:'sittings', label:'Sittings & traslados'},
+  {key:'finanzas', label:'Finanzas'},
+  {key:'marketing', label:'Marketing'},
+  {key:'legal', label:'Legal'},
+];
+let moduloActivo = 'rrhh';
+let rrhhTab = 'intake';
+
+function renderApp(){
+  document.getElementById('app').innerHTML = `
+    <header>
+      <div class="topbar">
+        <div>
+          <div class="eyebrow">Parents Break</div>
+          <h1>Sistema Parents Break</h1>
+          <div class="sub">RR.HH., familias, sittings/traslados, finanzas, marketing y legal.</div>
+        </div>
+        <div class="who">${session.user.email}<br><button onclick="logout()">Cerrar sesión</button></div>
+      </div>
+      <div class="modnav" id="modnav"></div>
+    </header>
+    <div id="modcontent"></div>
+  `;
+  renderNav();
+  renderModulo();
+}
+function renderNav(){
+  document.getElementById('modnav').innerHTML = MODULOS.map(m=>
+    `<button class="modbtn ${m.key===moduloActivo?'active':''}" onclick="setModulo('${m.key}')">${m.label}</button>`
+  ).join('');
+}
+function setModulo(k){ moduloActivo=k; renderNav(); renderModulo(); }
+function renderModulo(){
+  const cont = document.getElementById('modcontent');
+  if(moduloActivo==='rrhh'){ cont.innerHTML = rrhhShell(); afterRrhhRender(); return; }
+  if(moduloActivo==='familias'){ cont.innerHTML = '<div id="fam-body"></div>'; renderFamilias(document.getElementById('fam-body')); return; }
+  const textos = {
+    sittings:['Sittings & traslados','Esto ya lo tenés andando en el registro diario. Próximo paso: sumarlo acá.'],
+    finanzas:['Finanzas','Coordinar la app de registro con la conciliación de Itaú en un solo lugar.'],
+    marketing:['Marketing','Calendario de fechas especiales con sugerencias de contenido con anticipación.'],
+    legal:['Legal','Biblioteca de contratos de niñeras y traslados, y generación de contratos nuevos.'],
+  };
+  const [t,d] = textos[moduloActivo];
+  cont.innerHTML = `<div class="card placeholder"><h2>${t}</h2><p>${d}</p></div>`;
+}
+
+/* ================= RR.HH. ================= */
+function rrhhShell(){
+  const tabs = [['intake','Candidatas a entrevistar'],['entrevista','Entrevista'],['guardadas','Candidatas guardadas'],['ninieras','Niñeras']];
+  return `<div class="subnav">${tabs.map(([k,l])=>`<button class="subtab ${rrhhTab===k?'active':''}" data-rrhhtab="${k}">${l}</button>`).join('')}</div><div id="rrhh-body"></div>`;
+}
+function afterRrhhRender(){
+  document.querySelectorAll('[data-rrhhtab]').forEach(b=>b.addEventListener('click', ()=>{ rrhhTab=b.dataset.rrhhtab; renderModulo(); }));
+  const body = document.getElementById('rrhh-body');
+  if(rrhhTab==='intake') renderIntake(body);
+  if(rrhhTab==='entrevista') renderEntrevista(body);
+  if(rrhhTab==='guardadas') renderGuardadas(body);
+  if(rrhhTab==='ninieras') renderNinieras(body);
+}
+function errBox(e){ return `<div class="warnbox">Error de conexión con la base: ${e.message||e}</div>`; }
+
+/* ---- Candidatas a entrevistar (intake) ---- */
+let intakeItems = [];
+let intakeFiltro = 'Todas';
+function renderIntake(body){
+  body.innerHTML = `
+    <div class="card">
+      <h2>Cargar candidata manualmente</h2>
+      <div class="helper">Para carga rápida. Para traer la ficha completa del form, usá el importador CSV de abajo.</div>
+      <div class="grid3">
+        <div class="field"><label>Nombre</label><input type="text" id="in-nombre"></div>
+        <div class="field"><label>Teléfono</label><input type="tel" id="in-tel"></div>
+        <div class="field"><label>Zona</label><input type="text" id="in-zona"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Edad</label><input type="text" id="in-edad"></div>
+        <div class="field"><label>Cómo llegó</label><select id="in-origen"><option>Instagram / Form</option><option>Recomendada</option><option>Otro</option></select></div>
+        <div class="field"><label>Experiencia (resumen)</label><input type="text" id="in-exp"></div>
+      </div>
+      <div class="field"><label>Tipo</label><select id="in-tipo"><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
+      <button class="btn primary" onclick="addIntake()">Agregar candidata</button>
+    </div>
+    <div class="card">
+      <h2>Importar desde CSV (form de Google)</h2>
+      <div class="helper">Descargá la planilla "Entrevistadas" del Drive como CSV y subila acá.</div>
+      <input type="file" id="csvfile" accept=".csv">
+      <div id="importbox"></div>
+    </div>
+    <div class="subnav" style="border-bottom:none;margin:0 0 10px;">
+      ${['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="smallbtn" onclick="intakeFiltro='${t}';loadIntake();" style="${intakeFiltro===t?'background:var(--accent);color:#fff;border-color:var(--accent);':''}">${t}</button>`).join(' ')}
+    </div>
+    <div class="cardgrid" id="intakegrid"></div>
+  `;
+  document.getElementById('csvfile').addEventListener('change', handleCSV);
+  loadIntake();
+}
+async function addIntake(){
+  const nombre = document.getElementById('in-nombre').value.trim();
+  if(!nombre){ alert('Falta el nombre.'); return; }
+  const item = { nombre, telefono:document.getElementById('in-tel').value, zona:document.getElementById('in-zona').value,
+    edad:document.getElementById('in-edad').value, origen:document.getElementById('in-origen').value, experiencia:document.getElementById('in-exp').value,
+    tipo:document.getElementById('in-tipo').value, estado:'intake' };
+  const { error } = await sb.from('candidatas').insert(item);
+  if(error){ alert('No se pudo guardar: '+error.message); return; }
+  ['in-nombre','in-tel','in-zona','in-edad','in-exp'].forEach(id=>document.getElementById(id).value='');
+  loadIntake();
+}
+async function loadIntake(){
+  const grid = document.getElementById('intakegrid');
+  if(!grid) return;
+  grid.innerHTML = '<div class="empty">Cargando…</div>';
+  let q = sb.from('candidatas').select('*').eq('estado','intake').order('created_at',{ascending:false});
+  if(intakeFiltro!=='Todas') q = q.eq('tipo', intakeFiltro);
+  const { data, error } = await q;
+  if(error){ grid.innerHTML = errBox(error); return; }
+  intakeItems = data;
+  if(!intakeItems.length){ grid.innerHTML = '<div class="empty">No hay candidatas esperando entrevista.</div>'; return; }
+  grid.innerHTML = intakeItems.map((c,i)=>`
+    <div class="pcard">
+      <div class="ph">${(c.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="name">${c.nombre} ${c.apellido||''} <span class="badge warn" style="font-size:10px;padding:2px 8px;">${c.tipo||'Niñera'}</span></div>
+      <div class="meta">${c.zona||'zona s/d'} · ${c.edad?c.edad+(String(c.edad).length<=2?' años':''):'edad s/d'}<br>${c.origen||''} ${c.telefono?'· '+c.telefono:''}</div>
+      <div class="rowbtns">
+        <button class="smallbtn" onclick="verFichaIntake(${i})">Ver ficha</button>
+        <button class="smallbtn" onclick="agendarDesdeIntake(${i})">Agendar entrevista</button>
+        <button class="smallbtn danger" onclick="descartarIntake('${c.id}')">Descartar</button>
+      </div>
+    </div>`).join('') + '<div id="intakedetalle" style="grid-column:1/-1;"></div>';
+}
+function verFichaIntake(i){
+  const c = intakeItems[i];
+  const rows = FICHA_CAMPOS.filter(f=>c[f.key]).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
+  document.getElementById('intakedetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('intakedetalle').innerHTML=''">← Cerrar</button><h2>${c.nombre} ${c.apellido||''}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos cargados.</div>'}</div></div>`;
+}
+async function descartarIntake(id){
+  if(!confirm('¿Descartar esta candidata? No se puede deshacer.')) return;
+  const { error } = await sb.from('candidatas').delete().eq('id', id);
+  if(error){ alert('No se pudo descartar: '+error.message); return; }
+  loadIntake();
+}
+function agendarDesdeIntake(i){
+  const c = intakeItems[i];
+  rrhhTab = 'entrevista';
+  renderModulo();
+  setTimeout(()=>{
+    document.getElementById('f-nombre').value = (c.nombre||'') + (c.apellido? ' '+c.apellido:'');
+    document.getElementById('f-telefono').value = c.telefono||'';
+    document.getElementById('f-zona').value = c.zona||'';
+    document.getElementById('f-origen').value = c.origen||'';
+    document.getElementById('f-exp-previa').value = c.experiencia||'';
+    entrevistaState.tipo = c.tipo || 'Niñera';
+    entrevistaState.fichaOrigen = c;
+    entrevistaState.candidataId = c.id;
+    renderFichaOrigen();
+  }, 30);
+}
+function renderFichaOrigen(){
+  const box = document.getElementById('fichaOrigenBox');
+  if(!box) return;
+  const c = entrevistaState.fichaOrigen;
+  if(!c){ box.innerHTML=''; return; }
+  const rows = FICHA_CAMPOS.filter(f=>c[f.key] && !['nombre','apellido','telefono','zona'].includes(f.key)).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
+  box.innerHTML = `<div class="card"><h2>Ficha del formulario</h2><div class="helper">Cargada por ella misma antes de la entrevista — no editable acá.</div><div class="fichadl">${rows||'<div>Sin más datos.</div>'}</div></div>`;
+}
+
+/* ---- Importador CSV ---- */
+function parseCSV(text){
+  const rows = []; let row=[], cur='', inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(inQ){ if(ch==='"' && text[i+1]==='"'){cur+='"';i++;} else if(ch==='"'){inQ=false;} else cur+=ch; }
+    else{ if(ch==='"') inQ=true; else if(ch===','){row.push(cur);cur='';}
+      else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n')i++; row.push(cur);cur=''; if(row.some(v=>v!=='')) rows.push(row); row=[]; }
+      else cur+=ch; }
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return rows;
+}
+let csvRows=[], csvHeaders=[];
+function handleCSV(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{ const rows = parseCSV(reader.result); csvHeaders = rows[0]||[]; csvRows = rows.slice(1).filter(r=>r.length && r.some(v=>v.trim()!=='')); renderImportMap(); };
+  reader.readAsText(file, 'UTF-8');
+}
+function renderImportMap(){
+  const box = document.getElementById('importbox');
+  const opts = ['<option value="">— no mapear —</option>'].concat(csvHeaders.map((h,i)=>`<option value="${i}">${h||'(columna '+(i+1)+')'}</option>`)).join('');
+  box.innerHTML = `
+    <div class="helper" style="margin-top:12px;">Se detectaron ${csvRows.length} filas. Revisá el mapeo:</div>
+    ${FICHA_CAMPOS.map(f=>`<div class="maprow"><label style="margin:0;">${f.label}${f.key==='nombre'?' *':''}</label><select id="map-${f.key}">${opts}</select></div>`).join('')}
+    <table class="importtable"><thead><tr>${csvHeaders.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${csvRows.slice(0,3).map(r=>`<tr>${r.map(v=>`<td>${v}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>
+    <button class="btn primary" onclick="importarCSV()">Importar ${csvRows.length} candidatas</button>
+    <div id="importresult"></div>
+  `;
+  const usados = new Set();
+  FICHA_CAMPOS.forEach(f=>{
+    let idx=-1;
+    for(let i=0;i<csvHeaders.length;i++){
+      if(usados.has(i)) continue;
+      const h = normaliza(csvHeaders[i]);
+      if(f.hints.some(hint=>h.includes(normaliza(hint)))){ idx=i; break; }
+    }
+    if(idx>-1){ document.getElementById('map-'+f.key).value = idx; usados.add(idx); }
+  });
+}
+async function importarCSV(){
+  const map = {};
+  FICHA_CAMPOS.forEach(f=>{ const v = document.getElementById('map-'+f.key).value; map[f.key] = v===''? null : parseInt(v); });
+  if(map.nombre===null){ document.getElementById('importresult').innerHTML = '<div class="warnbox">Tenés que mapear al menos el campo Nombre.</div>'; return; }
+  const registros = [];
+  for(const row of csvRows){
+    const nombre = (row[map.nombre]||'').trim();
+    if(!nombre) continue;
+    const item = { origen:'Instagram / Form', tipo:'Niñera', estado:'intake' };
+    FICHA_CAMPOS.forEach(f=>{ if(map[f.key]!==null) item[f.key] = (row[map[f.key]]||'').trim(); });
+    registros.push(item);
+  }
+  const { error } = await sb.from('candidatas').insert(registros);
+  if(error){ document.getElementById('importresult').innerHTML = `<div class="warnbox">Error al importar: ${error.message}</div>`; return; }
+  document.getElementById('importresult').innerHTML = `<div class="okbox">Se importaron ${registros.length} candidatas.</div>`;
+  loadIntake();
+}
+
+/* ---- Entrevista ---- */
+let entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null };
+function renderEntrevista(body){
+  body.innerHTML = `
+    <div class="card">
+      <h2>Datos de la entrevista</h2>
+      <div class="grid3">
+        <div class="field"><label>Nombre de la candidata</label><input type="text" id="f-nombre"></div>
+        <div class="field"><label>Fecha</label><input type="date" id="f-fecha"></div>
+        <div class="field"><label>Entrevistó</label><select id="f-entrevisto"><option value="">Elegir…</option><option>Paulina G</option><option>Delfina F</option><option>Otra</option></select></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Teléfono</label><input type="tel" id="f-telefono"></div>
+        <div class="field"><label>Zona</label><input type="text" id="f-zona"></div>
+        <div class="field"><label>Rol pensado</label><select id="f-rol"><option value="">Elegir…</option><option>Turno fijo semanal</option><option>Sittings espontáneos</option><option>Traslados</option><option>Sin definir</option></select></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Cómo llegó</label><input type="text" id="f-origen"></div>
+        <div class="field"><label>Experiencia previa (resumen)</label><input type="text" id="f-exp-previa"></div>
+      </div>
+    </div>
+    <div id="fichaOrigenBox"></div>
+    <div id="competencias"></div>
+    <div class="card">
+      <h2>Explicación de juegos y capacitación extra</h2>
+      <div class="field">
+        <label>¿Le explicaste cómo funcionan los juegos/actividades y mostró que entendió?</label>
+        <div class="scorebar" style="max-width:220px;">
+          <div class="scorebtn" data-juegos="Si">Sí</div>
+          <div class="scorebtn" data-juegos="No">No</div>
+        </div>
+      </div>
+      <div class="field"><label>Capacitación extra (cursos, certificaciones que mencionó)</label><textarea id="f-capacitacion"></textarea></div>
+    </div>
+    <div class="card">
+      <h2>Psicotécnico — guía de observación</h2>
+      <div class="helper">No es un test proyectivo clínico ni tiene validez diagnóstica: es una guía para observar cómo responde bajo una consigna ambigua, con criterios orientativos.</div>
+      ${PSICO_IMGS.map((img)=>`
+        <div style="margin-bottom:16px;">
+          <div class="psico-img">${img.svg}</div>
+          <label>¿Qué ve la candidata? (anotá su respuesta tal cual)</label>
+          <textarea data-psico="${img.id}"></textarea>
+          <details class="crit"><summary>Qué mirar en la respuesta</summary>
+            <ul><li>¿Responde rápido y con seguridad, o duda mucho?</li><li>¿La respuesta es concreta o muy vaga/evasiva?</li><li>¿Menciona espontáneamente algo relacionado a cuidado, personas o interacción?</li><li>¿Se pone nerviosa o incómoda con la ambigüedad de la consigna?</li></ul>
+          </details>
+        </div>`).join('')}
+    </div>
+    <div class="card"><h2>Señales de alerta observadas</h2><div class="helper">Marcá solo lo que efectivamente observaste.</div><div id="redflags"></div></div>
+    <div class="card"><h2>Referencias</h2><div id="reflist"></div><button class="smallbtn" onclick="addRef()">+ Agregar referencia</button></div>
+    <div class="card"><h2>Notas finales</h2><textarea id="f-notas" placeholder="Impresión general…"></textarea></div>
+    <div class="card resultcard" id="resultado" style="display:none;"></div>
+    <div class="actions">
+      <button class="btn primary" id="btnGuardar" onclick="guardarCandidata()">Guardar candidata</button>
+      <button class="btn ghost" onclick="window.print()">Imprimir</button>
+      <button class="btn ghost" onclick="limpiarForm()">Vaciar formulario</button>
+    </div>
+    <div id="warnArea"></div>
+  `;
+  renderFichaOrigen();
+  renderCompetencias();
+  renderRedflags();
+  renderRefs();
+  document.querySelectorAll('[data-juegos]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      entrevistaState.explicacionJuegos = el.dataset.juegos;
+      document.querySelectorAll('[data-juegos]').forEach(b=>b.classList.remove('selected'));
+      el.classList.add('selected');
+    });
+  });
+}
+function renderCompetencias(){
+  const cont = document.getElementById('competencias');
+  cont.innerHTML = COMPETENCIAS.map(c => `
+    <div class="card"><h2>${c.titulo}</h2>${c.preguntas.length? c.preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper" style="margin-top:-4px;">${c.helper||''}</div>`}
+      <textarea placeholder="Notas de la respuesta…" data-notes="${c.key}"></textarea>
+      <div class="scorebar" data-scorebar="${c.key}">${[1,2,3,4,5].map(n=>`<div class="scorebtn" data-score="${c.key}:${n}">${n}</div>`).join('')}</div>
+      <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div>
+  `).join('');
+  cont.querySelectorAll('[data-score]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const [key,n] = el.dataset.score.split(':');
+      entrevistaState.competencias[key] = entrevistaState.competencias[key] || {};
+      entrevistaState.competencias[key].score = parseInt(n);
+      cont.querySelectorAll(`[data-scorebar="${key}"] .scorebtn`).forEach(b=>b.classList.remove('selected'));
+      el.classList.add('selected'); calcular();
+    });
+  });
+  cont.querySelectorAll('[data-notes]').forEach(el=>{
+    el.addEventListener('input', ()=>{ const key=el.dataset.notes; entrevistaState.competencias[key]=entrevistaState.competencias[key]||{}; entrevistaState.competencias[key].notes=el.value; });
+  });
+}
+function renderRedflags(){
+  const cont = document.getElementById('redflags');
+  cont.innerHTML = REDFLAGS.map(f=>`<label class="flag-row ${f.critico?'critical':''}"><input type="checkbox" data-flag="${f.key}"><span>${f.texto}</span></label>`).join('');
+  cont.querySelectorAll('[data-flag]').forEach(el=>{ el.addEventListener('change', ()=>{ entrevistaState.redflags[el.dataset.flag]=el.checked; calcular(); }); });
+}
+function addRef(){ entrevistaState.refs.push({name:'',phone:'',relacion:'',confirmado:false}); renderRefs(); }
+function renderRefs(){
+  const cont = document.getElementById('reflist');
+  cont.innerHTML = entrevistaState.refs.map((r,i)=>`
+    <div class="refrow">
+      <input type="text" placeholder="Nombre" value="${r.name}" oninput="entrevistaState.refs[${i}].name=this.value">
+      <input type="tel" placeholder="Teléfono" value="${r.phone}" oninput="entrevistaState.refs[${i}].phone=this.value">
+      <input type="text" placeholder="Relación" value="${r.relacion}" oninput="entrevistaState.refs[${i}].relacion=this.value">
+      <label class="chk"><input type="checkbox" ${r.confirmado?'checked':''} onchange="entrevistaState.refs[${i}].confirmado=this.checked"> Confirmada</label>
+    </div>`).join('');
+}
+function calcular(){
+  const scores = COMPETENCIAS.map(c => entrevistaState.competencias[c.key]?.score).filter(v=>v!==undefined);
+  const completo = scores.length === COMPETENCIAS.length;
+  const total = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+  const criticoMarcado = REDFLAGS.some(f=>f.critico && entrevistaState.redflags[f.key]);
+  let badgeClass='warn', badgeTexto='Faltan puntajes', nota='Completá los bloques de arriba para tener una recomendación.';
+  if(completo){
+    if(criticoMarcado){ badgeClass='warn'; badgeTexto='Con reservas'; nota='Hay una señal de alerta crítica marcada — revisar antes de avanzar.'; }
+    else if(total>=4.2){ badgeClass='good'; badgeTexto='Recomendada'; nota='Puntaje sólido y sin señales críticas.'; }
+    else if(total>=3){ badgeClass='warn'; badgeTexto='Con reservas'; nota='Puntaje intermedio — conviene una segunda charla.'; }
+    else { badgeClass='bad'; badgeTexto='No recomendada'; nota='Puntaje bajo en varias competencias.'; }
+  }
+  const gaugeColor = badgeClass==='good'?'var(--good)':badgeClass==='bad'?'var(--bad)':'var(--warn)';
+  const pct = completo?(total/5*100):0;
+  const box = document.getElementById('resultado');
+  box.style.display='flex';
+  box.innerHTML = `<div class="gauge" style="background:conic-gradient(${gaugeColor} ${pct}%, var(--line) 0);"><div class="inner"><div class="num">${completo?total.toFixed(1):'—'}</div><div class="max">/ 5</div></div></div>
+    <div><span class="badge ${badgeClass}">${badgeTexto}</span><div class="resultnote">${nota}</div></div>`;
+  document.getElementById('btnGuardar').disabled = !completo;
+  return {total, completo, recomendacion:badgeTexto};
+}
+async function guardarCandidata(){
+  const nombre = document.getElementById('f-nombre').value.trim();
+  const warnArea = document.getElementById('warnArea');
+  warnArea.innerHTML='';
+  if(!nombre){ warnArea.innerHTML='<div class="warnbox">Falta el nombre.</div>'; return; }
+  const {total, completo, recomendacion} = calcular();
+  if(!completo){ warnArea.innerHTML='<div class="warnbox">Faltan puntajes en algún bloque.</div>'; return; }
+  const psico = {};
+  PSICO_IMGS.forEach(img=>{ const el = document.querySelector(`[data-psico="${img.id}"]`); psico[img.id]= el?el.value:''; });
+
+  let candidataId = entrevistaState.candidataId;
+  if(candidataId){
+    const { error } = await sb.from('candidatas').update({ estado:'entrevistada', telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value }).eq('id', candidataId);
+    if(error){ warnArea.innerHTML = errBox(error); return; }
+  } else {
+    const { data, error } = await sb.from('candidatas').insert({
+      nombre, telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value,
+      origen:document.getElementById('f-origen').value, experiencia:document.getElementById('f-exp-previa').value,
+      tipo: entrevistaState.tipo || 'Niñera', estado:'entrevistada',
+    }).select().single();
+    if(error){ warnArea.innerHTML = errBox(error); return; }
+    candidataId = data.id;
+  }
+
+  const { error: e2 } = await sb.from('entrevistas').insert({
+    candidata_id: candidataId,
+    fecha: document.getElementById('f-fecha').value || null,
+    entrevisto: document.getElementById('f-entrevisto').value,
+    rol: document.getElementById('f-rol').value,
+    puntajes: entrevistaState.competencias,
+    redflags: entrevistaState.redflags,
+    referencias: entrevistaState.refs,
+    psico,
+    explicacion_juegos: entrevistaState.explicacionJuegos,
+    notas: document.getElementById('f-notas').value,
+    total: Number(total.toFixed(2)),
+    recomendacion,
+  });
+  if(e2){ warnArea.innerHTML = errBox(e2); return; }
+  warnArea.innerHTML='<div class="okbox">Candidata guardada. La vas a ver en "Candidatas guardadas".</div>';
+  limpiarForm();
+}
+function limpiarForm(){
+  entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null };
+  renderEntrevista(document.getElementById('rrhh-body'));
+}
+
+/* ---- Candidatas guardadas ---- */
+let candidatasItems = [];
+function renderGuardadas(body){
+  body.innerHTML = `
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+      <div><h2>Candidatas guardadas</h2><div class="helper" style="margin:2px 0 0;">Ya entrevistadas, todavía no son niñeras.</div></div>
+      <button class="smallbtn" onclick="exportCSVcand()">Exportar CSV</button>
+    </div>
+    <div class="candlist" id="candlist"></div>
+    <div id="detalle"></div>
+  `;
+  cargarGuardadas();
+}
+async function cargarGuardadas(){
+  const cont = document.getElementById('candlist');
+  cont.innerHTML = '<div class="empty">Cargando…</div>';
+  const { data, error } = await sb.from('entrevistas').select('*, candidatas(*)').order('created_at',{ascending:false});
+  if(error){ cont.innerHTML = errBox(error); return; }
+  candidatasItems = data;
+  if(!candidatasItems.length){ cont.innerHTML='<div class="empty">Todavía no hay candidatas guardadas.</div>'; return; }
+  cont.innerHTML = candidatasItems.map((c,i)=>{
+    const cd = c.candidatas;
+    return `<div class="item" onclick="verDetalle(${i})">
+      <div><div class="name">${cd.nombre} ${cd.estado==='contratada'?'✓':''}</div><div class="meta">${c.fecha||'sin fecha'} · ${cd.zona||'zona s/d'} · ${c.rol||'rol s/d'}</div></div>
+      <div class="sc"><div class="n">${Number(c.total).toFixed(1)} / 5</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${cd.estado==='contratada'?'Contratada':c.recomendacion}</span></div>
+    </div>`;
+  }).join('');
+}
+function verDetalle(i){
+  const c = candidatasItems[i];
+  const cd = c.candidatas;
+  const det = document.getElementById('detalle');
+  const compHtml = COMPETENCIAS.map(comp=>{ const d=c.puntajes[comp.key]||{}; return `<div class="card"><h2>${comp.titulo} — <span style="color:var(--accent)">${d.score||'—'}/5</span></h2><div class="helper" style="margin-top:6px;">${d.notes||'(sin notas)'}</div></div>`; }).join('');
+  const flags = REDFLAGS.filter(f=>c.redflags[f.key]);
+  const refs = c.referencias||[];
+  const refsHtml = refs.length ? refs.map(r=>`<div class="q">${r.name||'(sin nombre)'} · ${r.phone||'sin tel'} · ${r.relacion||'—'} ${r.confirmado?'· ✓ confirmada':''}</div>`).join('') : '<div class="helper">Sin referencias.</div>';
+  const psicoHtml = c.psico ? PSICO_IMGS.map(img=>`<div class="q"><b>${img.id}:</b> ${c.psico[img.id]||'(sin respuesta anotada)'}</div>`).join('') : '';
+  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
+  det.innerHTML = `
+    <button class="detailback" onclick="document.getElementById('detalle').innerHTML=''">← Volver</button>
+    <div class="card resultcard">
+      <div class="gauge" style="background:conic-gradient(${c.recomendacion==='Recomendada'?'var(--good)':c.recomendacion==='No recomendada'?'var(--bad)':'var(--warn)'} ${c.total/5*100}%, var(--line) 0);"><div class="inner"><div class="num">${Number(c.total).toFixed(1)}</div><div class="max">/ 5</div></div></div>
+      <div><h2 style="font-size:20px;">${cd.nombre}</h2><div class="helper" style="margin:4px 0;">${c.fecha||''} · ${cd.zona||''} · ${c.rol||''} · tel ${cd.telefono||'—'}</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${c.recomendacion}</span></div>
+    </div>
+    ${fichaHtml}
+    ${compHtml}
+    <div class="card"><h2>Explicación de juegos y capacitación</h2><div class="q">¿Explicó bien los juegos? <b>${c.explicacion_juegos||'—'}</b></div><div class="helper">${cd.capacitacion_extra||'(sin capacitación extra registrada)'}</div></div>
+    <div class="card"><h2>Psicotécnico (guía de observación)</h2>${psicoHtml}</div>
+    <div class="card"><h2>Señales de alerta</h2>${flags.length?flags.map(f=>`<div class="q">${f.texto}${f.critico?' · crítico':''}</div>`).join(''):'<div class="helper">Ninguna marcada.</div>'}</div>
+    <div class="card"><h2>Referencias</h2>${refsHtml}</div>
+    <div class="card"><h2>Notas finales</h2><div class="helper">${c.notas||'(sin notas)'}</div></div>
+    ${cd.estado==='contratada' ? '<div class="okbox">Ya está contratada — figura en la sección Niñeras.</div>' : `
+    <div class="card"><h2>Contratar</h2>
+      <div class="grid3">
+        <div class="field"><label>Zona (confirmar)</label><input type="text" id="hire-zona" value="${cd.zona||''}"></div>
+        <div class="field"><label>Foto (URL, opcional)</label><input type="text" id="hire-foto" placeholder="link de Drive/Canva"></div>
+      </div>
+      <div class="helper">El precio por hora se define por familia en la sección "Familias".</div>
+      <button class="btn primary" onclick="contratar('${cd.id}')">Pasar a Niñeras</button>
+    </div>`}
+    <div class="actions"><button class="btn ghost" onclick="eliminarCandidata('${cd.id}')">Eliminar candidata</button></div>
+  `;
+}
+async function contratar(candidataId){
+  const c = candidatasItems.find(x=>x.candidatas.id===candidataId);
+  const cd = c.candidatas;
+  const ninera = {
+    candidata_id: candidataId, nombre:cd.nombre, telefono:cd.telefono, tipo:cd.tipo||'Niñera',
+    zona: document.getElementById('hire-zona').value, foto: document.getElementById('hire-foto').value, notas: c.notas,
+  };
+  const { error: e1 } = await sb.from('ninieras').insert(ninera);
+  if(e1){ alert('No se pudo contratar: '+e1.message); return; }
+  const { error: e2 } = await sb.from('candidatas').update({ estado:'contratada' }).eq('id', candidataId);
+  if(e2){ alert('Niñera creada, pero no se pudo actualizar el estado: '+e2.message); }
+  document.getElementById('detalle').innerHTML='';
+  cargarGuardadas();
+}
+async function eliminarCandidata(candidataId){
+  if(!confirm('¿Eliminar? No se puede deshacer.')) return;
+  const { error } = await sb.from('candidatas').delete().eq('id', candidataId);
+  if(error){ alert('No se pudo eliminar: '+error.message); return; }
+  document.getElementById('detalle').innerHTML='';
+  cargarGuardadas();
+}
+function exportCSVcand(){
+  if(!candidatasItems.length){ alert('No hay candidatas para exportar.'); return; }
+  const headers=['Nombre','Fecha','Zona','Rol','Teléfono','Puntaje','Recomendación','Contratada','Notas'];
+  const rows = candidatasItems.map(c=>[c.candidatas.nombre,c.fecha,c.candidatas.zona,c.rol,c.candidatas.telefono,c.total,c.recomendacion,c.candidatas.estado==='contratada'?'Sí':'No',(c.notas||'').replace(/\n/g,' ')]);
+  descargarCSV(headers, rows, 'candidatas_guardadas.csv');
+}
+function descargarCSV(headers, rows, filename){
+  const csv = [headers, ...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(["\uFEFF"+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+}
+
+/* ---- Niñeras ---- */
+let ninierasItems = [];
+function renderNinieras(body){
+  body.innerHTML = `
+    <div class="card"><h2>Buscar</h2><div class="grid3">
+      <div class="field"><label>Nombre</label><input type="text" id="filt-nombre" oninput="filtrarNinieras()"></div>
+      <div class="field"><label>Zona</label><input type="text" id="filt-zona" oninput="filtrarNinieras()"></div>
+      <div class="field"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
+    </div></div>
+    <div class="cardgrid" id="ninierasgrid"></div>
+    <div id="ninieradetalle"></div>
+  `;
+  cargarNinieras();
+}
+async function cargarNinieras(){
+  const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true);
+  if(error){ document.getElementById('ninierasgrid').innerHTML = errBox(error); return; }
+  ninierasItems = data;
+  filtrarNinieras();
+}
+function filtrarNinieras(){
+  const grid = document.getElementById('ninierasgrid');
+  if(!grid) return;
+  const fn = (document.getElementById('filt-nombre')?.value||'').toLowerCase();
+  const fz = (document.getElementById('filt-zona')?.value||'').toLowerCase();
+  const ft = document.getElementById('filt-tipo')?.value||'';
+  const filtradas = ninierasItems.filter(n => (n.nombre||'').toLowerCase().includes(fn) && (n.zona||'').toLowerCase().includes(fz) && (!ft || (n.tipo||'Niñera')===ft));
+  if(!filtradas.length){ grid.innerHTML='<div class="empty">No hay niñeras que coincidan. Contratá candidatas desde "Candidatas guardadas" para que aparezcan acá.</div>'; return; }
+  grid.innerHTML = filtradas.map(n=>`
+    <div class="pcard">
+      <div class="ph">${n.foto?`<img src="${n.foto}">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="name">${n.nombre} <span class="badge warn" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span></div>
+      <div class="meta">${n.zona||'zona s/d'}${n.candidatas?.edad?' · '+n.candidatas.edad:''}<br>${n.candidatas?.universidad||''}${n.candidatas?.idiomas?' · '+n.candidatas.idiomas:''}</div>
+      <div class="rowbtns">
+        <button class="smallbtn" onclick="verNinera('${n.id}')">Ver ficha</button>
+        <button class="smallbtn" onclick="editarNinera('${n.id}')">Editar</button>
+        <button class="smallbtn danger" onclick="eliminarNinera('${n.id}')">Eliminar</button>
+        <button class="smallbtn" onclick="alert('Mandame ejemplos de CV en Canva y conecto este botón para generarlo automático.')">CV (Canva)</button>
+      </div>
+    </div>`).join('');
+}
+function verNinera(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  const cd = n.candidatas || {};
+  const rows = FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
+  document.getElementById('ninieradetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cerrar</button><h2>${n.nombre}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos.</div>'}<div><b>Notas</b>${n.notas||'—'}</div></div></div>`;
+}
+function editarNinera(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  document.getElementById('ninieradetalle').innerHTML = `
+    <div class="card">
+      <button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cancelar</button>
+      <h2>Editar a ${n.nombre}</h2>
+      <div class="grid3">
+        <div class="field"><label>Nombre</label><input type="text" id="ed-nombre" value="${n.nombre||''}"></div>
+        <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${n.telefono||''}"></div>
+        <div class="field"><label>Zona</label><input type="text" id="ed-zona" value="${n.zona||''}"></div>
+      </div>
+      <div class="field"><label>Foto (URL)</label><input type="text" id="ed-foto" value="${n.foto||''}"></div>
+      <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
+      <button class="btn primary" onclick="guardarEdicionNinera('${id}')">Guardar cambios</button>
+    </div>`;
+}
+async function guardarEdicionNinera(id){
+  const cambios = {
+    nombre: document.getElementById('ed-nombre').value,
+    telefono: document.getElementById('ed-telefono').value,
+    zona: document.getElementById('ed-zona').value,
+    foto: document.getElementById('ed-foto').value,
+    notas: document.getElementById('ed-notas').value,
+  };
+  const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
+  if(error){ alert('No se pudo guardar: '+error.message); return; }
+  document.getElementById('ninieradetalle').innerHTML = '<div class="okbox">Cambios guardados.</div>';
+  cargarNinieras();
+}
+async function eliminarNinera(id){
+  if(!confirm('¿Eliminar esta niñera del sistema? No se puede deshacer.')) return;
+  const { error } = await sb.from('ninieras').delete().eq('id', id);
+  if(error){ alert('No se pudo eliminar: '+error.message); return; }
+  cargarNinieras();
+}
+
+/* ================= FAMILIAS ================= */
+let familiasItems = [];
+function renderFamilias(body){
+  body.innerHTML = `
+    <div class="card">
+      <h2>Nueva familia</h2>
+      <div class="helper">Acá vive el precio: cuánto le cobramos a la familia por hora y cuánto le pagamos a cada niñera — el margen se calcula solo.</div>
+      <div class="grid3">
+        <div class="field"><label>Nombre de la familia</label><input type="text" id="fam-nombre"></div>
+        <div class="field"><label>Zona</label><input type="text" id="fam-zona"></div>
+        <div class="field"><label>Teléfono</label><input type="tel" id="fam-telefono"></div>
+      </div>
+      <div class="field"><label>Niños (edades)</label><input type="text" id="fam-ninos" placeholder="Ej: 3 y 6 años"></div>
+      <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
+      <button class="btn primary" onclick="addFamilia()">Agregar familia</button>
+    </div>
+    <div id="familiaslist"></div>
+  `;
+  cargarFamilias();
+}
+async function addFamilia(){
+  const nombre = document.getElementById('fam-nombre').value.trim();
+  if(!nombre){ alert('Falta el nombre de la familia.'); return; }
+  const fam = { nombre, zona:document.getElementById('fam-zona').value, telefono:document.getElementById('fam-telefono').value,
+    ninos:document.getElementById('fam-ninos').value, notas:document.getElementById('fam-notas').value };
+  const { error } = await sb.from('familias').insert(fam);
+  if(error){ alert('No se pudo guardar: '+error.message); return; }
+  ['fam-nombre','fam-zona','fam-telefono','fam-ninos','fam-notas'].forEach(id=>document.getElementById(id).value='');
+  cargarFamilias();
+}
+async function cargarFamilias(){
+  const cont = document.getElementById('familiaslist');
+  cont.innerHTML = '<div class="empty">Cargando…</div>';
+  const { data: familias, error } = await sb.from('familias').select('*').order('nombre');
+  if(error){ cont.innerHTML = errBox(error); return; }
+  const { data: asignaciones } = await sb.from('asignaciones').select('*');
+  familiasItems = familias.map(f => ({...f, asignaciones: (asignaciones||[]).filter(a=>a.familia_id===f.id)}));
+  if(!ninierasItems.length){ try{ const r = await sb.from('ninieras').select('nombre'); ninierasItems = r.data||ninierasItems; }catch(e){} }
+  if(!familiasItems.length){ cont.innerHTML='<div class="empty">Todavía no hay familias cargadas.</div>'; return; }
+  const dl = `<datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${n.nombre}">`).join('')}</datalist>`;
+  cont.innerHTML = dl + familiasItems.map(f=>{
+    const asigRows = (f.asignaciones||[]).map(a=>{
+      const margen = (Number(a.cobro_hora)||0) - (Number(a.pago_hora)||0);
+      return `<tr><td>${a.ninera_nombre}</td><td>$${a.cobro_hora||0}/h</td><td>$${a.pago_hora||0}/h</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}/h</td><td><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></td></tr>`;
+    }).join('');
+    return `
+    <div class="card">
+      <h2>${f.nombre}</h2>
+      <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
+      ${f.notas?`<div class="helper">${f.notas}</div>`:''}
+      <table class="asigtable"><thead><tr><th>Niñera</th><th>Cobro a familia</th><th>Pago a niñera</th><th>Margen</th><th></th></tr></thead>
+        <tbody>${asigRows || '<tr><td colspan="5" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table>
+      <div class="grid3" style="margin-top:10px;">
+        <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
+        <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="asig-cobro-${f.id}"></div>
+        <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="asig-pago-${f.id}"></div>
+      </div>
+      <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Agregar asignación</button>
+      <div class="actions" style="margin-top:14px;"><button class="smallbtn danger" onclick="eliminarFamilia('${f.id}')">Eliminar familia</button></div>
+    </div>`;
+  }).join('');
+}
+async function addAsignacion(famId){
+  const nombre = document.getElementById('asig-nombre-'+famId).value.trim();
+  if(!nombre){ alert('Falta el nombre de la niñera.'); return; }
+  const asig = { familia_id:famId, ninera_nombre:nombre, cobro_hora:document.getElementById('asig-cobro-'+famId).value||null, pago_hora:document.getElementById('asig-pago-'+famId).value||null };
+  const { error } = await sb.from('asignaciones').insert(asig);
+  if(error){ alert('No se pudo agregar: '+error.message); return; }
+  cargarFamilias();
+}
+async function quitarAsignacion(id){
+  const { error } = await sb.from('asignaciones').delete().eq('id', id);
+  if(error){ alert('No se pudo quitar: '+error.message); return; }
+  cargarFamilias();
+}
+async function eliminarFamilia(id){
+  if(!confirm('¿Eliminar esta familia? No se puede deshacer.')) return;
+  const { error } = await sb.from('familias').delete().eq('id', id);
+  if(error){ alert('No se pudo eliminar: '+error.message); return; }
+  cargarFamilias();
+}
+
+boot();
+</script>
+</body>
+</html>
