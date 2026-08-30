@@ -170,7 +170,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .toast.leaving{animation:toastOut 200ms ease forwards;}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
 @keyframes toastOut{to{opacity:0;transform:translateX(20px);}}
-.applayout{display:flex;gap:20px;align-items:flex-start;}
+.applayout{display:flex;gap:20px;align-items:stretch;}
 .sidebar{width:172px;flex-shrink:0;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:12px;position:sticky;top:20px;display:flex;flex-direction:column;gap:2px;}
 .mainarea{flex:1;min-width:0;}
 .navitem{display:flex;align-items:center;gap:10px;background:none;border:none;border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;transition:background var(--ease);font-family:'Inter',sans-serif;width:100%;}
@@ -393,6 +393,7 @@ function renderApp(){
       <aside class="sidebar" id="sidebar"></aside>
       <main id="modcontent" class="mainarea"></main>
     </div>
+    <div id="modfooter"></div>
   `;
   renderModulo();
 }
@@ -421,7 +422,7 @@ async function renderDashboard(cont){
   cont.innerHTML = `
     <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1></div>
     <div class="statrow" id="statrow">
-      <div class="statcard"><div class="statnum">—</div><div class="statlabel">En pipeline</div></div>
+      <div class="statcard"><div class="statnum">—</div><div class="statlabel">En proceso</div></div>
       <div class="statcard"><div class="statnum">—</div><div class="statlabel">Niñeras activas</div></div>
       <div class="statcard"><div class="statnum">—</div><div class="statlabel">Familias</div></div>
     </div>
@@ -449,8 +450,8 @@ async function renderDashboard(cont){
       </div>
       <div id="agenda" class="agendabox"><div class="empty">Cargando…</div></div>
     </div>
-    <div class="warnbox" style="margin-top:14px;">Ingresos, gastos y pendientes todavía son de ejemplo — se conectan cuando armemos Finanzas y Sittings de verdad.</div>
   `;
+  document.getElementById('modfooter').innerHTML = `<div class="warnbox" style="margin-top:14px;">Ingresos, gastos y pendientes todavía son de ejemplo — se conectan cuando armemos Finanzas y Sittings de verdad.</div>`;
   loadDashboardData();
 }
 async function loadDashboardData(){
@@ -526,6 +527,7 @@ function moduloHeader(titulo){
 }
 function renderModulo(){
   renderSidebar();
+  document.getElementById('modfooter').innerHTML = '';
   const cont = document.getElementById('modcontent');
   if(!moduloActivo){ renderDashboard(cont); return; }
   if(moduloActivo.startsWith('pend-')){ renderPendientes(cont, moduloActivo); return; }
