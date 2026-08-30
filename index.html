@@ -171,7 +171,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
 @keyframes toastOut{to{opacity:0;transform:translateX(20px);}}
 .applayout{display:flex;gap:20px;align-items:flex-start;}
-.sidebar{width:172px;flex-shrink:0;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:12px;position:sticky;top:20px;height:calc(100vh - 40px);display:flex;flex-direction:column;gap:2px;}
+.sidebar{width:172px;flex-shrink:0;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:12px;position:sticky;top:20px;display:flex;flex-direction:column;gap:2px;}
 .mainarea{flex:1;min-width:0;}
 .navitem{display:flex;align-items:center;gap:10px;background:none;border:none;border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;transition:background var(--ease);font-family:'Inter',sans-serif;width:100%;}
 .navitem:hover{background:var(--bg);}
@@ -213,6 +213,21 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .dayrow{display:flex;gap:6px;margin-bottom:10px;}
 .daybtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all var(--ease);}
 .daybtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
+.tiporow{display:flex;gap:8px;margin-bottom:14px;}
+.tipobtn{flex:1;text-align:center;padding:10px;border-radius:10px;border:1px solid var(--line);background:#fff;font-weight:600;font-size:13.5px;color:var(--ink-soft);cursor:pointer;font-family:'Inter',sans-serif;transition:all var(--ease);}
+.tipobtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
+.createhint{margin-top:5px;}
+.createbtn{background:none;border:1px solid var(--clay);color:var(--clay-text);font-size:11.5px;font-weight:600;border-radius:7px;padding:5px 10px;cursor:pointer;font-family:'Inter',sans-serif;}
+.createbtn:hover{background:var(--clay-soft);}
+.addrhint{font-size:11px;color:var(--accent);margin:-6px 0 10px;}
+.extratoggle{background:none;border:1px dashed var(--accent);color:var(--accent);font-weight:600;font-size:12.5px;border-radius:8px;padding:7px 12px;cursor:pointer;font-family:'Inter',sans-serif;margin-top:2px;}
+.extrabox{margin-top:10px;padding:12px;background:var(--accent-soft);border-radius:9px;}
+.durbtn{padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:#fff;font-size:12.5px;cursor:pointer;font-family:'Inter',sans-serif;}
+.durbtn:hover{border-color:var(--accent);color:var(--accent);}
+.summary3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;}
+.summarycard{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
+.mesbar{display:flex;justify-content:space-between;align-items:flex-end;margin:16px 0 10px;gap:10px;flex-wrap:wrap;}
+@media (max-width:640px){.summary3{grid-template-columns:1fr;}}
 @media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow,.pendrow{grid-template-columns:1fr 1fr;}}
 @media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}.hometiles{grid-template-columns:1fr;grid-auto-rows:auto;}.tile.hero{grid-column:span 1;grid-row:span 1;}}
 @media print{.subnav,.actions,.backbtn,button{display:none !important;}}
@@ -536,8 +551,8 @@ function renderModulo(){
   if(moduloActivo==='ninieras'){ cont.innerHTML = moduloHeader(m.label) + '<div id="ninieras-body"></div>'; renderNinieras(document.getElementById('ninieras-body')); return; }
   if(moduloActivo==='familias'){ cont.innerHTML = moduloHeader(m.label) + '<div id="fam-body"></div>'; renderFamilias(document.getElementById('fam-body')); return; }
   if(moduloActivo==='finanzas'){ renderFinanzasPreview(cont); return; }
+  if(moduloActivo==='sittings'){ cont.innerHTML = moduloHeader(m.label) + '<div id="sit-body"></div>'; renderSittings(document.getElementById('sit-body')); return; }
   const textos = {
-    sittings:'Esto ya lo tenés andando en el registro diario. Próximo paso: sumarlo acá.',
     marketing:'Calendario de fechas especiales con sugerencias de contenido con anticipación.',
     legal:'Biblioteca de contratos de niñeras y traslados, y generación de contratos nuevos.',
   };
@@ -1179,6 +1194,380 @@ async function eliminarFamilia(id){
   const { error } = await sb.from('familias').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   cargarFamilias();
+}
+
+/* ================= SITTINGS & TRASLADOS ================= */
+let sitFamilias = [];
+let sitNinieras = [];
+let sitAsignaciones = [];
+let sitItems = [];
+let sitTipo = 'sitting';
+let sitEditId = null;
+let sitFamiliaSel = null;
+let sitNineraSel = null;
+let sitOrigenAuto = true;
+let sitMes = null;
+
+function currentMonthStr(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function monthLabel(mesStr){
+  const [y,m] = mesStr.split('-').map(Number);
+  const f = new Intl.DateTimeFormat('es-UY', {month:'long', year:'numeric'}).format(new Date(y, m-1, 1));
+  return f.charAt(0).toUpperCase() + f.slice(1);
+}
+function findFamilia(nombre){ const n = normaliza(nombre); return sitFamilias.find(f=>normaliza(f.nombre)===n) || null; }
+function findNinera(nombre){ const n = normaliza(nombre); return sitNinieras.find(x=>normaliza(x.nombre)===n) || null; }
+
+async function renderSittings(body){
+  sitMes = sitMes || currentMonthStr();
+  sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
+  body.innerHTML = `
+    <div id="sit-form-wrap"><div class="card"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div></div>
+    <div class="mesbar">
+      <div class="field" style="margin:0;max-width:200px;"><label>Mes</label><input type="month" id="sit-mes" value="${sitMes}" onchange="cambiarSitMes()"></div>
+      <button class="smallbtn" onclick="exportarSitCSV()">Exportar CSV</button>
+    </div>
+    <div class="summary3" id="sit-summary"></div>
+    <div class="card" id="sit-list-wrap"></div>
+  `;
+  await cargarSitBase();
+  renderSitForm();
+  cargarSitLista();
+}
+async function cargarSitBase(){
+  const [{data:fams}, {data:nins}, {data:asigs}] = await Promise.all([
+    sb.from('familias').select('id,nombre,direccion').order('nombre'),
+    sb.from('ninieras').select('id,nombre').eq('activa', true).order('nombre'),
+    sb.from('asignaciones').select('familia_id,ninera_nombre,cobro_hora,pago_hora'),
+  ]);
+  sitFamilias = fams || [];
+  sitNinieras = nins || [];
+  sitAsignaciones = asigs || [];
+}
+
+function sitFormHTML(){
+  return `
+    <div class="card">
+      <h2>${sitEditId ? 'Editar registro' : 'Nuevo registro'}</h2>
+      <div class="tiporow">
+        <button type="button" class="tipobtn ${sitTipo==='sitting'?'selected':''}" id="sit-tipo-sitting" onclick="setSitTipo('sitting')">Sitting</button>
+        <button type="button" class="tipobtn ${sitTipo==='traslado'?'selected':''}" id="sit-tipo-traslado" onclick="setSitTipo('traslado')">Traslado</button>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Registró</label><select id="sit-registro"><option>Paulina G</option><option>Delfina F</option></select></div>
+        <div class="field">
+          <label>Familia</label>
+          <input type="text" id="sit-familia" list="sit-familias-dl" autocomplete="off" oninput="onSitFamiliaInput()">
+          <datalist id="sit-familias-dl">${sitFamilias.map(f=>`<option value="${f.nombre}">`).join('')}</datalist>
+          <div class="createhint" id="sit-familia-create"></div>
+        </div>
+        <div class="field">
+          <label>Niñera</label>
+          <input type="text" id="sit-ninera" list="sit-ninieras-dl" autocomplete="off" oninput="onSitNineraInput()">
+          <datalist id="sit-ninieras-dl">${sitNinieras.map(n=>`<option value="${n.nombre}">`).join('')}</datalist>
+          <div class="createhint" id="sit-ninera-create"></div>
+        </div>
+      </div>
+      <div id="sit-camposTipo"></div>
+      <div class="grid2">
+        <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen()"></div>
+        <div class="field"><label>Pago a niñera</label><input type="number" id="sit-pago" value="0" oninput="calcSitMargen()"></div>
+      </div>
+      <button type="button" class="extratoggle" id="sit-extra-toggle" onclick="toggleSitExtra()">+ Horas o cobro extra</button>
+      <div class="extrabox" id="sit-extra-box" style="display:none;"></div>
+      <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="sit-notas"></textarea></div>
+      <div class="actions">
+        <button class="btn primary" onclick="guardarSitting()">${sitEditId ? 'Guardar cambios' : 'Guardar registro'}</button>
+        ${sitEditId ? `<button class="btn ghost" onclick="cancelarEdicionSitting()">Cancelar edición</button>` : ''}
+        <div style="margin-left:auto;align-self:center;font-size:13px;color:var(--ink-soft);">Margen: <b id="sit-margen" style="color:var(--good);font-family:'IBM Plex Mono',monospace;">$0</b></div>
+      </div>
+    </div>
+  `;
+}
+function sitCamposTipoHTML(){
+  if(sitTipo==='sitting'){
+    return `<div class="grid3">
+      <div class="field"><label>Fecha</label><input type="date" id="sit-fecha" value="${todayISO()}"></div>
+      <div class="field"><label>Hora inicio</label><input type="time" id="sit-horaini"></div>
+      <div class="field"><label>Hora fin</label><input type="time" id="sit-horafin"></div>
+    </div>`;
+  }
+  return `<div class="grid3">
+      <div class="field"><label>Fecha</label><input type="date" id="sit-fecha" value="${todayISO()}"></div>
+      <div class="field"><label>Km recorridos</label><input type="number" id="sit-km"></div>
+      <div class="field"><label>&nbsp;</label><button type="button" class="smallbtn" style="width:100%;" onclick="verRutaMaps()">🗺️ Ver ruta en Maps</button></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Origen</label><input type="text" id="sit-origen" oninput="sitOrigenAuto=false;"></div>
+      <div class="field"><label>Destino</label><input type="text" id="sit-destino"></div>
+    </div>
+    <div class="addrhint" id="sit-addr-hint" style="display:none;"></div>`;
+}
+function renderSitForm(){
+  const wrap = document.getElementById('sit-form-wrap');
+  if(!wrap) return;
+  wrap.innerHTML = sitFormHTML();
+  document.getElementById('sit-camposTipo').innerHTML = sitCamposTipoHTML();
+  calcSitMargen();
+}
+function setSitTipo(t){
+  sitTipo = t;
+  const bS = document.getElementById('sit-tipo-sitting'), bT = document.getElementById('sit-tipo-traslado');
+  if(bS) bS.classList.toggle('selected', t==='sitting');
+  if(bT) bT.classList.toggle('selected', t==='traslado');
+  sitOrigenAuto = true;
+  document.getElementById('sit-camposTipo').innerHTML = sitCamposTipoHTML();
+  const box = document.getElementById('sit-extra-box');
+  if(box) box.style.display = 'none';
+  if(t==='traslado') aplicarDireccionSugerida();
+  calcSitMargen();
+}
+
+/* ---- crear familia/niñera al vuelo ---- */
+function onSitFamiliaInput(){
+  const val = document.getElementById('sit-familia').value.trim();
+  sitFamiliaSel = findFamilia(val);
+  const box = document.getElementById('sit-familia-create');
+  box.innerHTML = (val && !sitFamiliaSel) ? `<button type="button" class="createbtn" onclick="crearFamiliaRapida()">+ Crear familia "${val}"</button>` : '';
+  sitOrigenAuto = true;
+  if(sitTipo==='traslado') aplicarDireccionSugerida();
+  actualizarTarifaExtra();
+}
+function onSitNineraInput(){
+  const val = document.getElementById('sit-ninera').value.trim();
+  sitNineraSel = findNinera(val);
+  const box = document.getElementById('sit-ninera-create');
+  box.innerHTML = (val && !sitNineraSel) ? `<button type="button" class="createbtn" onclick="crearNineraRapida()">+ Crear niñera "${val}"</button>` : '';
+  actualizarTarifaExtra();
+}
+async function crearFamiliaRapida(){
+  const val = document.getElementById('sit-familia').value.trim();
+  if(!val) return;
+  const { data, error } = await sb.from('familias').insert({nombre:val}).select().single();
+  if(error){ toast('No se pudo crear la familia: '+error.message, 'bad'); return; }
+  sitFamilias.push(data);
+  sitFamiliaSel = data;
+  document.getElementById('sit-familia-create').innerHTML = '<div style="font-size:11.5px;color:var(--good);font-weight:600;">Familia creada.</div>';
+  const dl = document.getElementById('sit-familias-dl'); if(dl) dl.insertAdjacentHTML('beforeend', `<option value="${data.nombre}">`);
+  toast('Familia creada — le podés agregar zona, teléfono y dirección después desde Familias.');
+}
+async function crearNineraRapida(){
+  const val = document.getElementById('sit-ninera').value.trim();
+  if(!val) return;
+  const { data, error } = await sb.from('ninieras').insert({nombre:val, activa:true}).select().single();
+  if(error){ toast('No se pudo crear la niñera: '+error.message, 'bad'); return; }
+  sitNinieras.push(data);
+  sitNineraSel = data;
+  document.getElementById('sit-ninera-create').innerHTML = '<div style="font-size:11.5px;color:var(--good);font-weight:600;">Niñera creada.</div>';
+  const dl = document.getElementById('sit-ninieras-dl'); if(dl) dl.insertAdjacentHTML('beforeend', `<option value="${data.nombre}">`);
+  toast('Niñera creada — le podés agregar zona y teléfono después desde Niñeras.');
+}
+
+/* ---- dirección sugerida para traslados ---- */
+function aplicarDireccionSugerida(){
+  const hint = document.getElementById('sit-addr-hint');
+  const origenInput = document.getElementById('sit-origen');
+  if(!hint || !origenInput) return;
+  if(sitFamiliaSel && sitFamiliaSel.direccion && sitOrigenAuto){
+    origenInput.value = sitFamiliaSel.direccion;
+    hint.textContent = `Dirección sugerida desde la ficha de ${sitFamiliaSel.nombre} — la podés editar si el traslado arranca en otro lado.`;
+    hint.style.display = 'block';
+  } else {
+    hint.style.display = 'none';
+  }
+}
+function verRutaMaps(){
+  const o = (document.getElementById('sit-origen')||{}).value?.trim();
+  const d = (document.getElementById('sit-destino')||{}).value?.trim();
+  if(!o || !d){ toast('Cargá origen y destino primero.', 'bad'); return; }
+  window.open('https://www.google.com/maps/dir/'+encodeURIComponent(o)+'/'+encodeURIComponent(d), '_blank');
+}
+
+/* ---- horas / cobro extra ---- */
+function toggleSitExtra(){
+  const box = document.getElementById('sit-extra-box');
+  const opening = box.style.display === 'none';
+  box.style.display = opening ? 'block' : 'none';
+  if(opening) actualizarTarifaExtra();
+}
+function tarifaParaSeleccion(){
+  if(!sitFamiliaSel || !sitNineraSel) return null;
+  const nomb = normaliza(sitNineraSel.nombre);
+  return sitAsignaciones.find(a => a.familia_id===sitFamiliaSel.id && normaliza(a.ninera_nombre||'')===nomb) || null;
+}
+function extraManualHTML(msg){
+  return `<div class="helper" style="margin:0 0 8px;">${msg}</div>
+    <div class="grid2">
+      <div class="field"><label>Extra cobro</label><input type="number" id="sit-extra-cobro-manual" value="0"></div>
+      <div class="field"><label>Extra pago</label><input type="number" id="sit-extra-pago-manual" value="0"></div>
+    </div>
+    <button type="button" class="smallbtn" onclick="aplicarExtraManual()">Sumar extra</button>`;
+}
+function actualizarTarifaExtra(){
+  const box = document.getElementById('sit-extra-box');
+  if(!box || box.style.display==='none') return;
+  if(!sitFamiliaSel || !sitNineraSel){
+    box.innerHTML = extraManualHTML('Elegí una familia y una niñera ya cargadas para calcular el extra según su tarifa, o cargalo a mano.');
+    return;
+  }
+  const asig = tarifaParaSeleccion();
+  if(asig && (Number(asig.cobro_hora)||Number(asig.pago_hora))){
+    box.innerHTML = `
+      <div class="helper" style="margin:0 0 6px;">Tarifa encontrada para ${sitNineraSel.nombre} × ${sitFamiliaSel.nombre}: $${asig.cobro_hora||0}/h cobro · $${asig.pago_hora||0}/h pago</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${[30,60,90,120].map(min=>`<button type="button" class="durbtn" onclick="aplicarExtraHoras(${min}, ${Number(asig.cobro_hora)||0}, ${Number(asig.pago_hora)||0})">${min<60 ? min+' min' : (min/60)+' h'}</button>`).join('')}
+      </div>
+      <div id="sit-extra-result" style="font-size:12.5px;margin-top:8px;color:var(--ink-soft);"></div>`;
+  } else {
+    box.innerHTML = extraManualHTML('No encontramos una tarifa por hora cargada para esta niñera y familia (revisá Familias) — cargá el extra a mano.');
+  }
+}
+function aplicarExtraHoras(min, tarifaCobro, tarifaPago){
+  const horas = min/60;
+  const extraCobro = Math.round(tarifaCobro*horas);
+  const extraPago = Math.round(tarifaPago*horas);
+  const cobroInput = document.getElementById('sit-cobro');
+  const pagoInput = document.getElementById('sit-pago');
+  cobroInput.value = (Number(cobroInput.value)||0) + extraCobro;
+  pagoInput.value = (Number(pagoInput.value)||0) + extraPago;
+  const res = document.getElementById('sit-extra-result');
+  if(res) res.textContent = `+${min<60 ? min+' min' : (min/60)+' h'} → +$${extraCobro} cobro, +$${extraPago} pago (ya sumado arriba)`;
+  calcSitMargen();
+}
+function aplicarExtraManual(){
+  const ec = Number(document.getElementById('sit-extra-cobro-manual').value)||0;
+  const ep = Number(document.getElementById('sit-extra-pago-manual').value)||0;
+  const cobroInput = document.getElementById('sit-cobro');
+  const pagoInput = document.getElementById('sit-pago');
+  cobroInput.value = (Number(cobroInput.value)||0) + ec;
+  pagoInput.value = (Number(pagoInput.value)||0) + ep;
+  toast('Extra sumado al cobro y al pago.');
+  calcSitMargen();
+}
+function calcSitMargen(){
+  const c = Number((document.getElementById('sit-cobro')||{}).value)||0;
+  const p = Number((document.getElementById('sit-pago')||{}).value)||0;
+  const el = document.getElementById('sit-margen');
+  if(el) el.textContent = '$'+(c-p);
+}
+
+/* ---- guardar / editar / eliminar ---- */
+async function guardarSitting(){
+  const familiaNombre = document.getElementById('sit-familia').value.trim();
+  const nineraNombre = document.getElementById('sit-ninera').value.trim();
+  const fecha = document.getElementById('sit-fecha').value;
+  if(!familiaNombre || !nineraNombre || !fecha){ toast('Faltan familia, niñera o fecha.', 'bad'); return; }
+  const registro = {
+    tipo: sitTipo,
+    registrado_por: document.getElementById('sit-registro').value,
+    familia_id: sitFamiliaSel ? sitFamiliaSel.id : null,
+    familia_nombre: familiaNombre,
+    ninera_id: sitNineraSel ? sitNineraSel.id : null,
+    ninera_nombre: nineraNombre,
+    fecha,
+    cobro_familia: Number(document.getElementById('sit-cobro').value)||0,
+    pago_ninera: Number(document.getElementById('sit-pago').value)||0,
+    notas: document.getElementById('sit-notas').value || null,
+    hora_inicio: null, hora_fin: null, km: null, origen: null, destino: null,
+  };
+  if(sitTipo==='sitting'){
+    registro.hora_inicio = document.getElementById('sit-horaini').value || null;
+    registro.hora_fin = document.getElementById('sit-horafin').value || null;
+  } else {
+    const km = document.getElementById('sit-km').value;
+    registro.km = km ? Number(km) : null;
+    registro.origen = document.getElementById('sit-origen').value || null;
+    registro.destino = document.getElementById('sit-destino').value || null;
+  }
+  let error;
+  if(sitEditId){
+    ({ error } = await sb.from('sittings_traslados').update(registro).eq('id', sitEditId));
+  } else {
+    ({ error } = await sb.from('sittings_traslados').insert(registro));
+  }
+  if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  toast(sitEditId ? 'Registro actualizado.' : 'Registro guardado.');
+  sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
+  renderSitForm();
+  cargarSitLista();
+}
+function cancelarEdicionSitting(){
+  sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
+  renderSitForm();
+}
+function editarSitting(id){
+  const r = sitItems.find(x=>x.id===id);
+  if(!r) return;
+  sitEditId = id;
+  sitTipo = r.tipo;
+  sitFamiliaSel = sitFamilias.find(f=>f.id===r.familia_id) || findFamilia(r.familia_nombre);
+  sitNineraSel = sitNinieras.find(n=>n.id===r.ninera_id) || findNinera(r.ninera_nombre);
+  sitOrigenAuto = false;
+  renderSitForm();
+  setTimeout(()=>{
+    document.getElementById('sit-familia').value = r.familia_nombre || '';
+    document.getElementById('sit-ninera').value = r.ninera_nombre || '';
+    document.getElementById('sit-registro').value = r.registrado_por || 'Paulina G';
+    document.getElementById('sit-fecha').value = r.fecha || '';
+    document.getElementById('sit-cobro').value = r.cobro_familia || 0;
+    document.getElementById('sit-pago').value = r.pago_ninera || 0;
+    document.getElementById('sit-notas').value = r.notas || '';
+    if(r.tipo==='sitting'){
+      if(document.getElementById('sit-horaini')) document.getElementById('sit-horaini').value = r.hora_inicio ? r.hora_inicio.slice(0,5) : '';
+      if(document.getElementById('sit-horafin')) document.getElementById('sit-horafin').value = r.hora_fin ? r.hora_fin.slice(0,5) : '';
+    } else {
+      if(document.getElementById('sit-km')) document.getElementById('sit-km').value = r.km || '';
+      if(document.getElementById('sit-origen')) document.getElementById('sit-origen').value = r.origen || '';
+      if(document.getElementById('sit-destino')) document.getElementById('sit-destino').value = r.destino || '';
+    }
+    calcSitMargen();
+  }, 30);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+async function eliminarSitting(id){
+  if(!confirm('¿Eliminar este registro? No se puede deshacer.')) return;
+  const { error } = await sb.from('sittings_traslados').delete().eq('id', id);
+  if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
+  toast('Registro eliminado.');
+  cargarSitLista();
+}
+
+/* ---- lista del mes / resumen / export ---- */
+function cambiarSitMes(){ sitMes = document.getElementById('sit-mes').value; cargarSitLista(); }
+async function cargarSitLista(){
+  const wrap = document.getElementById('sit-list-wrap');
+  const summary = document.getElementById('sit-summary');
+  if(!wrap) return;
+  wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
+  const [y,m] = sitMes.split('-').map(Number);
+  const desde = `${sitMes}-01`;
+  const hasta = new Date(y, m, 1).toISOString().slice(0,10);
+  const { data, error } = await sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
+  if(error){ wrap.innerHTML = errBox(error); return; }
+  sitItems = data || [];
+  const cobrado = sitItems.reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
+  const pagado = sitItems.reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
+  summary.innerHTML = `
+    <div class="summarycard"><div class="statlabel">Cobrado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${cobrado}</div></div>
+    <div class="summarycard"><div class="statlabel">Pagado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${pagado}</div></div>
+    <div class="summarycard" style="border-left:3px solid var(--good);"><div class="statlabel">Margen</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${cobrado-pagado}</div></div>
+  `;
+  if(!sitItems.length){ wrap.innerHTML = `<div class="empty">No hay registros cargados en ${monthLabel(sitMes)} todavía.</div>`; return; }
+  wrap.innerHTML = `
+    <h2 style="margin-bottom:10px;">Registros de ${monthLabel(sitMes)}</h2>
+    <table class="asigtable"><thead><tr><th>Fecha</th><th>Tipo</th><th>Familia</th><th>Niñera</th><th>Cobro</th><th>Pago</th><th>Margen</th><th></th></tr></thead>
+    <tbody>${sitItems.map(r=>{
+      const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
+      const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
+      return `<tr><td>${fechaFmt}</td><td>${r.tipo==='sitting'?'Sitting':'Traslado'}</td><td>${r.familia_nombre}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><button class="smallbtn" onclick="editarSitting('${r.id}')">Editar</button> <button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></td></tr>`;
+    }).join('')}</tbody></table>
+  `;
+}
+function exportarSitCSV(){
+  if(!sitItems.length){ toast('No hay registros para exportar en este mes.', 'bad'); return; }
+  const headers = ['Fecha','Tipo','Registró','Familia','Niñera','Hora inicio','Hora fin','Km','Origen','Destino','Cobro familia','Pago niñera','Margen','Notas'];
+  const rows = sitItems.map(r=>[r.fecha, r.tipo, r.registrado_por, r.familia_nombre, r.ninera_nombre, r.hora_inicio||'', r.hora_fin||'', r.km||'', r.origen||'', r.destino||'', r.cobro_familia||0, r.pago_ninera||0, (Number(r.cobro_familia)||0)-(Number(r.pago_ninera)||0), (r.notas||'').replace(/\n/g,' ')]);
+  descargarCSV(headers, rows, `sittings_traslados_${sitMes}.csv`);
 }
 
 boot();
