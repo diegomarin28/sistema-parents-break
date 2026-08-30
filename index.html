@@ -170,8 +170,8 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .toast.leaving{animation:toastOut 200ms ease forwards;}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
 @keyframes toastOut{to{opacity:0;transform:translateX(20px);}}
-.applayout{display:flex;gap:20px;align-items:stretch;}
-.sidebar{width:172px;flex-shrink:0;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:12px;position:sticky;top:20px;display:flex;flex-direction:column;gap:2px;}
+.applayout{display:flex;gap:20px;align-items:flex-start;}
+.sidebar{width:172px;flex-shrink:0;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:12px;position:sticky;top:20px;height:calc(100vh - 40px);display:flex;flex-direction:column;gap:2px;}
 .mainarea{flex:1;min-width:0;}
 .navitem{display:flex;align-items:center;gap:10px;background:none;border:none;border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;transition:background var(--ease);font-family:'Inter',sans-serif;width:100%;}
 .navitem:hover{background:var(--bg);}
@@ -213,7 +213,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .dayrow{display:flex;gap:6px;margin-bottom:10px;}
 .daybtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all var(--ease);}
 .daybtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
-@media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow,.pendrow{grid-template-columns:1fr 1fr;}}
+@media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow,.pendrow{grid-template-columns:1fr 1fr;}}
 @media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}.hometiles{grid-template-columns:1fr;grid-auto-rows:auto;}.tile.hero{grid-column:span 1;grid-row:span 1;}}
 @media print{.subnav,.actions,.backbtn,button{display:none !important;}}
 </style>
