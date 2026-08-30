@@ -39,7 +39,9 @@ h1{font-size:27px;font-weight:600;}
   background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:26px 22px;
   text-align:left;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform var(--ease), box-shadow var(--ease), border-color var(--ease);
   display:flex;flex-direction:column;gap:12px;font-family:'Inter',sans-serif;
+  opacity:0;animation:tileIn 480ms cubic-bezier(.2,.8,.2,1) forwards;
 }
+@keyframes tileIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 .tile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--tile-accent);}
 .tile-icon{width:46px;height:46px;border-radius:13px;background:var(--tile-accent-soft);color:var(--tile-accent);display:flex;align-items:center;justify-content:center;}
 .tile-icon svg{width:23px;height:23px;}
@@ -134,8 +136,30 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .asigtable th,.asigtable td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;}
 .margenpos{color:var(--good);font-weight:600;}
 .margenneg{color:var(--bad);font-weight:600;}
-.loginwrap{max-width:360px;margin:80px auto;text-align:center;}
-.loginwrap .card{text-align:left;}
+.loginstage{position:fixed;inset:0;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg);}
+.blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.55;animation:drift 18s ease-in-out infinite;}
+.blob-a{width:420px;height:420px;background:var(--clay);top:-120px;left:-100px;animation-duration:22s;}
+.blob-b{width:380px;height:380px;background:var(--accent);bottom:-140px;right:-80px;animation-duration:26s;animation-delay:-6s;}
+.blob-c{width:260px;height:260px;background:var(--clay);bottom:10%;left:8%;opacity:.35;animation-duration:19s;animation-delay:-3s;}
+@keyframes drift{0%,100%{transform:translate(0,0) scale(1);}33%{transform:translate(30px,-20px) scale(1.06);}66%{transform:translate(-20px,25px) scale(0.96);}}
+.loginwrap{position:relative;z-index:1;max-width:380px;width:90%;text-align:center;}
+.loginlogo{height:52px;margin-bottom:26px;animation:logoIn 600ms cubic-bezier(.2,.8,.2,1);}
+@keyframes logoIn{from{opacity:0;transform:translateY(-8px) scale(.94);}to{opacity:1;transform:translateY(0) scale(1);}}
+.logincard{background:rgba(255,255,255,.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.6);border-radius:22px;padding:30px 28px;text-align:left;box-shadow:var(--shadow-md);animation:cardIn 550ms cubic-bezier(.2,.8,.2,1) 120ms both;}
+@keyframes cardIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+.inputicon{position:relative;}
+.inputicon svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--ink-soft);pointer-events:none;}
+.inputicon input{padding-left:34px;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:2px;}
+.spinner.dark{border-color:var(--line);border-top-color:var(--accent);}
+@keyframes spin{to{transform:rotate(360deg);}}
+.toaststack{position:fixed;top:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:8px;}
+.toast{background:var(--ink);color:#fff;padding:12px 16px;border-radius:11px;font-size:13.5px;box-shadow:var(--shadow-md);animation:toastIn 220ms cubic-bezier(.2,.8,.2,1);max-width:300px;}
+.toast.good{background:var(--good);}
+.toast.bad{background:var(--bad);}
+.toast.leaving{animation:toastOut 200ms ease forwards;}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
+@keyframes toastOut{to{opacity:0;transform:translateX(20px);}}
 @media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}}
 @media print{.subnav,.actions,.backbtn,button{display:none !important;}}
 </style>
@@ -151,6 +175,16 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 function normaliza(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+
+function toast(msg, type='good'){
+  let stack = document.querySelector('.toaststack');
+  if(!stack){ stack = document.createElement('div'); stack.className='toaststack'; document.body.appendChild(stack); }
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  stack.appendChild(el);
+  setTimeout(()=>{ el.classList.add('leaving'); setTimeout(()=>el.remove(), 220); }, 3200);
+}
 
 /* columnas de candidatas que vienen del form / ficha (nombres = columnas reales de la tabla) */
 const FICHA_CAMPOS = [
@@ -216,14 +250,31 @@ function renderRoot(){
 }
 function renderLogin(){
   document.getElementById('app').innerHTML = `
-    <div class="loginwrap">
-      <img src="logo.png" alt="Parents Break" style="height:52px;margin-bottom:28px;">
-      <div class="card">
-        <div class="field"><label>Mail</label><input type="email" id="login-mail"></div>
-        <div class="field"><label>Contraseña</label><input type="password" id="login-pass"></div>
-        <label class="chk" style="display:flex;align-items:center;gap:7px;margin-bottom:14px;"><input type="checkbox" id="login-recordar" checked> Recordarme en este dispositivo</label>
-        <button class="btn primary" style="width:100%;" onclick="login()">Entrar</button>
-        <div id="loginwarn"></div>
+    <div class="loginstage">
+      <div class="blob blob-a"></div>
+      <div class="blob blob-b"></div>
+      <div class="blob blob-c"></div>
+      <div class="loginwrap">
+        <img src="logo.png" alt="Parents Break" class="loginlogo">
+        <div class="logincard">
+          <div class="field">
+            <label>Mail</label>
+            <div class="inputicon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h16v12H4z"/><path d="m4 7 8 6 8-6"/></svg>
+              <input type="email" id="login-mail">
+            </div>
+          </div>
+          <div class="field">
+            <label>Contraseña</label>
+            <div class="inputicon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8 10.5V7a4 4 0 018 0v3.5"/></svg>
+              <input type="password" id="login-pass">
+            </div>
+          </div>
+          <label class="chk" style="display:flex;align-items:center;gap:7px;margin-bottom:16px;"><input type="checkbox" id="login-recordar" checked> Recordarme en este dispositivo</label>
+          <button class="btn primary" id="loginbtn" style="width:100%;" onclick="login()"><span id="loginbtn-label">Entrar</span></button>
+          <div id="loginwarn"></div>
+        </div>
       </div>
     </div>`;
   document.getElementById('login-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') login(); });
@@ -232,8 +283,16 @@ async function login(){
   const email = document.getElementById('login-mail').value.trim();
   const password = document.getElementById('login-pass').value;
   const recordar = document.getElementById('login-recordar').checked;
+  const btn = document.getElementById('loginbtn');
+  btn.disabled = true;
+  document.getElementById('loginbtn-label').innerHTML = `<span class="spinner"></span> Entrando…`;
   const { error } = await sb.auth.signInWithPassword({ email, password });
-  if(error){ document.getElementById('loginwarn').innerHTML = `<div class="warnbox">${error.message==='Invalid login credentials' ? 'Mail o contraseña incorrectos.' : error.message}</div>`; return; }
+  if(error){
+    btn.disabled = false;
+    document.getElementById('loginbtn-label').textContent = 'Entrar';
+    document.getElementById('loginwarn').innerHTML = `<div class="warnbox">${error.message==='Invalid login credentials' ? 'Mail o contraseña incorrectos.' : error.message}</div>`;
+    return;
+  }
   if(!recordar){ window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); }); }
 }
 async function logout(){ await sb.auth.signOut(); }
@@ -279,7 +338,7 @@ function homeTiles(){
     </div>
     <div class="hometiles">
       ${MODULOS.map((m,i)=>`
-        <button class="tile" style="--tile-accent:var(${i%2===0?'--accent':'--clay'});--tile-accent-soft:var(${i%2===0?'--accent-soft':'--clay-soft'});" onclick="setModulo('${m.key}')">
+        <button class="tile" style="--tile-accent:var(${i%2===0?'--accent':'--clay'});--tile-accent-soft:var(${i%2===0?'--accent-soft':'--clay-soft'});animation-delay:${i*60}ms;" onclick="setModulo('${m.key}')">
           <div class="tile-icon">${ICONS[m.key]}</div>
           <div class="tile-title">${m.label}</div>
           <div class="tile-desc">${m.desc}</div>
@@ -289,7 +348,7 @@ function homeTiles(){
   `;
 }
 function moduloHeader(titulo){
-  return `<button class="backbtn" onclick="setModulo(null)">← Volver</button><h1 class="modtitle">${titulo}</h1>`;
+  return `<div style="animation:fadeIn var(--ease);"><button class="backbtn" onclick="setModulo(null)">← Volver</button><h1 class="modtitle">${titulo}</h1></div>`;
 }
 function renderModulo(){
   const cont = document.getElementById('modcontent');
@@ -359,19 +418,19 @@ function renderIntake(body){
 }
 async function addIntake(){
   const nombre = document.getElementById('in-nombre').value.trim();
-  if(!nombre){ alert('Falta el nombre.'); return; }
+  if(!nombre){ toast('Falta el nombre.','bad'); return; }
   const item = { nombre, telefono:document.getElementById('in-tel').value, zona:document.getElementById('in-zona').value,
     edad:document.getElementById('in-edad').value, origen:document.getElementById('in-origen').value, experiencia:document.getElementById('in-exp').value,
     tipo:document.getElementById('in-tipo').value, estado:'intake' };
   const { error } = await sb.from('candidatas').insert(item);
-  if(error){ alert('No se pudo guardar: '+error.message); return; }
+  if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   ['in-nombre','in-tel','in-zona','in-edad','in-exp'].forEach(id=>document.getElementById(id).value='');
   loadIntake();
 }
 async function loadIntake(){
   const grid = document.getElementById('intakegrid');
   if(!grid) return;
-  grid.innerHTML = '<div class="empty">Cargando…</div>';
+  grid.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   let q = sb.from('candidatas').select('*').eq('estado','intake').order('created_at',{ascending:false});
   if(intakeFiltro!=='Todas') q = q.eq('tipo', intakeFiltro);
   const { data, error } = await q;
@@ -398,7 +457,7 @@ function verFichaIntake(i){
 async function descartarIntake(id){
   if(!confirm('¿Descartar esta candidata? No se puede deshacer.')) return;
   const { error } = await sb.from('candidatas').delete().eq('id', id);
-  if(error){ alert('No se pudo descartar: '+error.message); return; }
+  if(error){ toast('No se pudo descartar: '+error.message,'bad'); return; }
   loadIntake();
 }
 function agendarDesdeIntake(i){
@@ -484,7 +543,8 @@ async function importarCSV(){
   }
   const { error } = await sb.from('candidatas').insert(registros);
   if(error){ document.getElementById('importresult').innerHTML = `<div class="warnbox">Error al importar: ${error.message}</div>`; return; }
-  document.getElementById('importresult').innerHTML = `<div class="okbox">Se importaron ${registros.length} candidatas.</div>`;
+  document.getElementById('importresult').innerHTML = '';
+  toast(`Se importaron ${registros.length} candidatas.`);
   loadIntake();
 }
 
@@ -655,7 +715,7 @@ async function guardarCandidata(){
     recomendacion,
   });
   if(e2){ warnArea.innerHTML = errBox(e2); return; }
-  warnArea.innerHTML='<div class="okbox">Candidata guardada. La vas a ver en "Candidatas guardadas".</div>';
+  toast('Candidata guardada — está en "Candidatas guardadas".');
   limpiarForm();
 }
 function limpiarForm(){
@@ -678,7 +738,7 @@ function renderGuardadas(body){
 }
 async function cargarGuardadas(){
   const cont = document.getElementById('candlist');
-  cont.innerHTML = '<div class="empty">Cargando…</div>';
+  cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const { data, error } = await sb.from('entrevistas').select('*, candidatas(*)').order('created_at',{ascending:false});
   if(error){ cont.innerHTML = errBox(error); return; }
   candidatasItems = data;
@@ -734,21 +794,22 @@ async function contratar(candidataId){
     zona: document.getElementById('hire-zona').value, foto: document.getElementById('hire-foto').value, notas: c.notas,
   };
   const { error: e1 } = await sb.from('ninieras').insert(ninera);
-  if(e1){ alert('No se pudo contratar: '+e1.message); return; }
+  if(e1){ toast('No se pudo contratar: '+e1.message,'bad'); return; }
   const { error: e2 } = await sb.from('candidatas').update({ estado:'contratada' }).eq('id', candidataId);
-  if(e2){ alert('Niñera creada, pero no se pudo actualizar el estado: '+e2.message); }
+  if(e2){ toast('Niñera creada, pero no se pudo actualizar el estado: '+e2.message,'bad'); }
+  toast('Pasó a Niñeras.');
   document.getElementById('detalle').innerHTML='';
   cargarGuardadas();
 }
 async function eliminarCandidata(candidataId){
   if(!confirm('¿Eliminar? No se puede deshacer.')) return;
   const { error } = await sb.from('candidatas').delete().eq('id', candidataId);
-  if(error){ alert('No se pudo eliminar: '+error.message); return; }
+  if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   document.getElementById('detalle').innerHTML='';
   cargarGuardadas();
 }
 function exportCSVcand(){
-  if(!candidatasItems.length){ alert('No hay candidatas para exportar.'); return; }
+  if(!candidatasItems.length){ toast('No hay candidatas para exportar.','bad'); return; }
   const headers=['Nombre','Fecha','Zona','Rol','Teléfono','Puntaje','Recomendación','Contratada','Notas'];
   const rows = candidatasItems.map(c=>[c.candidatas.nombre,c.fecha,c.candidatas.zona,c.rol,c.candidatas.telefono,c.total,c.recomendacion,c.candidatas.estado==='contratada'?'Sí':'No',(c.notas||'').replace(/\n/g,' ')]);
   descargarCSV(headers, rows, 'candidatas_guardadas.csv');
@@ -832,14 +893,16 @@ async function guardarEdicionNinera(id){
     notas: document.getElementById('ed-notas').value,
   };
   const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
-  if(error){ alert('No se pudo guardar: '+error.message); return; }
-  document.getElementById('ninieradetalle').innerHTML = '<div class="okbox">Cambios guardados.</div>';
+  if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  document.getElementById('ninieradetalle').innerHTML = '';
+  toast('Cambios guardados.');
   cargarNinieras();
 }
 async function eliminarNinera(id){
   if(!confirm('¿Eliminar esta niñera del sistema? No se puede deshacer.')) return;
   const { error } = await sb.from('ninieras').delete().eq('id', id);
-  if(error){ alert('No se pudo eliminar: '+error.message); return; }
+  if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
+  toast('Niñera eliminada.');
   cargarNinieras();
 }
 
@@ -865,17 +928,18 @@ function renderFamilias(body){
 }
 async function addFamilia(){
   const nombre = document.getElementById('fam-nombre').value.trim();
-  if(!nombre){ alert('Falta el nombre de la familia.'); return; }
+  if(!nombre){ toast('Falta el nombre de la familia.','bad'); return; }
   const fam = { nombre, zona:document.getElementById('fam-zona').value, telefono:document.getElementById('fam-telefono').value,
     ninos:document.getElementById('fam-ninos').value, notas:document.getElementById('fam-notas').value };
   const { error } = await sb.from('familias').insert(fam);
-  if(error){ alert('No se pudo guardar: '+error.message); return; }
+  if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   ['fam-nombre','fam-zona','fam-telefono','fam-ninos','fam-notas'].forEach(id=>document.getElementById(id).value='');
+  toast('Familia agregada.');
   cargarFamilias();
 }
 async function cargarFamilias(){
   const cont = document.getElementById('familiaslist');
-  cont.innerHTML = '<div class="empty">Cargando…</div>';
+  cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const { data: familias, error } = await sb.from('familias').select('*').order('nombre');
   if(error){ cont.innerHTML = errBox(error); return; }
   const { data: asignaciones } = await sb.from('asignaciones').select('*');
@@ -907,21 +971,21 @@ async function cargarFamilias(){
 }
 async function addAsignacion(famId){
   const nombre = document.getElementById('asig-nombre-'+famId).value.trim();
-  if(!nombre){ alert('Falta el nombre de la niñera.'); return; }
+  if(!nombre){ toast('Falta el nombre de la niñera.','bad'); return; }
   const asig = { familia_id:famId, ninera_nombre:nombre, cobro_hora:document.getElementById('asig-cobro-'+famId).value||null, pago_hora:document.getElementById('asig-pago-'+famId).value||null };
   const { error } = await sb.from('asignaciones').insert(asig);
-  if(error){ alert('No se pudo agregar: '+error.message); return; }
+  if(error){ toast('No se pudo agregar: '+error.message,'bad'); return; }
   cargarFamilias();
 }
 async function quitarAsignacion(id){
   const { error } = await sb.from('asignaciones').delete().eq('id', id);
-  if(error){ alert('No se pudo quitar: '+error.message); return; }
+  if(error){ toast('No se pudo quitar: '+error.message,'bad'); return; }
   cargarFamilias();
 }
 async function eliminarFamilia(id){
   if(!confirm('¿Eliminar esta familia? No se puede deshacer.')) return;
   const { error } = await sb.from('familias').delete().eq('id', id);
-  if(error){ alert('No se pudo eliminar: '+error.message); return; }
+  if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   cargarFamilias();
 }
 
