@@ -389,12 +389,13 @@ const MODULOS = [
   {key:'ninieras', label:'Niñeras', desc:'Tu equipo activo, con filtro por nombre y zona.'},
   {key:'familias', label:'Familias', desc:'Familias, tarifas por niñera y márgenes.'},
   {key:'sittings', label:'Sittings & traslados', desc:'Registro diario de sittings y traslados.'},
-  {key:'finanzas', label:'Finanzas', desc:'Conciliación con el estado de cuenta de Itaú.'},
+  {key:'finanzas', label:'Finanzas', desc:'Ingresos, pagos a niñeras y gastos generales — con datos reales.'},
   {key:'marketing', label:'Marketing', desc:'Calendario de fechas especiales y contenido.'},
   {key:'legal', label:'Legal', desc:'Contratos de niñeras y traslados.'},
 ];
 let moduloActivo = null;
 let rrhhTab = 'intake';
+let dashPendientesHoy = [];
 
 function renderApp(){
   document.getElementById('app').innerHTML = `
@@ -444,19 +445,20 @@ async function renderDashboard(cont){
     <div class="moneyrow">
       <button class="moneycard accent" onclick="setModulo('finanzas')">
         <div class="moneytop"><span>Ingresos del mes</span>${ICONS.moneyIn}</div>
-        <div class="moneynum">$128.400</div>
+        <div class="moneynum" id="dash-ingresos">—</div>
         <div class="moneylink">Ver detalle →</div>
       </button>
       <button class="moneycard clay" onclick="setModulo('finanzas')">
         <div class="moneytop"><span>Gastos del mes</span>${ICONS.moneyOut}</div>
-        <div class="moneynum">$86.200</div>
+        <div class="moneynum" id="dash-gastos">—</div>
         <div class="moneylink">Ver detalle →</div>
       </button>
     </div>
-    <div class="pendrow">
-      <button class="pendcard" onclick="setModulo('pend-sittings')"><div class="pendnum">4</div><div class="pendlabel">Sittings/carsittings pendientes</div></button>
-      <button class="pendcard" onclick="setModulo('pend-pagos')"><div class="pendnum">3</div><div class="pendlabel">Pagos pendientes</div></button>
-      <button class="pendcard" onclick="setModulo('pend-cobros')"><div class="pendnum">2</div><div class="pendlabel">Cobros pendientes</div></button>
+    <div class="pendrow" style="grid-template-columns:1fr;">
+      <button class="pendcard" onclick="setModulo('pend-hoy')">
+        <div class="pendnum" id="dash-pend-num">—</div>
+        <div class="pendlabel">Sittings/traslados de hoy sin registrar</div>
+      </button>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -466,7 +468,6 @@ async function renderDashboard(cont){
       <div id="agenda" class="agendabox"><div class="empty">Cargando…</div></div>
     </div>
   `;
-  document.getElementById('modfooter').innerHTML = `<div class="warnbox" style="margin-top:14px;">Ingresos, gastos y pendientes todavía son de ejemplo — se conectan cuando armemos Finanzas y Sittings de verdad.</div>`;
   loadDashboardData();
 }
 async function loadDashboardData(){
@@ -482,59 +483,152 @@ async function loadDashboardData(){
     if(nums[2]) nums[2].textContent = famCount ?? 0;
   }catch(e){}
 
+  try{
+    const mesActual = currentMonthStr();
+    const [y,m] = mesActual.split('-').map(Number);
+    const desde = `${mesActual}-01`;
+    const hasta = new Date(y, m, 1).toISOString().slice(0,10);
+    const [{data:sits}, {data:gastos}] = await Promise.all([
+      sb.from('sittings_traslados').select('cobro_familia,pago_ninera').gte('fecha', desde).lt('fecha', hasta),
+      sb.from('gastos_generales').select('monto').gte('fecha', desde).lt('fecha', hasta),
+    ]);
+    const ingresos = (sits||[]).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
+    const egresos = (sits||[]).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0) + (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0);
+    const elIng = document.getElementById('dash-ingresos'); if(elIng) elIng.textContent = '$'+ingresos.toLocaleString('es-UY');
+    const elGas = document.getElementById('dash-gastos'); if(elGas) elGas.textContent = '$'+egresos.toLocaleString('es-UY');
+  }catch(e){}
+
   const box = document.getElementById('agenda');
+  let agendaItems = [];
   try{
     const { data, error } = await sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false});
     if(error){ box.innerHTML = errBox(error); return; }
     const hoy = diaHoy();
-    const items = (data||[]).filter(a => Array.isArray(a.dias) && a.dias.includes(hoy));
-    if(!items.length){ box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>'; return; }
-    box.innerHTML = items.map(a=>`
-      <div class="agendarow">
-        <div class="agendatime">${a.hora_inicio ? a.hora_inicio.slice(0,5) : '—'}</div>
-        <div class="agendadot"></div>
-        <div><b>${a.ninera_nombre}</b> → ${a.familias?.nombre || 'familia sin nombre'}${a.hora_fin ? ' · hasta '+a.hora_fin.slice(0,5) : ''}</div>
-      </div>`).join('');
-  }catch(e){ box.innerHTML = errBox(e); }
+    agendaItems = (data||[]).filter(a => Array.isArray(a.dias) && a.dias.includes(hoy));
+    if(!agendaItems.length){
+      box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>';
+    } else {
+      box.innerHTML = agendaItems.map(a=>`
+        <div class="agendarow">
+          <div class="agendatime">${a.hora_inicio ? a.hora_inicio.slice(0,5) : '—'}</div>
+          <div class="agendadot"></div>
+          <div><b>${a.ninera_nombre}</b> → ${a.familias?.nombre || 'familia sin nombre'}${a.hora_fin ? ' · hasta '+a.hora_fin.slice(0,5) : ''}</div>
+        </div>`).join('');
+    }
+  }catch(e){ box.innerHTML = errBox(e); return; }
+
+  try{
+    const { data: registrosHoy } = await sb.from('sittings_traslados').select('familia_nombre,ninera_nombre').eq('fecha', todayISO());
+    dashPendientesHoy = agendaItems.filter(a=>{
+      const famN = normaliza(a.familias?.nombre||'');
+      const ninN = normaliza(a.ninera_nombre||'');
+      return !(registrosHoy||[]).some(r => normaliza(r.familia_nombre)===famN && normaliza(r.ninera_nombre)===ninN);
+    });
+    const el = document.getElementById('dash-pend-num');
+    if(el) el.textContent = dashPendientesHoy.length;
+  }catch(e){}
 }
 
-const PEND_MOCK = {
-  'pend-sittings': {titulo:'Sittings/carsittings pendientes de registrar', filas:[
-    ['Paulina Dangelo','Sitting del 27/08 sin cargar'],['Danira Micak','Traslado del 28/08 sin cargar'],
-    ['Federica Beltramini','Sitting de hoy, sin horario cerrado'],['Belén Boasso','Falta confirmar horas']]},
-  'pend-pagos': {titulo:'A quién le debo', filas:[
-    ['Lucero Jeske','$1.550 · semana del 25/08'],['Paula Rebufello','$1.400 · semana del 25/08'],['Romina Hernández','$1.080 · semana del 25/08']]},
-  'pend-cobros': {titulo:'Quién me debe', filas:[
-    ['Gonzalo','$1.560 · semana del 25/08'],['Paola Badiola','$2.500 · sitting del 26/08']]},
-};
-function renderPendientes(cont, key){
-  const d = PEND_MOCK[key];
+function renderPendHoy(cont){
   cont.innerHTML = `
     <button class="backbtn" onclick="setModulo(null)">← Volver</button>
-    <h1 class="modtitle">${d.titulo}</h1>
-    <div class="card">${d.filas.map(([a,b])=>`<div class="agendarow" style="border-bottom:1px solid var(--line);"><div style="flex:1;"><b>${a}</b></div><div style="color:var(--ink-soft);">${b}</div></div>`).join('')}</div>
-    <div class="warnbox">Lista de ejemplo — se va a llenar sola cuando carguemos pagos/cobros reales.</div>
+    <h1 class="modtitle">Sittings/traslados de hoy sin registrar</h1>
+    <div class="helper">Comparando la agenda de hoy (armada en Familias) contra lo que ya cargaste en Sittings &amp; traslados.</div>
+    <div class="card">
+      ${dashPendientesHoy.length ? dashPendientesHoy.map(a=>`
+        <div class="agendarow" style="border-bottom:1px solid var(--line);">
+          <div><b>${a.ninera_nombre}</b> → ${a.familias?.nombre || 'familia sin nombre'}</div>
+          <div style="color:var(--ink-soft);">${a.hora_inicio ? a.hora_inicio.slice(0,5) : ''}${a.hora_fin ? '–'+a.hora_fin.slice(0,5) : ''}</div>
+        </div>`).join('') : '<div class="empty">Ya está todo registrado por hoy.</div>'}
+    </div>
+    <div class="actions"><button class="btn primary" onclick="setModulo('sittings')">Ir a cargar sittings</button></div>
   `;
 }
 
-function renderFinanzasPreview(cont){
-  const mov = [
-    ['28 ago','Laura Pouquette — semana',4200],['27 ago','Pago a Romina H.',-1080],
-    ['26 ago','Paola Badiola — sitting',2500],['25 ago','Pago a Lucero J.',-1550],
-    ['24 ago','Gonzalo — semana',1560],
-  ];
-  cont.innerHTML = `
-    <h1 class="modtitle">Finanzas</h1>
-    <div class="helper">Estado de cuenta del mes, estilo banco — vista de ejemplo hasta que conectemos la conciliación real con Itaú.</div>
-    <div class="pendrow" style="margin-top:14px;">
-      <div class="pendcard" style="cursor:default;"><div class="pendnum" style="color:var(--accent);">$128.400</div><div class="pendlabel">Ingresos</div></div>
-      <div class="pendcard" style="cursor:default;"><div class="pendnum" style="color:var(--clay-text);">$86.200</div><div class="pendlabel">Gastos</div></div>
-      <div class="pendcard" style="cursor:default;"><div class="pendnum">$42.200</div><div class="pendlabel">Balance</div></div>
+/* ================= FINANZAS ================= */
+let finMes = null;
+async function renderFinanzas(cont){
+  finMes = finMes || currentMonthStr();
+  cont.innerHTML = moduloHeader('Finanzas') + `
+    <div class="helper">Ingresos y pagos a niñeras vienen automáticos desde Sittings &amp; traslados. Los demás gastos del negocio (alquiler, insumos, etc.) se cargan acá a mano. La conciliación con el estado de cuenta de Itaú sigue siendo un paso aparte por ahora.</div>
+    <div class="mesbar">
+      <div class="field" style="margin:0;max-width:200px;"><label>Mes</label><input type="month" id="fin-mes" value="${finMes}" onchange="cambiarFinMes()"></div>
     </div>
+    <div class="summary3" id="fin-summary"></div>
     <div class="card">
-      ${mov.map(([f,c,m])=>`<div class="agendarow" style="border-bottom:1px solid var(--line);"><div>${f} · ${c}</div><div style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${m>0?'var(--good)':'var(--bad)'};">${m>0?'+':''}$${m}</div></div>`).join('')}
+      <h2>Registrar gasto general</h2>
+      <div class="helper">Alquiler, insumos u otro gasto del negocio que no sea pago a una niñera.</div>
+      <div class="grid3">
+        <div class="field"><label>Fecha</label><input type="date" id="fin-gasto-fecha" value="${todayISO()}"></div>
+        <div class="field"><label>Concepto</label><input type="text" id="fin-gasto-concepto" placeholder="Alquiler, insumos..."></div>
+        <div class="field"><label>Monto</label><input type="number" id="fin-gasto-monto"></div>
+      </div>
+      <button class="btn primary" onclick="guardarGastoGeneral()">Agregar gasto</button>
     </div>
+    <div class="card" id="fin-movs"></div>
   `;
+  cargarFinanzas();
+}
+function cambiarFinMes(){ finMes = document.getElementById('fin-mes').value; cargarFinanzas(); }
+async function guardarGastoGeneral(){
+  const fecha = document.getElementById('fin-gasto-fecha').value;
+  const concepto = document.getElementById('fin-gasto-concepto').value.trim();
+  const monto = Number(document.getElementById('fin-gasto-monto').value)||0;
+  if(!fecha || !concepto || !monto){ toast('Faltan fecha, concepto o monto.', 'bad'); return; }
+  const { error } = await sb.from('gastos_generales').insert({fecha, concepto, monto});
+  if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  toast('Gasto agregado.');
+  document.getElementById('fin-gasto-concepto').value = '';
+  document.getElementById('fin-gasto-monto').value = '';
+  cargarFinanzas();
+}
+async function eliminarGastoGeneral(id){
+  if(!confirm('¿Eliminar este gasto? No se puede deshacer.')) return;
+  const { error } = await sb.from('gastos_generales').delete().eq('id', id);
+  if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
+  cargarFinanzas();
+}
+async function cargarFinanzas(){
+  const summary = document.getElementById('fin-summary');
+  const movsBox = document.getElementById('fin-movs');
+  movsBox.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
+  const [y,m] = finMes.split('-').map(Number);
+  const desde = `${finMes}-01`;
+  const hasta = new Date(y, m, 1).toISOString().slice(0,10);
+  const [{data:sits, error:e1}, {data:gastos, error:e2}] = await Promise.all([
+    sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta),
+    sb.from('gastos_generales').select('*').gte('fecha', desde).lt('fecha', hasta),
+  ]);
+  if(e1 || e2){ movsBox.innerHTML = errBox(e1||e2); return; }
+  const ingresos = (sits||[]).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
+  const egresosNinieras = (sits||[]).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
+  const egresosGenerales = (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0);
+  const egresos = egresosNinieras + egresosGenerales;
+  summary.innerHTML = `
+    <div class="summarycard"><div class="statlabel">Ingresos de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${ingresos.toLocaleString('es-UY')}</div></div>
+    <div class="summarycard"><div class="statlabel">Gastos de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--clay-text);">$${egresos.toLocaleString('es-UY')}</div></div>
+    <div class="summarycard" style="border-left:3px solid var(--accent);"><div class="statlabel">Balance</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${(ingresos-egresos).toLocaleString('es-UY')}</div></div>
+  `;
+  const movs = [];
+  (sits||[]).forEach(r=>{
+    if(Number(r.cobro_familia)) movs.push({fecha:r.fecha, texto:`${r.familia_nombre} — ${r.tipo==='sitting'?'sitting':'traslado'} (${r.ninera_nombre})`, monto:Number(r.cobro_familia)});
+    if(Number(r.pago_ninera)) movs.push({fecha:r.fecha, texto:`Pago a ${r.ninera_nombre}`, monto:-Number(r.pago_ninera)});
+  });
+  (gastos||[]).forEach(g=>{
+    movs.push({fecha:g.fecha, texto:g.concepto, monto:-Number(g.monto), gastoId:g.id});
+  });
+  movs.sort((a,b)=> b.fecha.localeCompare(a.fecha));
+  if(!movs.length){ movsBox.innerHTML = `<div class="empty">No hay movimientos cargados en ${monthLabel(finMes)} todavía.</div>`; return; }
+  movsBox.innerHTML = `<h2 style="margin-bottom:10px;">Movimientos de ${monthLabel(finMes)}</h2>` + movs.map(mv=>{
+    const fechaFmt = new Date(mv.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
+    return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
+      <div>${fechaFmt} · ${mv.texto}</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${mv.monto>0?'var(--good)':'var(--bad)'};">${mv.monto>0?'+':''}$${mv.monto.toLocaleString('es-UY')}</span>
+        ${mv.gastoId ? `<button class="smallbtn danger" onclick="eliminarGastoGeneral('${mv.gastoId}')">Eliminar</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function moduloHeader(titulo){
@@ -545,12 +639,12 @@ function renderModulo(){
   document.getElementById('modfooter').innerHTML = '';
   const cont = document.getElementById('modcontent');
   if(!moduloActivo){ renderDashboard(cont); return; }
-  if(moduloActivo.startsWith('pend-')){ renderPendientes(cont, moduloActivo); return; }
+  if(moduloActivo.startsWith('pend-')){ renderPendHoy(cont); return; }
   const m = MODULOS.find(x=>x.key===moduloActivo);
   if(moduloActivo==='rrhh'){ cont.innerHTML = moduloHeader(m.label) + rrhhShell(); afterRrhhRender(); return; }
   if(moduloActivo==='ninieras'){ cont.innerHTML = moduloHeader(m.label) + '<div id="ninieras-body"></div>'; renderNinieras(document.getElementById('ninieras-body')); return; }
   if(moduloActivo==='familias'){ cont.innerHTML = moduloHeader(m.label) + '<div id="fam-body"></div>'; renderFamilias(document.getElementById('fam-body')); return; }
-  if(moduloActivo==='finanzas'){ renderFinanzasPreview(cont); return; }
+  if(moduloActivo==='finanzas'){ renderFinanzas(cont); return; }
   if(moduloActivo==='sittings'){ cont.innerHTML = moduloHeader(m.label) + '<div id="sit-body"></div>'; renderSittings(document.getElementById('sit-body')); return; }
   const textos = {
     marketing:'Calendario de fechas especiales con sugerencias de contenido con anticipación.',
