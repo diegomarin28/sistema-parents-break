@@ -646,11 +646,89 @@ function renderModulo(){
   if(moduloActivo==='familias'){ cont.innerHTML = moduloHeader(m.label) + '<div id="fam-body"></div>'; renderFamilias(document.getElementById('fam-body')); return; }
   if(moduloActivo==='finanzas'){ renderFinanzas(cont); return; }
   if(moduloActivo==='sittings'){ cont.innerHTML = moduloHeader(m.label) + '<div id="sit-body"></div>'; renderSittings(document.getElementById('sit-body')); return; }
+  if(moduloActivo==='marketing'){ renderMarketing(cont); return; }
   const textos = {
-    marketing:'Calendario de fechas especiales con sugerencias de contenido con anticipación.',
     legal:'Biblioteca de contratos de niñeras y traslados, y generación de contratos nuevos.',
   };
   cont.innerHTML = moduloHeader(m.label) + `<div class="card placeholder"><p>${textos[moduloActivo]}</p></div>`;
+}
+
+/* ================= MARKETING ================= */
+let marketingItems = [];
+function renderMarketing(cont){
+  cont.innerHTML = moduloHeader('Marketing') + `
+    <div class="helper">Calendario de fechas especiales para ir armando contenido de Instagram con anticipación.</div>
+    <div class="card">
+      <h2>Agregar fecha especial</h2>
+      <div class="grid3">
+        <div class="field"><label>Fecha</label><input type="date" id="mk-fecha"></div>
+        <div class="field"><label>Título</label><input type="text" id="mk-titulo" placeholder="Ej: Día del Niño"></div>
+        <div class="field"><label>¿Ya publicado?</label><select id="mk-publicado"><option value="false">No</option><option value="true">Sí</option></select></div>
+      </div>
+      <div class="field"><label>Idea de contenido</label><textarea id="mk-sugerencia" placeholder="Qué publicar y cuándo conviene hacerlo"></textarea></div>
+      <div class="field"><label>Notas</label><textarea id="mk-notas"></textarea></div>
+      <button class="btn primary" onclick="addFechaMarketing()">Agregar fecha</button>
+    </div>
+    <div id="mk-list"></div>
+  `;
+  cargarMarketing();
+}
+async function addFechaMarketing(){
+  const fecha = document.getElementById('mk-fecha').value;
+  const titulo = document.getElementById('mk-titulo').value.trim();
+  if(!fecha || !titulo){ toast('Faltan fecha o título.', 'bad'); return; }
+  const item = { fecha, titulo, sugerencia: document.getElementById('mk-sugerencia').value || null,
+    publicado: document.getElementById('mk-publicado').value === 'true', notas: document.getElementById('mk-notas').value || null };
+  const { error } = await sb.from('fechas_marketing').insert(item);
+  if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  ['mk-fecha','mk-titulo','mk-sugerencia','mk-notas'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('mk-publicado').value = 'false';
+  toast('Fecha agregada.');
+  cargarMarketing();
+}
+async function cargarMarketing(){
+  const cont = document.getElementById('mk-list');
+  cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
+  const { data, error } = await sb.from('fechas_marketing').select('*').order('fecha');
+  if(error){ cont.innerHTML = errBox(error); return; }
+  marketingItems = data || [];
+  if(!marketingItems.length){ cont.innerHTML = '<div class="empty">Todavía no hay fechas cargadas.</div>'; return; }
+  const hoy = todayISO();
+  const proximas = marketingItems.filter(f=>f.fecha >= hoy);
+  const pasadas = marketingItems.filter(f=>f.fecha < hoy).reverse();
+  const filaHTML = (f)=>{
+    const fechaFmt = new Date(f.fecha+'T00:00:00').toLocaleDateString('es-UY', {day:'2-digit', month:'long', year:'numeric'});
+    return `<div class="card" style="${f.publicado?'opacity:.6;':''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div>
+          <div class="eyebrow" style="margin-bottom:2px;">${fechaFmt}</div>
+          <h2 style="margin:0;">${f.titulo}</h2>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft);white-space:nowrap;">
+          <input type="checkbox" onchange="togglePublicadoMarketing('${f.id}', this.checked)" ${f.publicado?'checked':''}> Publicado
+        </label>
+      </div>
+      ${f.sugerencia?`<div class="helper" style="margin-top:8px;">${f.sugerencia}</div>`:''}
+      ${f.notas?`<div class="helper">${f.notas}</div>`:''}
+      <div class="actions" style="margin-top:10px;"><button class="smallbtn danger" onclick="eliminarFechaMarketing('${f.id}')">Eliminar</button></div>
+    </div>`;
+  };
+  let html = '';
+  if(proximas.length){ html += `<h2 style="margin:18px 0 10px;">Próximas</h2>` + proximas.map(filaHTML).join(''); }
+  if(pasadas.length){ html += `<h2 style="margin:18px 0 10px;">Pasadas</h2>` + pasadas.map(filaHTML).join(''); }
+  cont.innerHTML = html;
+}
+async function togglePublicadoMarketing(id, val){
+  const { error } = await sb.from('fechas_marketing').update({publicado: val}).eq('id', id);
+  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+  cargarMarketing();
+}
+async function eliminarFechaMarketing(id){
+  if(!confirm('¿Eliminar esta fecha? No se puede deshacer.')) return;
+  const { error } = await sb.from('fechas_marketing').delete().eq('id', id);
+  if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
+  toast('Fecha eliminada.');
+  cargarMarketing();
 }
 
 /* ================= RR.HH. ================= */
@@ -1145,7 +1223,7 @@ function filtrarNinieras(){
         <button class="smallbtn" onclick="verNinera('${n.id}')">Ver ficha</button>
         <button class="smallbtn" onclick="editarNinera('${n.id}')">Editar</button>
         <button class="smallbtn danger" onclick="eliminarNinera('${n.id}')">Eliminar</button>
-        <button class="smallbtn" onclick="alert('Mandame ejemplos de CV en Canva y conecto este botón para generarlo automático.')">CV (Canva)</button>
+        <button class="smallbtn" onclick="generarMensajeCV('${n.id}')">Generar CV</button>
       </div>
     </div>`).join('');
 }
@@ -1195,6 +1273,59 @@ async function eliminarNinera(id){
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   toast('Niñera eliminada.');
   cargarNinieras();
+}
+
+/* ---- Generar CV: arma el pedido para pegarle a Claude en el chat ---- */
+const CV_CANVA_DESIGN_ID = 'DAHErvfrB3A';
+const CV_CANVA_DESIGN_NOMBRE = 'CV babysitter nueva identidad';
+function generarMensajeCV(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  if(!n) return;
+  const cd = n.candidatas || {};
+  const datos = [`Nombre: ${n.nombre}`];
+  if(n.telefono) datos.push(`Teléfono: ${n.telefono}`);
+  if(n.zona) datos.push(`Zona: ${n.zona}`);
+  datos.push(`Tipo: ${n.tipo || 'Niñera'}`);
+  if(n.foto) datos.push(`Foto (URL): ${n.foto}`);
+  FICHA_CAMPOS.forEach(f=>{ if(cd[f.key]) datos.push(`${f.label}: ${cd[f.key]}`); });
+  if(n.notas) datos.push(`Notas: ${n.notas}`);
+  const mensaje = `Generame el CV de ${n.nombre} en Canva.
+
+Antes de generarlo, leé en los Files de este Project el archivo "instrucciones_generar_cv_ninieras.md" y la imagen de ejemplo de un CV ya terminado — ahí está el paso a paso exacto y el formato visual a respetar (fondo salvia, nombre en violeta bold, foto circular, bullets coral).
+
+Usá como base el diseño "${CV_CANVA_DESIGN_NOMBRE}" (ID: ${CV_CANVA_DESIGN_ID}) de mi cuenta de Canva conectada — duplicá una página nueva ahí (no edites el diseño original), reemplazá los datos por los de abajo, y mandámelo acá como PDF.
+
+Datos de la niñera:
+${datos.map(d=>'- '+d).join('\n')}`;
+  document.getElementById('ninieradetalle').innerHTML = `
+    <div class="card">
+      <button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cerrar</button>
+      <h2>Mensaje para pedirle el CV a Claude</h2>
+      <div class="helper">Copiá esto (o descargalo) y pegalo en un chat con Claude dentro de este Project — tiene todo lo que necesita para generar el CV de ${n.nombre} y mandártelo en PDF. Para que funcione, el Project tiene que tener cargados el archivo de instrucciones y una imagen de ejemplo de CV en su sección de Files.</div>
+      <textarea id="cv-msg-${id}" readonly style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">${mensaje}</textarea>
+      <div class="actions">
+        <button class="btn primary" onclick="copiarMensajeCV('${id}')">Copiar mensaje</button>
+        <button class="btn ghost" onclick="descargarMensajeCV('${id}')">Descargar .txt</button>
+      </div>
+    </div>`;
+}
+async function copiarMensajeCV(id){
+  const ta = document.getElementById('cv-msg-'+id);
+  try{
+    await navigator.clipboard.writeText(ta.value);
+    toast('Mensaje copiado — pegalo en el chat con Claude.');
+  }catch(e){
+    ta.select();
+    toast('No se pudo copiar automático — seleccioná el texto y copiá a mano.', 'bad');
+  }
+}
+function descargarMensajeCV(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  const ta = document.getElementById('cv-msg-'+id);
+  if(!ta) return;
+  const blob = new Blob([ta.value], {type:'text/plain;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download = `pedido_cv_${(n?.nombre||'ninera').replace(/\s+/g,'_')}.txt`; a.click(); URL.revokeObjectURL(url);
 }
 
 /* ================= FAMILIAS ================= */
