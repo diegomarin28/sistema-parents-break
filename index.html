@@ -1153,7 +1153,7 @@ function verNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
   const cd = n.candidatas || {};
   const rows = FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
-  document.getElementById('ninieradetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cerrar</button><h2>${n.nombre}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos.</div>'}<div><b>Notas</b>${n.notas||'—'}</div></div></div>`;
+  document.getElementById('ninieradetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cerrar</button><h2>${n.nombre}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos.</div>'}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div></div>`;
 }
 function editarNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
@@ -1166,7 +1166,10 @@ function editarNinera(id){
         <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${n.telefono||''}"></div>
         <div class="field"><label>Zona</label><input type="text" id="ed-zona" value="${n.zona||''}"></div>
       </div>
-      <div class="field"><label>Foto (URL)</label><input type="text" id="ed-foto" value="${n.foto||''}"></div>
+      <div class="grid2">
+        <div class="field"><label>Foto (URL)</label><input type="text" id="ed-foto" value="${n.foto||''}"></div>
+        <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-cuenta" value="${n.cuenta_bancaria||''}"></div>
+      </div>
       <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
       <button class="btn primary" onclick="guardarEdicionNinera('${id}')">Guardar cambios</button>
     </div>`;
@@ -1177,6 +1180,7 @@ async function guardarEdicionNinera(id){
     telefono: document.getElementById('ed-telefono').value,
     zona: document.getElementById('ed-zona').value,
     foto: document.getElementById('ed-foto').value,
+    cuenta_bancaria: document.getElementById('ed-cuenta').value,
     notas: document.getElementById('ed-notas').value,
   };
   const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
@@ -1205,7 +1209,11 @@ function renderFamilias(body){
         <div class="field"><label>Zona</label><input type="text" id="fam-zona"></div>
         <div class="field"><label>Teléfono</label><input type="tel" id="fam-telefono"></div>
       </div>
-      <div class="field"><label>Niños (edades)</label><input type="text" id="fam-ninos" placeholder="Ej: 3 y 6 años"></div>
+      <div class="grid2">
+        <div class="field"><label>Niños (edades)</label><input type="text" id="fam-ninos" placeholder="Ej: 3 y 6 años"></div>
+        <div class="field"><label>Dirección</label><input type="text" id="fam-direccion" placeholder="Para sugerir origen en traslados"></div>
+      </div>
+      <div class="field"><label>Cuenta bancaria</label><input type="text" id="fam-cuenta"></div>
       <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
       <button class="btn primary" onclick="addFamilia()">Agregar familia</button>
     </div>
@@ -1217,10 +1225,11 @@ async function addFamilia(){
   const nombre = document.getElementById('fam-nombre').value.trim();
   if(!nombre){ toast('Falta el nombre de la familia.','bad'); return; }
   const fam = { nombre, zona:document.getElementById('fam-zona').value, telefono:document.getElementById('fam-telefono').value,
-    ninos:document.getElementById('fam-ninos').value, notas:document.getElementById('fam-notas').value };
+    ninos:document.getElementById('fam-ninos').value, direccion:document.getElementById('fam-direccion').value,
+    cuenta_bancaria:document.getElementById('fam-cuenta').value, notas:document.getElementById('fam-notas').value };
   const { error } = await sb.from('familias').insert(fam);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
-  ['fam-nombre','fam-zona','fam-telefono','fam-ninos','fam-notas'].forEach(id=>document.getElementById(id).value='');
+  ['fam-nombre','fam-zona','fam-telefono','fam-ninos','fam-direccion','fam-cuenta','fam-notas'].forEach(id=>document.getElementById(id).value='');
   toast('Familia agregada.');
   cargarFamilias();
 }
@@ -1243,9 +1252,15 @@ async function cargarFamilias(){
     }).join('');
     return `
     <div class="card">
-      <h2>${f.nombre}</h2>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <h2>${f.nombre}</h2>
+        <button class="smallbtn" onclick="editarFamilia('${f.id}')">Editar</button>
+      </div>
       <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
+      ${f.direccion?`<div class="helper">📍 ${f.direccion}</div>`:''}
+      ${f.cuenta_bancaria?`<div class="helper">Cuenta: ${f.cuenta_bancaria}</div>`:''}
       ${f.notas?`<div class="helper">${f.notas}</div>`:''}
+      <div id="fam-editbox-${f.id}"></div>
       <table class="asigtable"><thead><tr><th>Niñera</th><th>Días y horario</th><th>Cobro a familia</th><th>Pago a niñera</th><th>Margen</th><th></th></tr></thead>
         <tbody>${asigRows || '<tr><td colspan="6" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table>
       <div class="grid3" style="margin-top:14px;">
@@ -1266,6 +1281,43 @@ async function cargarFamilias(){
       <div class="actions" style="margin-top:14px;"><button class="smallbtn danger" onclick="eliminarFamilia('${f.id}')">Eliminar familia</button></div>
     </div>`;
   }).join('');
+}
+function editarFamilia(id){
+  const f = familiasItems.find(x=>x.id===id);
+  if(!f) return;
+  document.getElementById('fam-editbox-'+id).innerHTML = `
+    <div class="card" style="background:var(--bg);box-shadow:none;">
+      <div class="grid3">
+        <div class="field"><label>Nombre</label><input type="text" id="ed-fam-nombre-${id}" value="${f.nombre||''}"></div>
+        <div class="field"><label>Zona</label><input type="text" id="ed-fam-zona-${id}" value="${f.zona||''}"></div>
+        <div class="field"><label>Teléfono</label><input type="tel" id="ed-fam-telefono-${id}" value="${f.telefono||''}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Niños (edades)</label><input type="text" id="ed-fam-ninos-${id}" value="${f.ninos||''}"></div>
+        <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion-${id}" value="${f.direccion||''}"></div>
+      </div>
+      <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-fam-cuenta-${id}" value="${f.cuenta_bancaria||''}"></div>
+      <div class="field"><label>Notas</label><textarea id="ed-fam-notas-${id}">${f.notas||''}</textarea></div>
+      <div class="actions">
+        <button class="btn primary" onclick="guardarEdicionFamilia('${id}')">Guardar cambios</button>
+        <button class="btn ghost" onclick="document.getElementById('fam-editbox-${id}').innerHTML=''">Cancelar</button>
+      </div>
+    </div>`;
+}
+async function guardarEdicionFamilia(id){
+  const cambios = {
+    nombre: document.getElementById('ed-fam-nombre-'+id).value,
+    zona: document.getElementById('ed-fam-zona-'+id).value,
+    telefono: document.getElementById('ed-fam-telefono-'+id).value,
+    ninos: document.getElementById('ed-fam-ninos-'+id).value,
+    direccion: document.getElementById('ed-fam-direccion-'+id).value,
+    cuenta_bancaria: document.getElementById('ed-fam-cuenta-'+id).value,
+    notas: document.getElementById('ed-fam-notas-'+id).value,
+  };
+  const { error } = await sb.from('familias').update(cambios).eq('id', id);
+  if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  toast('Cambios guardados.');
+  cargarFamilias();
 }
 async function addAsignacion(famId){
   const nombre = document.getElementById('asig-nombre-'+famId).value.trim();
