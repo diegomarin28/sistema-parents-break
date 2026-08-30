@@ -34,19 +34,25 @@ h1{font-size:27px;font-weight:600;}
 .who button{background:none;border:none;color:var(--accent);font-weight:600;cursor:pointer;font-size:12.5px;padding:0;margin-top:3px;}
 .homeintro{margin:12px 0 28px;}
 .homeintro h1{font-size:26px;margin-top:4px;}
-.hometiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;}
+.hometiles{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:130px;gap:16px;}
 .tile{
-  background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:26px 22px;
+  background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px;
   text-align:left;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform var(--ease), box-shadow var(--ease), border-color var(--ease);
-  display:flex;flex-direction:column;gap:12px;font-family:'Inter',sans-serif;
+  display:flex;flex-direction:column;gap:10px;font-family:'Inter',sans-serif;position:relative;overflow:hidden;
   opacity:0;animation:tileIn 480ms cubic-bezier(.2,.8,.2,1) forwards;
 }
+.tile.hero{grid-column:span 2;grid-row:span 2;padding:30px;justify-content:flex-end;}
+.tile.hero .tile-icon{width:56px;height:56px;border-radius:16px;}
+.tile.hero .tile-icon svg{width:28px;height:28px;}
+.tile.hero .tile-title{font-size:22px;}
+.tile.hero .tile-desc{font-size:14px;max-width:320px;}
+.tile.hero::after{content:'';position:absolute;width:220px;height:220px;border-radius:50%;background:var(--tile-accent-soft);top:-90px;right:-90px;z-index:0;}
 @keyframes tileIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 .tile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--tile-accent);}
-.tile-icon{width:46px;height:46px;border-radius:13px;background:var(--tile-accent-soft);color:var(--tile-accent);display:flex;align-items:center;justify-content:center;}
+.tile-icon{width:46px;height:46px;border-radius:13px;background:var(--tile-accent-soft);color:var(--tile-accent);display:flex;align-items:center;justify-content:center;position:relative;z-index:1;}
 .tile-icon svg{width:23px;height:23px;}
-.tile-title{font-family:'Baloo 2',sans-serif;font-size:17px;font-weight:700;color:var(--ink);}
-.tile-desc{font-size:13px;color:var(--ink-soft);line-height:1.5;}
+.tile-title{font-family:'Baloo 2',sans-serif;font-size:17px;font-weight:700;color:var(--ink);position:relative;z-index:1;}
+.tile-desc{font-size:13px;color:var(--ink-soft);line-height:1.5;position:relative;z-index:1;}
 .backbtn{background:var(--paper);border:1px solid var(--line);border-radius:100px;padding:8px 16px;font-weight:600;font-size:13.5px;color:var(--ink-soft);cursor:pointer;transition:all var(--ease);font-family:'Inter',sans-serif;}
 .backbtn:hover{border-color:var(--accent);color:var(--accent);}
 .modtitle{font-size:24px;margin:14px 0 20px;}
@@ -136,23 +142,27 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .asigtable th,.asigtable td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;}
 .margenpos{color:var(--good);font-weight:600;}
 .margenneg{color:var(--bad);font-weight:600;}
-.loginstage{position:fixed;inset:0;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg);}
-.blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.55;animation:drift 18s ease-in-out infinite;}
-.blob-a{width:420px;height:420px;background:var(--clay);top:-120px;left:-100px;animation-duration:22s;}
-.blob-b{width:380px;height:380px;background:var(--accent);bottom:-140px;right:-80px;animation-duration:26s;animation-delay:-6s;}
-.blob-c{width:260px;height:260px;background:var(--clay);bottom:10%;left:8%;opacity:.35;animation-duration:19s;animation-delay:-3s;}
+.loginstage{position:fixed;inset:0;display:grid;grid-template-columns:1fr 1fr;background:var(--paper);}
+.loginbrand{position:relative;overflow:hidden;background:var(--accent);display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:60px;}
+.blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.6;animation:drift 20s ease-in-out infinite;}
+.blob-a{width:380px;height:380px;background:var(--clay);top:-100px;right:-80px;animation-duration:22s;}
+.blob-b{width:320px;height:320px;background:#fff;bottom:-120px;left:-60px;opacity:.16;animation-duration:26s;animation-delay:-6s;}
 @keyframes drift{0%,100%{transform:translate(0,0) scale(1);}33%{transform:translate(30px,-20px) scale(1.06);}66%{transform:translate(-20px,25px) scale(0.96);}}
-.loginwrap{position:relative;z-index:1;max-width:380px;width:90%;text-align:center;}
-.loginlogo{height:52px;margin-bottom:26px;animation:logoIn 600ms cubic-bezier(.2,.8,.2,1);}
+.loginbrand-logo{height:44px;filter:brightness(0) invert(1);position:relative;z-index:1;margin-bottom:28px;animation:logoIn 600ms cubic-bezier(.2,.8,.2,1);}
 @keyframes logoIn{from{opacity:0;transform:translateY(-8px) scale(.94);}to{opacity:1;transform:translateY(0) scale(1);}}
-.logincard{background:rgba(255,255,255,.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.6);border-radius:22px;padding:30px 28px;text-align:left;box-shadow:var(--shadow-md);animation:cardIn 550ms cubic-bezier(.2,.8,.2,1) 120ms both;}
-@keyframes cardIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+.loginbrand h1{position:relative;z-index:1;color:#fff;font-size:32px;max-width:380px;line-height:1.25;animation:fadeIn 500ms 100ms both;}
+.loginbrand p{position:relative;z-index:1;color:rgba(255,255,255,.85);font-size:14.5px;max-width:340px;line-height:1.6;margin-top:14px;animation:fadeIn 500ms 180ms both;}
+.loginformside{display:flex;align-items:center;justify-content:center;padding:40px;}
+.loginwrap{width:100%;max-width:340px;animation:fadeIn 500ms 200ms both;}
+.loginwrap h2{font-size:22px;margin-bottom:6px;}
+.loginwrap .helper{margin-bottom:26px;}
 .inputicon{position:relative;}
 .inputicon svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--ink-soft);pointer-events:none;}
 .inputicon input{padding-left:34px;}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:2px;}
 .spinner.dark{border-color:var(--line);border-top-color:var(--accent);}
 @keyframes spin{to{transform:rotate(360deg);}}
+@media (max-width:760px){.loginstage{grid-template-columns:1fr;grid-template-rows:auto 1fr;}.loginbrand{padding:36px 28px;min-height:180px;}.loginbrand h1{font-size:22px;}.loginbrand p{display:none;}.loginformside{padding:28px;}}
 .toaststack{position:fixed;top:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:8px;}
 .toast{background:var(--ink);color:#fff;padding:12px 16px;border-radius:11px;font-size:13.5px;box-shadow:var(--shadow-md);animation:toastIn 220ms cubic-bezier(.2,.8,.2,1);max-width:300px;}
 .toast.good{background:var(--good);}
@@ -160,7 +170,51 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .toast.leaving{animation:toastOut 200ms ease forwards;}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
 @keyframes toastOut{to{opacity:0;transform:translateX(20px);}}
-@media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}}
+.applayout{display:flex;gap:20px;align-items:flex-start;}
+.sidebar{width:172px;flex-shrink:0;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:12px;position:sticky;top:20px;display:flex;flex-direction:column;gap:2px;}
+.mainarea{flex:1;min-width:0;}
+.navitem{display:flex;align-items:center;gap:10px;background:none;border:none;border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;transition:background var(--ease);font-family:'Inter',sans-serif;width:100%;}
+.navitem:hover{background:var(--bg);}
+.navitem.active{background:var(--accent);}
+.navitem.active .navitem-label{color:#fff;}
+.navitem.active .navitem-ic{background:rgba(255,255,255,.25);color:#fff;}
+.navitem-ic{width:28px;height:28px;border-radius:8px;background:var(--bg);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.navitem-ic svg{width:14px;height:14px;}
+.navitem-label{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:12.5px;color:var(--ink);}
+.statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
+.statcard{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);}
+.statnum{font-family:'Baloo 2',sans-serif;font-size:26px;font-weight:700;color:var(--ink);}
+.statlabel{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+.moneyrow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.moneycard{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 18px;text-align:left;cursor:pointer;transition:transform var(--ease), border-color var(--ease);box-shadow:var(--shadow-sm);font-family:'Inter',sans-serif;}
+.moneycard:hover{transform:translateY(-2px);border-color:#C8C6DC;}
+.moneycard.accent{border-left:3px solid var(--accent);}
+.moneycard.clay{border-left:3px solid var(--clay);}
+.moneytop{display:flex;justify-content:space-between;align-items:flex-start;font-size:12px;color:var(--ink-soft);}
+.moneytop svg{width:16px;height:16px;flex-shrink:0;}
+.moneycard.accent .moneytop svg{color:var(--accent);}
+.moneycard.clay .moneytop svg{color:var(--clay);}
+.moneynum{font-family:'Baloo 2',sans-serif;font-size:22px;font-weight:700;color:var(--ink);margin-top:8px;}
+.moneylink{font-size:11px;margin-top:4px;}
+.moneycard.accent .moneylink{color:var(--accent);}
+.moneycard.clay .moneylink{color:var(--clay-text);}
+.pendrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+.pendcard{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:13px 14px;text-align:left;cursor:pointer;transition:transform var(--ease), border-color var(--ease);font-family:'Inter',sans-serif;}
+.pendcard:hover{transform:translateY(-2px);border-color:#C8C6DC;}
+.pendnum{font-family:'Baloo 2',sans-serif;font-size:19px;font-weight:700;color:var(--ink);}
+.pendlabel{font-size:11px;color:var(--ink-soft);margin-top:1px;}
+.agendabox{max-height:190px;overflow-y:auto;}
+.agendabox::-webkit-scrollbar{width:6px;}
+.agendabox::-webkit-scrollbar-thumb{background:var(--line);border-radius:10px;}
+.agendarow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px dashed var(--line);font-size:13.5px;}
+.agendarow:last-child{border-bottom:none;}
+.agendatime{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--accent);min-width:44px;}
+.agendadot{width:7px;height:7px;border-radius:50%;background:var(--clay);flex-shrink:0;}
+.dayrow{display:flex;gap:6px;margin-bottom:10px;}
+.daybtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all var(--ease);}
+.daybtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
+@media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow,.pendrow{grid-template-columns:1fr 1fr;}}
+@media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}.hometiles{grid-template-columns:1fr;grid-auto-rows:auto;}.tile.hero{grid-column:span 1;grid-row:span 1;}}
 @media print{.subnav,.actions,.backbtn,button{display:none !important;}}
 </style>
 </head>
@@ -251,12 +305,17 @@ function renderRoot(){
 function renderLogin(){
   document.getElementById('app').innerHTML = `
     <div class="loginstage">
-      <div class="blob blob-a"></div>
-      <div class="blob blob-b"></div>
-      <div class="blob blob-c"></div>
-      <div class="loginwrap">
-        <img src="logo.png" alt="Parents Break" class="loginlogo">
-        <div class="logincard">
+      <div class="loginbrand">
+        <div class="blob blob-a"></div>
+        <div class="blob blob-b"></div>
+        <img src="logo.png" alt="Parents Break" class="loginbrand-logo">
+        <h1>El día a día de tu equipo, en un solo lugar.</h1>
+        <p>Candidatas, entrevistas, niñeras activas y tarifas por familia — todo conectado, sin planillas sueltas.</p>
+      </div>
+      <div class="loginformside">
+        <div class="loginwrap">
+          <h2>Bienvenida de vuelta</h2>
+          <div class="helper">Entrá con tu cuenta de equipo.</div>
           <div class="field">
             <label>Mail</label>
             <div class="inputicon">
@@ -305,9 +364,14 @@ const ICONS = {
   finanzas: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>`,
   marketing: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10v4h3l7 4V6l-7 4H4z"/><path d="M18 9a4 4 0 010 6"/></svg>`,
   legal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/></svg>`,
+  ninieras: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="7.5" r="3.2"/><path d="M6 20c0-3.4 2.7-5.7 6-5.7s6 2.3 6 5.7"/><path d="M9 20v-3M15 20v-3"/></svg>`,
+  hoy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>`,
+  moneyIn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l5-5 4 4 7-8"/><path d="M15 8h5v5"/></svg>`,
+  moneyOut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7l5 5 4-4 7 8"/><path d="M15 16h5v-5"/></svg>`,
 };
 const MODULOS = [
-  {key:'rrhh', label:'RR.HH.', desc:'Candidatas, entrevistas y niñeras activas.'},
+  {key:'rrhh', label:'RR.HH.', desc:'Candidatas y entrevistas — el pipeline completo, de punta a punta.'},
+  {key:'ninieras', label:'Niñeras', desc:'Tu equipo activo, con filtro por nombre y zona.'},
   {key:'familias', label:'Familias', desc:'Familias, tarifas por niñera y márgenes.'},
   {key:'sittings', label:'Sittings & traslados', desc:'Registro diario de sittings y traslados.'},
   {key:'finanzas', label:'Finanzas', desc:'Conciliación con el estado de cuenta de Itaú.'},
@@ -321,44 +385,157 @@ function renderApp(){
   document.getElementById('app').innerHTML = `
     <header>
       <div class="topbar">
-        <div><img src="logo.png" alt="Parents Break" style="height:38px;"></div>
+        <div><img src="logo.png" alt="Parents Break" style="height:34px;"></div>
         <div class="who">${session.user.email}<br><button onclick="logout()">Cerrar sesión</button></div>
       </div>
     </header>
-    <div id="modcontent"></div>
+    <div class="applayout">
+      <aside class="sidebar" id="sidebar"></aside>
+      <main id="modcontent" class="mainarea"></main>
+    </div>
   `;
   renderModulo();
 }
 function setModulo(k){ moduloActivo=k; renderModulo(); }
-function homeTiles(){
-  return `
-    <div class="homeintro">
-      <div class="eyebrow">Parents Break</div>
-      <h1>¿Qué necesitás hoy?</h1>
+function renderSidebar(){
+  const activeTop = (moduloActivo===null || moduloActivo==='hoy') ? 'hoy' : (MODULOS.some(m=>m.key===moduloActivo) ? moduloActivo : null);
+  document.getElementById('sidebar').innerHTML = `
+    <button class="navitem ${activeTop==='hoy'?'active':''}" onclick="setModulo(null)">
+      <div class="navitem-ic">${ICONS.hoy}</div><div class="navitem-label">Hoy</div>
+    </button>
+    ${MODULOS.map(m=>`
+      <button class="navitem ${activeTop===m.key?'active':''}" onclick="setModulo('${m.key}')">
+        <div class="navitem-ic">${ICONS[m.key]}</div><div class="navitem-label">${m.label}</div>
+      </button>`).join('')}
+  `;
+}
+
+const DIAS_LABEL = {L:'Lun',M:'Mar',X:'Mié',J:'Jue',V:'Vie',S:'Sáb',D:'Dom'};
+function diaHoy(){ return ['D','L','M','X','J','V','S'][new Date().getDay()]; }
+function fechaHoyLarga(){
+  const f = new Intl.DateTimeFormat('es-UY', {weekday:'long', day:'numeric', month:'long'}).format(new Date());
+  return f.charAt(0).toUpperCase() + f.slice(1);
+}
+
+async function renderDashboard(cont){
+  cont.innerHTML = `
+    <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1></div>
+    <div class="statrow" id="statrow">
+      <div class="statcard"><div class="statnum">—</div><div class="statlabel">En pipeline</div></div>
+      <div class="statcard"><div class="statnum">—</div><div class="statlabel">Niñeras activas</div></div>
+      <div class="statcard"><div class="statnum">—</div><div class="statlabel">Familias</div></div>
     </div>
-    <div class="hometiles">
-      ${MODULOS.map((m,i)=>`
-        <button class="tile" style="--tile-accent:var(${i%2===0?'--accent':'--clay'});--tile-accent-soft:var(${i%2===0?'--accent-soft':'--clay-soft'});animation-delay:${i*60}ms;" onclick="setModulo('${m.key}')">
-          <div class="tile-icon">${ICONS[m.key]}</div>
-          <div class="tile-title">${m.label}</div>
-          <div class="tile-desc">${m.desc}</div>
-        </button>
-      `).join('')}
+    <div class="moneyrow">
+      <button class="moneycard accent" onclick="setModulo('finanzas')">
+        <div class="moneytop"><span>Ingresos del mes</span>${ICONS.moneyIn}</div>
+        <div class="moneynum">$128.400</div>
+        <div class="moneylink">Ver detalle →</div>
+      </button>
+      <button class="moneycard clay" onclick="setModulo('finanzas')">
+        <div class="moneytop"><span>Gastos del mes</span>${ICONS.moneyOut}</div>
+        <div class="moneynum">$86.200</div>
+        <div class="moneylink">Ver detalle →</div>
+      </button>
+    </div>
+    <div class="pendrow">
+      <button class="pendcard" onclick="setModulo('pend-sittings')"><div class="pendnum">4</div><div class="pendlabel">Sittings/carsittings pendientes</div></button>
+      <button class="pendcard" onclick="setModulo('pend-pagos')"><div class="pendnum">3</div><div class="pendlabel">Pagos pendientes</div></button>
+      <button class="pendcard" onclick="setModulo('pend-cobros')"><div class="pendnum">2</div><div class="pendlabel">Cobros pendientes</div></button>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h2>Agenda de hoy · ${DIAS_LABEL[diaHoy()]}</h2>
+        <span style="font-size:11px;color:var(--ink-soft);">deslizá para ver más ↓</span>
+      </div>
+      <div id="agenda" class="agendabox"><div class="empty">Cargando…</div></div>
+    </div>
+    <div class="warnbox" style="margin-top:14px;">Ingresos, gastos y pendientes todavía son de ejemplo — se conectan cuando armemos Finanzas y Sittings de verdad.</div>
+  `;
+  loadDashboardData();
+}
+async function loadDashboardData(){
+  try{
+    const [{count:pipeline}, {count:activas}, {count:famCount}] = await Promise.all([
+      sb.from('candidatas').select('*', {count:'exact', head:true}).in('estado', ['intake','entrevistada']),
+      sb.from('ninieras').select('*', {count:'exact', head:true}).eq('activa', true),
+      sb.from('familias').select('*', {count:'exact', head:true}),
+    ]);
+    const nums = document.querySelectorAll('#statrow .statnum');
+    if(nums[0]) nums[0].textContent = pipeline ?? 0;
+    if(nums[1]) nums[1].textContent = activas ?? 0;
+    if(nums[2]) nums[2].textContent = famCount ?? 0;
+  }catch(e){}
+
+  const box = document.getElementById('agenda');
+  try{
+    const { data, error } = await sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false});
+    if(error){ box.innerHTML = errBox(error); return; }
+    const hoy = diaHoy();
+    const items = (data||[]).filter(a => Array.isArray(a.dias) && a.dias.includes(hoy));
+    if(!items.length){ box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>'; return; }
+    box.innerHTML = items.map(a=>`
+      <div class="agendarow">
+        <div class="agendatime">${a.hora_inicio ? a.hora_inicio.slice(0,5) : '—'}</div>
+        <div class="agendadot"></div>
+        <div><b>${a.ninera_nombre}</b> → ${a.familias?.nombre || 'familia sin nombre'}${a.hora_fin ? ' · hasta '+a.hora_fin.slice(0,5) : ''}</div>
+      </div>`).join('');
+  }catch(e){ box.innerHTML = errBox(e); }
+}
+
+const PEND_MOCK = {
+  'pend-sittings': {titulo:'Sittings/carsittings pendientes de registrar', filas:[
+    ['Paulina Dangelo','Sitting del 27/08 sin cargar'],['Danira Micak','Traslado del 28/08 sin cargar'],
+    ['Federica Beltramini','Sitting de hoy, sin horario cerrado'],['Belén Boasso','Falta confirmar horas']]},
+  'pend-pagos': {titulo:'A quién le debo', filas:[
+    ['Lucero Jeske','$1.550 · semana del 25/08'],['Paula Rebufello','$1.400 · semana del 25/08'],['Romina Hernández','$1.080 · semana del 25/08']]},
+  'pend-cobros': {titulo:'Quién me debe', filas:[
+    ['Gonzalo','$1.560 · semana del 25/08'],['Paola Badiola','$2.500 · sitting del 26/08']]},
+};
+function renderPendientes(cont, key){
+  const d = PEND_MOCK[key];
+  cont.innerHTML = `
+    <button class="backbtn" onclick="setModulo(null)">← Volver</button>
+    <h1 class="modtitle">${d.titulo}</h1>
+    <div class="card">${d.filas.map(([a,b])=>`<div class="agendarow" style="border-bottom:1px solid var(--line);"><div style="flex:1;"><b>${a}</b></div><div style="color:var(--ink-soft);">${b}</div></div>`).join('')}</div>
+    <div class="warnbox">Lista de ejemplo — se va a llenar sola cuando carguemos pagos/cobros reales.</div>
+  `;
+}
+
+function renderFinanzasPreview(cont){
+  const mov = [
+    ['28 ago','Laura Pouquette — semana',4200],['27 ago','Pago a Romina H.',-1080],
+    ['26 ago','Paola Badiola — sitting',2500],['25 ago','Pago a Lucero J.',-1550],
+    ['24 ago','Gonzalo — semana',1560],
+  ];
+  cont.innerHTML = `
+    <h1 class="modtitle">Finanzas</h1>
+    <div class="helper">Estado de cuenta del mes, estilo banco — vista de ejemplo hasta que conectemos la conciliación real con Itaú.</div>
+    <div class="pendrow" style="margin-top:14px;">
+      <div class="pendcard" style="cursor:default;"><div class="pendnum" style="color:var(--accent);">$128.400</div><div class="pendlabel">Ingresos</div></div>
+      <div class="pendcard" style="cursor:default;"><div class="pendnum" style="color:var(--clay-text);">$86.200</div><div class="pendlabel">Gastos</div></div>
+      <div class="pendcard" style="cursor:default;"><div class="pendnum">$42.200</div><div class="pendlabel">Balance</div></div>
+    </div>
+    <div class="card">
+      ${mov.map(([f,c,m])=>`<div class="agendarow" style="border-bottom:1px solid var(--line);"><div>${f} · ${c}</div><div style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${m>0?'var(--good)':'var(--bad)'};">${m>0?'+':''}$${m}</div></div>`).join('')}
     </div>
   `;
 }
+
 function moduloHeader(titulo){
-  return `<div style="animation:fadeIn var(--ease);"><button class="backbtn" onclick="setModulo(null)">← Volver</button><h1 class="modtitle">${titulo}</h1></div>`;
+  return `<h1 class="modtitle">${titulo}</h1>`;
 }
 function renderModulo(){
+  renderSidebar();
   const cont = document.getElementById('modcontent');
-  if(!moduloActivo){ cont.innerHTML = homeTiles(); return; }
+  if(!moduloActivo){ renderDashboard(cont); return; }
+  if(moduloActivo.startsWith('pend-')){ renderPendientes(cont, moduloActivo); return; }
   const m = MODULOS.find(x=>x.key===moduloActivo);
   if(moduloActivo==='rrhh'){ cont.innerHTML = moduloHeader(m.label) + rrhhShell(); afterRrhhRender(); return; }
+  if(moduloActivo==='ninieras'){ cont.innerHTML = moduloHeader(m.label) + '<div id="ninieras-body"></div>'; renderNinieras(document.getElementById('ninieras-body')); return; }
   if(moduloActivo==='familias'){ cont.innerHTML = moduloHeader(m.label) + '<div id="fam-body"></div>'; renderFamilias(document.getElementById('fam-body')); return; }
+  if(moduloActivo==='finanzas'){ renderFinanzasPreview(cont); return; }
   const textos = {
     sittings:'Esto ya lo tenés andando en el registro diario. Próximo paso: sumarlo acá.',
-    finanzas:'Coordinar la app de registro con la conciliación de Itaú en un solo lugar.',
     marketing:'Calendario de fechas especiales con sugerencias de contenido con anticipación.',
     legal:'Biblioteca de contratos de niñeras y traslados, y generación de contratos nuevos.',
   };
@@ -367,7 +544,7 @@ function renderModulo(){
 
 /* ================= RR.HH. ================= */
 function rrhhShell(){
-  const tabs = [['intake','Candidatas a entrevistar'],['entrevista','Entrevista'],['guardadas','Candidatas guardadas'],['ninieras','Niñeras']];
+  const tabs = [['intake','Candidatas a entrevistar'],['entrevista','Entrevista'],['guardadas','Candidatas guardadas']];
   return `<div class="subnav">${tabs.map(([k,l])=>`<button class="subtab ${rrhhTab===k?'active':''}" data-rrhhtab="${k}">${l}</button>`).join('')}</div><div id="rrhh-body"></div>`;
 }
 function afterRrhhRender(){
@@ -376,7 +553,6 @@ function afterRrhhRender(){
   if(rrhhTab==='intake') renderIntake(body);
   if(rrhhTab==='entrevista') renderEntrevista(body);
   if(rrhhTab==='guardadas') renderGuardadas(body);
-  if(rrhhTab==='ninieras') renderNinieras(body);
 }
 function errBox(e){ return `<div class="warnbox">Error de conexión con la base: ${e.message||e}</div>`; }
 
@@ -950,19 +1126,30 @@ async function cargarFamilias(){
   cont.innerHTML = dl + familiasItems.map(f=>{
     const asigRows = (f.asignaciones||[]).map(a=>{
       const margen = (Number(a.cobro_hora)||0) - (Number(a.pago_hora)||0);
-      return `<tr><td>${a.ninera_nombre}</td><td>$${a.cobro_hora||0}/h</td><td>$${a.pago_hora||0}/h</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}/h</td><td><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></td></tr>`;
+      const dias = (a.dias||[]).join(' ');
+      const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : '—';
+      return `<tr><td>${a.ninera_nombre}</td><td>${dias||'—'} · ${horario}</td><td>$${a.cobro_hora||0}/h</td><td>$${a.pago_hora||0}/h</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}/h</td><td><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></td></tr>`;
     }).join('');
     return `
     <div class="card">
       <h2>${f.nombre}</h2>
       <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
       ${f.notas?`<div class="helper">${f.notas}</div>`:''}
-      <table class="asigtable"><thead><tr><th>Niñera</th><th>Cobro a familia</th><th>Pago a niñera</th><th>Margen</th><th></th></tr></thead>
-        <tbody>${asigRows || '<tr><td colspan="5" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table>
-      <div class="grid3" style="margin-top:10px;">
+      <table class="asigtable"><thead><tr><th>Niñera</th><th>Días y horario</th><th>Cobro a familia</th><th>Pago a niñera</th><th>Margen</th><th></th></tr></thead>
+        <tbody>${asigRows || '<tr><td colspan="6" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table>
+      <div class="grid3" style="margin-top:14px;">
         <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
         <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="asig-cobro-${f.id}"></div>
         <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="asig-pago-${f.id}"></div>
+      </div>
+      <div class="field"><label>Días</label>
+        <div class="dayrow" id="asig-dias-${f.id}">
+          ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" onclick="this.classList.toggle('selected')">${d}</button>`).join('')}
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Hora inicio</label><input type="time" id="asig-horaini-${f.id}"></div>
+        <div class="field"><label>Hora fin</label><input type="time" id="asig-horafin-${f.id}"></div>
       </div>
       <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Agregar asignación</button>
       <div class="actions" style="margin-top:14px;"><button class="smallbtn danger" onclick="eliminarFamilia('${f.id}')">Eliminar familia</button></div>
@@ -972,9 +1159,12 @@ async function cargarFamilias(){
 async function addAsignacion(famId){
   const nombre = document.getElementById('asig-nombre-'+famId).value.trim();
   if(!nombre){ toast('Falta el nombre de la niñera.','bad'); return; }
-  const asig = { familia_id:famId, ninera_nombre:nombre, cobro_hora:document.getElementById('asig-cobro-'+famId).value||null, pago_hora:document.getElementById('asig-pago-'+famId).value||null };
+  const dias = Array.from(document.querySelectorAll(`#asig-dias-${famId} .daybtn.selected`)).map(b=>b.textContent);
+  const asig = { familia_id:famId, ninera_nombre:nombre, cobro_hora:document.getElementById('asig-cobro-'+famId).value||null, pago_hora:document.getElementById('asig-pago-'+famId).value||null,
+    dias, hora_inicio:document.getElementById('asig-horaini-'+famId).value||null, hora_fin:document.getElementById('asig-horafin-'+famId).value||null };
   const { error } = await sb.from('asignaciones').insert(asig);
   if(error){ toast('No se pudo agregar: '+error.message,'bad'); return; }
+  toast('Asignación agregada.');
   cargarFamilias();
 }
 async function quitarAsignacion(id){
