@@ -804,7 +804,7 @@ async function loadIntake(){
   if(!intakeItems.length){ grid.innerHTML = '<div class="empty">No hay candidatas esperando entrevista.</div>'; return; }
   grid.innerHTML = intakeItems.map((c,i)=>`
     <div class="pcard">
-      <div class="ph">${(c.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="ph">${c.foto_url?`<img src="${c.foto_url}">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="name">${c.nombre} ${c.apellido||''} <span class="badge brand" style="font-size:10px;padding:2px 8px;">${c.tipo||'Niñera'}</span></div>
       <div class="meta">${c.zona||'zona s/d'} · ${c.edad?c.edad+(String(c.edad).length<=2?' años':''):'edad s/d'}<br>${c.origen||''} ${c.telefono?'· '+c.telefono:''}</div>
       <div class="rowbtns">
@@ -817,7 +817,8 @@ async function loadIntake(){
 function verFichaIntake(i){
   const c = intakeItems[i];
   const rows = FICHA_CAMPOS.filter(f=>c[f.key]).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
-  document.getElementById('intakedetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('intakedetalle').innerHTML=''">← Cerrar</button><h2>${c.nombre} ${c.apellido||''}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos cargados.</div>'}</div></div>`;
+  const fotoHtml = c.foto_url ? `<img src="${c.foto_url}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;">` : '';
+  document.getElementById('intakedetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('intakedetalle').innerHTML=''">← Cerrar</button>${fotoHtml}<h2>${c.nombre} ${c.apellido||''}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos cargados.</div>'}</div></div>`;
 }
 async function descartarIntake(id){
   if(!confirm('¿Descartar esta candidata? No se puede deshacer.')) return;
@@ -1143,7 +1144,7 @@ function verDetalle(i){
     <div class="card"><h2>Contratar</h2>
       <div class="grid3">
         <div class="field"><label>Zona (confirmar)</label><input type="text" id="hire-zona" value="${cd.zona||''}"></div>
-        <div class="field"><label>Foto (URL, opcional)</label><input type="text" id="hire-foto" placeholder="link de Drive/Canva"></div>
+        <div class="field"><label>Foto (URL, opcional)</label><input type="text" id="hire-foto" value="${cd.foto_url||''}" placeholder="link de Drive/Canva"></div>
       </div>
       <div class="helper">El precio por hora se define por familia en la sección "Familias".</div>
       <button class="btn primary" onclick="contratar('${cd.id}')">Pasar a Niñeras</button>
