@@ -1605,7 +1605,30 @@ async function cargarFamilias(){
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const { data: familias, error } = await sb.from('familias').select('*').order('nombre');
   if(error){ cont.innerHTML = errBox(error); return; }
-  const { data: asignaciones } = await sb.from('asignaciones').select('*');
+  const [{data:asignaciones}, {data:sittings}, {data:resenas}] = await Promise.all([
+    sb.from('asignaciones').select('*'),
+    sb.from('sittings_traslados').select('familia_nombre,ninera_nombre'),
+    sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
+  ]);
+  // Promedio de reseñas por niñera (normalizado, para que no importe tilde/mayúscula)
+  const resenaPorNinera = {};
+  (resenas||[]).forEach(r=>{
+    if(r.puntuacion==null) return;
+    const k = normaliza(r.ninera_nombre||'');
+    if(!k) return;
+    if(!resenaPorNinera[k]) resenaPorNinera[k] = {suma:0, cant:0};
+    resenaPorNinera[k].suma += Number(r.puntuacion);
+    resenaPorNinera[k].cant += 1;
+  });
+  // Cuántos sittings/traslados hizo cada niñera con cada familia (historial real)
+  const historialPorFamilia = {};
+  (sittings||[]).forEach(s=>{
+    const kf = normaliza(s.familia_nombre||'');
+    const kn = s.ninera_nombre;
+    if(!kf || !kn) return;
+    if(!historialPorFamilia[kf]) historialPorFamilia[kf] = {};
+    historialPorFamilia[kf][kn] = (historialPorFamilia[kf][kn]||0) + 1;
+  });
   familiasItems = familias.map(f => ({...f, asignaciones: (asignaciones||[]).filter(a=>a.familia_id===f.id)}));
   if(!ninierasItems.length){ try{ const r = await sb.from('ninieras').select('nombre'); ninierasItems = r.data||ninierasItems; }catch(e){} }
   if(!familiasItems.length){ cont.innerHTML='<div class="empty">Todavía no hay familias cargadas.</div>'; return; }
@@ -1617,6 +1640,22 @@ async function cargarFamilias(){
       const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : '—';
       return `<tr><td>${a.ninera_nombre}</td><td>${dias||'—'} · ${horario}</td><td>$${a.cobro_hora||0}/h</td><td>$${a.pago_hora||0}/h</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}/h</td><td><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></td></tr>`;
     }).join('');
+    const historialFam = historialPorFamilia[normaliza(f.nombre)] || {};
+    const historialNombres = Object.keys(historialFam);
+    const historialHtml = historialNombres.length ? `
+      <div style="margin-top:12px;">
+        <div class="eyebrow" style="margin-bottom:6px;">Niñeras que trabajaron con esta familia</div>
+        ${historialNombres.map(nn=>{
+          const cant = historialFam[nn];
+          const res = resenaPorNinera[normaliza(nn)];
+          const promedio = res ? (res.suma/res.cant).toFixed(1) : null;
+          const colorProm = promedio===null ? 'var(--ink-soft)' : (Number(promedio)>=4 ? 'var(--good)' : Number(promedio)>=3 ? 'var(--warn-soft-text, #7A5A16)' : 'var(--clay-text)');
+          return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
+            <div>${nn} <span style="color:var(--ink-soft);font-size:12px;">· ${cant} ${cant===1?'sitting/traslado':'sittings/traslados'}</span></div>
+            <div style="font-weight:600;color:${colorProm};">${promedio!==null ? '★ '+promedio+'/5 ('+res.cant+')' : 'Sin reseñas'}</div>
+          </div>`;
+        }).join('')}
+      </div>` : '';
     return `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
@@ -1627,6 +1666,7 @@ async function cargarFamilias(){
       ${f.direccion?`<div class="helper">📍 ${f.direccion}</div>`:''}
       ${f.cuenta_bancaria?`<div class="helper">Cuenta: ${f.cuenta_bancaria}</div>`:''}
       ${f.notas?`<div class="helper">${f.notas}</div>`:''}
+      ${historialHtml}
       <div id="fam-editbox-${f.id}"></div>
       <table class="asigtable"><thead><tr><th>Niñera</th><th>Días y horario</th><th>Cobro a familia</th><th>Pago a niñera</th><th>Margen</th><th></th></tr></thead>
         <tbody>${asigRows || '<tr><td colspan="6" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table>
