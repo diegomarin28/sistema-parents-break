@@ -680,10 +680,210 @@ function renderModulo(){
   if(moduloActivo==='finanzas'){ renderFinanzas(cont); return; }
   if(moduloActivo==='sittings'){ cont.innerHTML = moduloHeader(m.label) + '<div id="sit-body"></div>'; renderSittings(document.getElementById('sit-body')); return; }
   if(moduloActivo==='marketing'){ renderMarketing(cont); return; }
-  const textos = {
-    legal:'Biblioteca de contratos de niñeras y traslados, y generación de contratos nuevos.',
-  };
-  cont.innerHTML = moduloHeader(m.label) + `<div class="card placeholder"><p>${textos[moduloActivo]}</p></div>`;
+  if(moduloActivo==='legal'){ renderLegal(cont); return; }
+}
+
+/* ================= LEGAL ================= */
+const CONTRATO_TEMPLATES = {
+  ninera: {
+    titulo: 'Acuerdo de prestación de servicios — Niñera',
+    texto: `ACUERDO DE PRESTACIÓN DE SERVICIOS DE CUIDADO INFANTIL
+
+En Montevideo, a {{FECHA}}, entre:
+
+PARENTS BREAK, en adelante "la empresa", por una parte;
+
+y {{NOMBRE}}, titular de la Cédula de Identidad {{CEDULA}}, con domicilio en {{DOMICILIO}}, en adelante "la niñera", por la otra;
+
+Se acuerda celebrar el presente contrato de prestación de servicios, sujeto a las siguientes cláusulas:
+
+PRIMERA — OBJETO. La niñera prestará servicios de cuidado infantil (sittings) para las familias que le asigne la empresa, en los horarios, zonas y condiciones particulares que se coordinen para cada asignación.
+
+SEGUNDA — NATURALEZA DEL VÍNCULO. El presente es un contrato de prestación de servicios independiente. No implica relación de dependencia laboral entre las partes, sin perjuicio de lo cual ambas partes se comprometen a dar cumplimiento a la normativa vigente en la materia (incluyendo, en lo que corresponda, las obligaciones ante el Banco de Previsión Social).
+
+TERCERA — TARIFA Y FORMA DE PAGO. La empresa abonará a la niñera ${'$'}{{TARIFA_HORA}} por hora efectivamente trabajada, según el registro de sittings cargado en el sistema de la empresa. El pago se realizará {{FRECUENCIA_PAGO}}, salvo acuerdo distinto entre las partes.
+
+CUARTA — OBLIGACIONES DE LA NIÑERA. Presentarse puntualmente en el lugar y horario acordados; velar en todo momento por la integridad física y emocional de los niños a su cargo; no dejarlos solos ni delegar el cuidado en terceros sin autorización expresa; respetar las indicaciones particulares de cada familia; y comunicar a la empresa, con la mayor anticipación posible, cualquier imprevisto, ausencia o incidente ocurrido durante el servicio.
+
+QUINTA — OBLIGACIONES DE LA EMPRESA. Coordinar con razonable anticipación cada asignación; informar a la niñera los datos necesarios para prestar el servicio con seguridad; y abonar la tarifa acordada en los plazos convenidos.
+
+SEXTA — CONFIDENCIALIDAD Y PROTECCIÓN DE DATOS. La niñera se compromete a mantener estricta reserva sobre la información personal, familiar y de los menores a la que acceda en el ejercicio de su tarea, dando cumplimiento a la Ley N.º 18.331 de Protección de Datos Personales y su decreto reglamentario. Dicha información solo podrá utilizarse para la coordinación del servicio.
+
+SÉPTIMA — DURACIÓN Y RESCISIÓN. El presente acuerdo rige desde la fecha indicada más arriba, por tiempo indeterminado, y podrá ser rescindido por cualquiera de las partes en cualquier momento, comunicándolo a la otra con una antelación razonable.
+
+OCTAVA — DOMICILIOS Y JURISDICCIÓN. A todos los efectos derivados del presente acuerdo, las partes constituyen domicilio en los indicados más arriba y se someten a los tribunales competentes de Montevideo.
+
+Leído y conforme, se firma en dos ejemplares de un mismo tenor, en el lugar y fecha indicados.
+
+
+Firma niñera: _______________________          Firma Parents Break: _______________________
+Aclaración: {{NOMBRE}}                          Aclaración: _______________________
+C.I.: {{CEDULA}}
+Fecha: {{FECHA}}`,
+  },
+  traslado: {
+    titulo: 'Acuerdo de prestación de servicios — Traslados',
+    texto: `ACUERDO DE PRESTACIÓN DE SERVICIOS DE TRASLADOS
+
+En Montevideo, a {{FECHA}}, entre:
+
+PARENTS BREAK, en adelante "la empresa", por una parte;
+
+y {{NOMBRE}}, titular de la Cédula de Identidad {{CEDULA}}, con domicilio en {{DOMICILIO}}, en adelante "el/la conductor/a", por la otra;
+
+Se acuerda celebrar el presente contrato de prestación de servicios, sujeto a las siguientes cláusulas:
+
+PRIMERA — OBJETO. El/la conductor/a prestará servicios de traslado de niños entre los puntos que le indique la empresa, con la periodicidad y en las condiciones que se coordinen para cada asignación.
+
+SEGUNDA — NATURALEZA DEL VÍNCULO. El presente es un contrato de prestación de servicios independiente. No implica relación de dependencia laboral entre las partes, sin perjuicio de lo cual ambas partes se comprometen a dar cumplimiento a la normativa vigente en la materia (incluyendo, en lo que corresponda, las obligaciones ante el Banco de Previsión Social).
+
+TERCERA — VEHÍCULO, LICENCIA Y SEGURO. El/la conductor/a declara contar con licencia de conducir categoría correspondiente vigente, vehículo en buen estado de mantenimiento y seguro vigente que cubra a los pasajeros transportados, comprometiéndose a mantener dicha documentación al día durante toda la vigencia del presente acuerdo.
+
+CUARTA — TARIFA Y FORMA DE PAGO. La empresa abonará ${'$'}{{TARIFA_HORA}} por traslado/día, según lo registrado en el sistema de la empresa. El pago se realizará {{FRECUENCIA_PAGO}}, salvo acuerdo distinto entre las partes.
+
+QUINTA — OBLIGACIONES DEL CONDUCTOR/A. Puntualidad; manejo prudente y responsable; uso de cinturón de seguridad y sistemas de retención infantil homologados cuando corresponda según la edad del menor; y comunicación inmediata a la empresa ante cualquier imprevisto, demora o incidente.
+
+SEXTA — CONFIDENCIALIDAD Y PROTECCIÓN DE DATOS. El/la conductor/a se compromete a mantener reserva sobre domicilios, horarios y datos personales de las familias y menores a los que traslade, dando cumplimiento a la Ley N.º 18.331 de Protección de Datos Personales y su decreto reglamentario.
+
+SÉPTIMA — DURACIÓN Y RESCISIÓN. El presente acuerdo rige desde la fecha indicada más arriba, por tiempo indeterminado, y podrá ser rescindido por cualquiera de las partes en cualquier momento, comunicándolo a la otra con una antelación razonable.
+
+OCTAVA — DOMICILIOS Y JURISDICCIÓN. A todos los efectos derivados del presente acuerdo, las partes constituyen domicilio en los indicados más arriba y se someten a los tribunales competentes de Montevideo.
+
+Leído y conforme, se firma en dos ejemplares de un mismo tenor, en el lugar y fecha indicados.
+
+
+Firma conductor/a: _______________________          Firma Parents Break: _______________________
+Aclaración: {{NOMBRE}}                              Aclaración: _______________________
+C.I.: {{CEDULA}}
+Fecha: {{FECHA}}`,
+  },
+};
+let contratosItems = [];
+function renderLegal(cont){
+  cont.innerHTML = moduloHeader('Legal') + `
+    <p class="helper" style="margin:2px 0 16px;">Plantilla genérica, no reemplaza asesoramiento legal — conviene que un abogado la revise antes de usarla.</p>
+    <div class="card">
+      <h2>Generar contrato</h2>
+      <div class="grid3">
+        <div class="field"><label>Tipo</label><select id="leg-tipo" onchange="onLegTipoChange()"><option value="ninera">Niñera</option><option value="traslado">Traslados</option></select></div>
+        <div class="field"><label>Nombre</label><input type="text" id="leg-nombre" list="leg-nombres-dl"></div>
+        <div class="field"><label>Cédula</label><input type="text" id="leg-cedula"></div>
+      </div>
+      <div class="field"><label>Domicilio</label><input type="text" id="leg-domicilio" placeholder="Calle, número, ciudad"></div>
+      <datalist id="leg-nombres-dl"></datalist>
+      <div class="grid3">
+        <div class="field"><label>Tarifa por hora</label><input type="number" id="leg-tarifa"></div>
+        <div class="field"><label>Frecuencia de pago</label><input type="text" id="leg-frecuencia" value="semanalmente"></div>
+        <div class="field"><label>Fecha</label><input type="date" id="leg-fecha" value="${typeof todayISO==='function'?todayISO():new Date().toISOString().slice(0,10)}"></div>
+      </div>
+      <button class="btn primary" onclick="generarContrato()">Generar texto del contrato</button>
+      <div id="leg-resultado"></div>
+    </div>
+    <div class="card">
+      <h2>Registro de contratos</h2>
+      <div class="helper">Llevá el control de a quién ya se le mandó, quién falta firmar.</div>
+      <div class="grid3">
+        <div class="field"><label>Tipo</label><select id="leg-reg-tipo"><option value="ninera">Niñera</option><option value="traslado">Traslados</option></select></div>
+        <div class="field"><label>Nombre</label><input type="text" id="leg-reg-nombre"></div>
+        <div class="field"><label>Fecha</label><input type="date" id="leg-reg-fecha"></div>
+      </div>
+      <button class="smallbtn" onclick="addContrato()">+ Agregar al registro</button>
+      <div id="leg-lista" style="margin-top:14px;"></div>
+    </div>
+  `;
+  cargarLegNombres();
+  cargarContratos();
+}
+async function cargarLegNombres(){
+  const [{data:nins}, {data:fams}] = await Promise.all([
+    sb.from('ninieras').select('nombre').eq('activa', true),
+    sb.from('familias').select('nombre'),
+  ]);
+  const dl = document.getElementById('leg-nombres-dl');
+  if(dl) dl.innerHTML = [...(nins||[]), ...(fams||[])].map(x=>`<option value="${x.nombre}">`).join('');
+}
+function onLegTipoChange(){ /* placeholder por si más adelante autocompleta tarifa según asignación */ }
+function generarContrato(){
+  const tipo = document.getElementById('leg-tipo').value;
+  const nombre = document.getElementById('leg-nombre').value.trim() || '[nombre]';
+  const cedula = document.getElementById('leg-cedula').value.trim() || '[cédula]';
+  const domicilio = document.getElementById('leg-domicilio').value.trim() || '[domicilio]';
+  const tarifa = document.getElementById('leg-tarifa').value || '[tarifa]';
+  const frecuencia = document.getElementById('leg-frecuencia').value.trim() || '[frecuencia]';
+  const fecha = document.getElementById('leg-fecha').value || '[fecha]';
+  const fechaFmt = fecha!=='[fecha]' ? new Date(fecha+'T00:00:00').toLocaleDateString('es-UY') : fecha;
+  const tpl = CONTRATO_TEMPLATES[tipo];
+  const texto = tpl.texto
+    .replace(/{{NOMBRE}}/g, nombre)
+    .replace(/{{CEDULA}}/g, cedula)
+    .replace(/{{DOMICILIO}}/g, domicilio)
+    .replace(/{{TARIFA_HORA}}/g, tarifa)
+    .replace(/{{FRECUENCIA_PAGO}}/g, frecuencia)
+    .replace(/{{FECHA}}/g, fechaFmt);
+  document.getElementById('leg-resultado').innerHTML = `
+    <h2 style="margin-top:18px;">${tpl.titulo} — ${nombre}</h2>
+    <textarea id="leg-texto-generado" readonly style="min-height:320px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">${texto}</textarea>
+    <div class="actions">
+      <button class="btn primary" onclick="copiarContrato()">Copiar texto</button>
+      <button class="btn ghost" onclick="descargarContrato('${tipo}','${nombre.replace(/'/g,"")}')">Descargar .txt</button>
+    </div>
+  `;
+}
+async function copiarContrato(){
+  const ta = document.getElementById('leg-texto-generado');
+  try{ await navigator.clipboard.writeText(ta.value); toast('Contrato copiado.'); }
+  catch(e){ ta.select(); toast('No se pudo copiar automático, seleccioná y copiá a mano.', 'bad'); }
+}
+function descargarContrato(tipo, nombre){
+  const ta = document.getElementById('leg-texto-generado');
+  const blob = new Blob([ta.value], {type:'text/plain;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download = `contrato_${tipo}_${nombre.replace(/\s+/g,'_')}.txt`; a.click(); URL.revokeObjectURL(url);
+}
+async function addContrato(){
+  const tipo = document.getElementById('leg-reg-tipo').value;
+  const parte_nombre = document.getElementById('leg-reg-nombre').value.trim();
+  const fecha = document.getElementById('leg-reg-fecha').value || null;
+  if(!parte_nombre){ toast('Falta el nombre.', 'bad'); return; }
+  const { error } = await sb.from('contratos').insert({tipo, parte_nombre, fecha, estado:'borrador'});
+  if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  document.getElementById('leg-reg-nombre').value = '';
+  toast('Agregado al registro.');
+  cargarContratos();
+}
+async function cargarContratos(){
+  const cont = document.getElementById('leg-lista');
+  const { data, error } = await sb.from('contratos').select('*').order('created_at', {ascending:false});
+  if(error){ cont.innerHTML = errBox(error); return; }
+  contratosItems = data || [];
+  if(!contratosItems.length){ cont.innerHTML = '<div class="empty">Todavía no hay contratos en el registro.</div>'; return; }
+  const estColor = {borrador:'var(--ink-soft)', enviado:'var(--accent)', firmado:'var(--good)'};
+  cont.innerHTML = `<table class="asigtable"><thead><tr><th>Tipo</th><th>Nombre</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${contratosItems.map(c=>`<tr>
+      <td>${c.tipo==='ninera'?'Niñera':'Traslados'}</td>
+      <td>${c.parte_nombre}</td>
+      <td>${c.fecha ? new Date(c.fecha+'T00:00:00').toLocaleDateString('es-UY') : '—'}</td>
+      <td><select onchange="cambiarEstadoContrato('${c.id}', this.value)" style="color:${estColor[c.estado]};font-weight:600;border:1px solid var(--line);border-radius:7px;padding:4px 8px;">
+        <option value="borrador" ${c.estado==='borrador'?'selected':''}>Borrador</option>
+        <option value="enviado" ${c.estado==='enviado'?'selected':''}>Enviado</option>
+        <option value="firmado" ${c.estado==='firmado'?'selected':''}>Firmado</option>
+      </select></td>
+      <td><button class="smallbtn danger" onclick="eliminarContrato('${c.id}')">Eliminar</button></td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+async function cambiarEstadoContrato(id, estado){
+  const { error } = await sb.from('contratos').update({estado}).eq('id', id);
+  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+  toast('Estado actualizado.');
+  cargarContratos();
+}
+async function eliminarContrato(id){
+  if(!(await confirmarAccion('¿Eliminar este contrato del registro? No se puede deshacer.'))) return;
+  const { error } = await sb.from('contratos').delete().eq('id', id);
+  if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
+  toast('Eliminado.');
+  cargarContratos();
 }
 
 /* ================= MARKETING ================= */
