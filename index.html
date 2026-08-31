@@ -108,6 +108,14 @@ textarea{resize:vertical;min-height:54px;}
 .btn.primary:disabled{background:#C7C6DA;cursor:not-allowed;}
 .btn.ghost{background:none;border:1px solid var(--line);color:var(--ink-soft);}
 .btn.ghost:hover{border-color:var(--accent);color:var(--accent);}
+.btn.danger{background:var(--clay-text);color:#fff;}
+.btn.danger:hover{background:#9C4448;}
+.confirmoverlay{position:fixed;inset:0;background:rgba(49,47,69,.35);display:flex;align-items:center;justify-content:center;z-index:300;opacity:0;transition:opacity 180ms ease;padding:20px;}
+.confirmoverlay.show{opacity:1;}
+.confirmbox{background:var(--paper);border-radius:16px;padding:22px 24px;max-width:380px;width:100%;box-shadow:var(--shadow-md);transform:translateY(8px) scale(.98);transition:transform 180ms cubic-bezier(.2,.8,.2,1);}
+.confirmoverlay.show .confirmbox{transform:translateY(0) scale(1);}
+.confirmmsg{font-size:14.5px;color:var(--ink);line-height:1.5;margin-bottom:18px;}
+.confirmbtns{display:flex;justify-content:flex-end;gap:10px;}
 .warnbox{background:var(--warn-soft);border:1px solid #E4C888;border-radius:9px;padding:10px 13px;font-size:13px;color:#7A5A16;margin-top:14px;line-height:1.5;}
 .okbox{background:var(--good-soft);border:1px solid #B9D9BE;border-radius:9px;padding:10px 13px;font-size:13px;color:var(--good);margin-top:14px;line-height:1.5;}
 .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;}
@@ -253,6 +261,31 @@ function toast(msg, type='good'){
   el.textContent = msg;
   stack.appendChild(el);
   setTimeout(()=>{ el.classList.add('leaving'); setTimeout(()=>el.remove(), 220); }, 3200);
+}
+
+function confirmarAccion(mensaje, textoBoton='Eliminar'){
+  return new Promise((resolve)=>{
+    const overlay = document.createElement('div');
+    overlay.className = 'confirmoverlay';
+    overlay.innerHTML = `
+      <div class="confirmbox">
+        <div class="confirmmsg">${mensaje}</div>
+        <div class="confirmbtns">
+          <button class="btn ghost" id="confirm-no">Cancelar</button>
+          <button class="btn danger" id="confirm-si">${textoBoton}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(()=>overlay.classList.add('show'));
+    function cerrar(resultado){
+      overlay.classList.remove('show');
+      setTimeout(()=>overlay.remove(), 180);
+      resolve(resultado);
+    }
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) cerrar(false); });
+    overlay.querySelector('#confirm-no').addEventListener('click', ()=>cerrar(false));
+    overlay.querySelector('#confirm-si').addEventListener('click', ()=>cerrar(true));
+  });
 }
 
 /* columnas de candidatas que vienen del form / ficha (nombres = columnas reales de la tabla) */
@@ -583,7 +616,7 @@ async function guardarGastoGeneral(){
   cargarFinanzas();
 }
 async function eliminarGastoGeneral(id){
-  if(!confirm('¿Eliminar este gasto? No se puede deshacer.')) return;
+  if(!(await confirmarAccion('¿Eliminar este gasto? No se puede deshacer.'))) return;
   const { error } = await sb.from('gastos_generales').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
   cargarFinanzas();
@@ -724,7 +757,7 @@ async function togglePublicadoMarketing(id, val){
   cargarMarketing();
 }
 async function eliminarFechaMarketing(id){
-  if(!confirm('¿Eliminar esta fecha? No se puede deshacer.')) return;
+  if(!(await confirmarAccion('¿Eliminar esta fecha? No se puede deshacer.'))) return;
   const { error } = await sb.from('fechas_marketing').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
   toast('Fecha eliminada.');
@@ -823,7 +856,7 @@ function verFichaIntake(i){
   document.getElementById('intakedetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('intakedetalle').innerHTML=''">← Cerrar</button>${avisoHtml}${fotoHtml}<h2>${c.nombre} ${c.apellido||''}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos cargados.</div>'}</div></div>`;
 }
 async function descartarIntake(id){
-  if(!confirm('¿Descartar esta candidata? No se puede deshacer.')) return;
+  if(!(await confirmarAccion('¿Descartar esta candidata? No se puede deshacer.', 'Descartar'))) return;
   const { error } = await sb.from('candidatas').delete().eq('id', id);
   if(error){ toast('No se pudo descartar: '+error.message,'bad'); return; }
   loadIntake();
@@ -1170,7 +1203,7 @@ async function contratar(candidataId){
   cargarGuardadas();
 }
 async function eliminarCandidata(candidataId){
-  if(!confirm('¿Eliminar? No se puede deshacer.')) return;
+  if(!(await confirmarAccion('¿Eliminar esta candidata? No se puede deshacer.'))) return;
   const { error } = await sb.from('candidatas').delete().eq('id', candidataId);
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   document.getElementById('detalle').innerHTML='';
@@ -1271,7 +1304,7 @@ async function guardarEdicionNinera(id){
   cargarNinieras();
 }
 async function eliminarNinera(id){
-  if(!confirm('¿Eliminar esta niñera del sistema? No se puede deshacer.')) return;
+  if(!(await confirmarAccion('¿Eliminar esta niñera del sistema? No se puede deshacer.'))) return;
   const { error } = await sb.from('ninieras').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   toast('Niñera eliminada.');
@@ -1470,7 +1503,7 @@ async function quitarAsignacion(id){
   cargarFamilias();
 }
 async function eliminarFamilia(id){
-  if(!confirm('¿Eliminar esta familia? No se puede deshacer.')) return;
+  if(!(await confirmarAccion('¿Eliminar esta familia? No se puede deshacer.'))) return;
   const { error } = await sb.from('familias').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   cargarFamilias();
@@ -1805,7 +1838,7 @@ function editarSitting(id){
   window.scrollTo({top:0, behavior:'smooth'});
 }
 async function eliminarSitting(id){
-  if(!confirm('¿Eliminar este registro? No se puede deshacer.')) return;
+  if(!(await confirmarAccion('¿Eliminar este registro? No se puede deshacer.'))) return;
   const { error } = await sb.from('sittings_traslados').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
   toast('Registro eliminado.');
