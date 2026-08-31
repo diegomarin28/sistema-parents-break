@@ -805,7 +805,7 @@ async function loadIntake(){
   grid.innerHTML = intakeItems.map((c,i)=>`
     <div class="pcard">
       <div class="ph">${c.foto_url?`<img src="${c.foto_url}">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
-      ${c.autoriza_foto===false?'<div style="background:#DF3838;color:#fff;font-weight:700;font-size:10.5px;text-align:center;padding:4px 6px;border-radius:6px;margin-bottom:6px;">⚠️ NO autoriza foto/datos</div>':''}
+      ${c.autoriza_foto===false?'<div style="background:var(--clay-soft);color:var(--clay-text);font-weight:600;font-size:10.5px;text-align:center;padding:4px 6px;border-radius:6px;margin-bottom:6px;">⚠️ No autoriza foto/datos</div>':''}
       <div class="name">${c.nombre} ${c.apellido||''} <span class="badge brand" style="font-size:10px;padding:2px 8px;">${c.tipo||'Niñera'}</span></div>
       <div class="meta">${c.zona||'zona s/d'} · ${c.edad?c.edad+(String(c.edad).length<=2?' años':''):'edad s/d'}<br>${c.origen||''} ${c.telefono?'· '+c.telefono:''}</div>
       <div class="rowbtns">
@@ -819,7 +819,7 @@ function verFichaIntake(i){
   const c = intakeItems[i];
   const rows = FICHA_CAMPOS.filter(f=>c[f.key]).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
   const fotoHtml = c.foto_url ? `<img src="${c.foto_url}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;">` : '';
-  const avisoHtml = c.autoriza_foto === false ? `<div style="background:#DF3838;color:#fff;font-weight:700;font-size:13.5px;padding:12px 16px;border-radius:10px;margin-bottom:14px;">⚠️ NO autorizó el uso de su foto ni sus datos para el proceso de selección — no usar su imagen ni compartir su información fuera de la evaluación.</div>` : '';
+  const avisoHtml = c.autoriza_foto === false ? `<div style="background:var(--clay-soft);color:var(--clay-text);font-weight:600;font-size:13px;padding:10px 14px;border-radius:10px;margin-bottom:14px;border:1px solid var(--clay);">⚠️ No autorizó el uso de su foto ni sus datos para el proceso de selección — no usar su imagen ni compartir su información fuera de la evaluación.</div>` : '';
   document.getElementById('intakedetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('intakedetalle').innerHTML=''">← Cerrar</button>${avisoHtml}${fotoHtml}<h2>${c.nombre} ${c.apellido||''}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos cargados.</div>'}</div></div>`;
 }
 async function descartarIntake(id){
