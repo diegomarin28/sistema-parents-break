@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Parents Break">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
 :root{
@@ -19,6 +20,7 @@
   --good:#3E7D4F; --good-soft:#E3EFE3; --warn:#B9862E; --warn-soft:#F7EBD4; --bad:#AB4B41; --bad-soft:#F5E1DD;
   --shadow-sm: 0 1px 2px rgba(49,47,69,.05), 0 1px 4px rgba(49,47,69,.05);
   --shadow-md: 0 6px 20px rgba(49,47,69,.10);
+  --gutter: 14px;
   --ease: 180ms cubic-bezier(.4,0,.2,1);
 }
 @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
@@ -41,7 +43,7 @@ h1{font-size:27px;font-weight:600;}
 .subtab{font-weight:600;font-size:13.5px;color:var(--ink-soft);background:none;border:none;padding:9px 4px;cursor:pointer;border-bottom:2px solid transparent;margin-right:16px;font-family:'Inter',sans-serif;transition:color var(--ease), border-color var(--ease);}
 .subtab:hover{color:var(--accent);}
 .subtab.active{color:var(--accent);border-bottom-color:var(--accent);}
-.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-bottom:16px;box-shadow:var(--shadow-sm);animation:fadeIn var(--ease);}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-bottom:var(--gutter);box-shadow:var(--shadow-sm);animation:fadeIn var(--ease);}
 .card h2{font-size:16.5px;font-weight:600;letter-spacing:-0.01em;margin:0 0 10px;}
 .card h2:first-child{margin-top:0;}
 .card>.helper:first-child{margin-top:0;}
@@ -57,8 +59,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 button:focus-visible{border-radius:8px;}
 textarea{resize:vertical;min-height:54px;}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--gutter);}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--gutter);}
 .field{margin-bottom:12px;}
 .q{background:var(--accent-soft);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:13.5px;color:var(--ink);line-height:1.45;}
 .scorebar{display:flex;gap:6px;margin-top:10px;}
@@ -106,7 +108,6 @@ textarea{resize:vertical;min-height:54px;}
 .confirmbtns{display:flex;justify-content:flex-end;gap:10px;}
 .warnbox{background:var(--warn-soft);border:1px solid #E4C888;border-radius:9px;padding:10px 13px;font-size:13px;color:#7A5A16;margin-top:14px;line-height:1.5;}
 .okbox{background:var(--good-soft);border:1px solid #B9D9BE;border-radius:9px;padding:10px 13px;font-size:13px;color:var(--good);margin-top:14px;line-height:1.5;}
-.cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;}
 .pcard{background:var(--paper);border:1px solid var(--line);border-radius:15px;padding:16px;box-shadow:var(--shadow-sm);transition:transform var(--ease), box-shadow var(--ease);position:relative;}
 .pcard-delete{position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;border:none;background:#fff;color:var(--ink-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.5;transition:opacity var(--ease), background var(--ease), color var(--ease);box-shadow:var(--shadow-sm);}
 .pcard-delete:hover,.pcard-delete:focus-visible{opacity:1;background:var(--clay-soft);color:var(--clay-text);}
@@ -169,34 +170,42 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .toast.leaving{animation:toastOut 200ms ease forwards;}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
 @keyframes toastOut{to{opacity:0;transform:translateX(20px);}}
-.applayout{display:flex;gap:20px;align-items:flex-start;}
-.sidebar{width:172px;flex-shrink:0;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:12px;position:sticky;top:20px;display:flex;flex-direction:column;gap:2px;}
-.mainarea{flex:1;min-width:0;}
+.appshell{display:flex;height:100vh;}
+.sidebar{width:196px;flex-shrink:0;height:100vh;position:sticky;top:0;background:#5B5FA0;padding:22px 14px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+.sidebar-logo{height:30px;filter:brightness(0) invert(1);margin:0 6px 30px;align-self:flex-start;}
+.sidebar-nav{display:flex;flex-direction:column;gap:2px;flex:1;}
+.sidebar-foot{border-top:1px solid rgba(255,255,255,.18);padding:14px 6px 2px;font-size:11.5px;color:rgba(255,255,255,.6);line-height:1.5;}
+.sidebar-foot button{background:none;border:none;color:#fff;font-weight:600;cursor:pointer;font-size:11.5px;padding:0;margin-top:3px;font-family:'Inter',sans-serif;}
+.mainarea{flex:1;min-width:0;height:100vh;overflow-y:auto;}
+#modcontent{max-width:960px;margin:0 auto;padding:26px 32px 100px;}
 .navitem{display:flex;align-items:center;gap:10px;background:none;border:none;border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;transition:background var(--ease);font-family:'Inter',sans-serif;width:100%;}
-.navitem:hover{background:var(--bg);}
-.navitem.active{background:#666EAE;}
+.navitem:hover{background:rgba(255,255,255,.1);}
+.navitem.active{background:rgba(255,255,255,.2);}
 .navitem.active .navitem-label{color:#fff;}
-.navitem.active .navitem-ic{background:rgba(255,255,255,.25);color:#fff;}
-.navitem-ic{width:28px;height:28px;border-radius:8px;background:var(--bg);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.navitem-ic svg{width:14px;height:14px;}
-.navitem-label{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:12.5px;color:var(--ink);}
-.statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
+.navitem.active .navitem-ic{background:rgba(255,255,255,.3);color:#fff;}
+.navitem-ic{width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.navitem-ic svg{width:13px;height:13px;}
+.navitem-label{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:12.5px;color:rgba(255,255,255,.85);}
+.statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gutter);margin-bottom:var(--gutter);}
 .statcard{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);}
 .statnum{font-family:'Baloo 2',sans-serif;font-size:26px;font-weight:700;color:var(--ink);}
 .statlabel{font-size:12px;color:var(--ink-soft);margin-top:2px;}
-.moneyrow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
-.moneycard{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 18px;text-align:left;cursor:pointer;transition:transform var(--ease), border-color var(--ease);box-shadow:var(--shadow-sm);font-family:'Inter',sans-serif;}
-.moneycard:hover{transform:translateY(-2px);border-color:#C8C6DC;}
-.moneycard.accent{border-left:3px solid var(--accent);}
-.moneycard.clay{border-left:3px solid var(--clay);}
-.moneytop{display:flex;justify-content:space-between;align-items:flex-start;font-size:12px;color:var(--ink-soft);}
-.moneytop svg{width:16px;height:16px;flex-shrink:0;}
-.moneycard.accent .moneytop svg{color:var(--accent);}
-.moneycard.clay .moneytop svg{color:var(--clay);}
-.moneynum{font-family:'Baloo 2',sans-serif;font-size:22px;font-weight:700;color:var(--ink);margin-top:8px;}
-.moneylink{font-size:11px;margin-top:4px;}
-.moneycard.accent .moneylink{color:var(--accent);}
-.moneycard.clay .moneylink{color:var(--clay-text);}
+.statnum-trend{font-size:11px;color:var(--ink-soft);margin-top:6px;line-height:1.4;}
+.chartcard{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm);}
+.chartlegend{display:flex;gap:14px;font-size:11.5px;color:var(--ink-soft);}
+.chartlegend span{display:flex;align-items:center;gap:4px;}
+.chartdot{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
+.person-list{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm);}
+.person-row{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line);}
+.person-row:last-child{border-bottom:none;}
+.person-row .av{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-family:'Baloo 2',sans-serif;font-weight:600;font-size:13.5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;}
+.person-row .av img{width:100%;height:100%;object-fit:cover;}
+.person-row .info{flex:1;min-width:0;}
+.person-row .info .name{font-family:'Baloo 2',sans-serif;font-size:14px;font-weight:600;}
+.person-row .info .meta{font-size:11.5px;color:var(--ink-soft);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.person-row .badge-slot{width:88px;flex-shrink:0;}
+.person-row .rowbtns{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;}
+.confirmbox.wide{max-width:640px;max-height:88vh;overflow-y:auto;}
 .pendbanner{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;text-align:left;width:100%;font-family:'Inter',sans-serif;transition:transform var(--ease), border-color var(--ease);box-shadow:var(--shadow-sm);}
 .pendbanner:hover{transform:translateY(-2px);border-color:#C8C6DC;}
 .pendbanner-left{display:flex;align-items:center;gap:12px;}
@@ -207,13 +216,15 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .pillbtn{background:#fff;border:1px solid var(--line);border-radius:100px;padding:6px 13px;font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:'Inter',sans-serif;transition:all var(--ease);}
 .pillbtn:hover{border-color:var(--accent);color:var(--accent);}
 .pillbtn.selected{background:#666EAE;border-color:#666EAE;color:#fff;}
-.agendabox{max-height:190px;overflow-y:auto;}
-.agendabox::-webkit-scrollbar{width:6px;}
-.agendabox::-webkit-scrollbar-thumb{background:var(--line);border-radius:10px;}
-.agendarow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px dashed var(--line);font-size:13.5px;}
+.agendarow{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--line);font-size:13.5px;}
 .agendarow:last-child{border-bottom:none;}
-.agendatime{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--accent);min-width:44px;}
-.agendadot{width:7px;height:7px;border-radius:50%;background:var(--clay);flex-shrink:0;}
+.agendatime{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);min-width:82px;line-height:1.3;flex-shrink:0;}
+.agendaicon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.agendaicon svg{width:13px;height:13px;}
+.agendaicon.sitting{background:var(--accent-soft);color:var(--accent);}
+.agendaicon.traslado{background:var(--clay-soft);color:var(--clay-text);}
+.agendabody{flex:1;min-width:0;}
+.agendatype{font-size:11px;color:var(--ink-soft);margin-top:1px;}
 .dayrow{display:flex;gap:6px;margin-bottom:10px;}
 .daybtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all var(--ease);}
 .daybtn.selected{background:#666EAE;border-color:#666EAE;color:#fff;}
@@ -228,12 +239,12 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .extrabox{margin-top:10px;padding:12px;background:var(--accent-soft);border-radius:9px;}
 .durbtn{padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:#fff;font-size:12.5px;cursor:pointer;font-family:'Inter',sans-serif;}
 .durbtn:hover{border-color:var(--accent);color:var(--accent);}
-.summary3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;}
+.summary3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--gutter);margin-bottom:var(--gutter);}
 .summarycard{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
-.mesbar{display:flex;justify-content:space-between;align-items:flex-end;margin:16px 0 10px;gap:10px;flex-wrap:wrap;}
+.mesbar{display:flex;justify-content:space-between;align-items:flex-end;margin:var(--gutter) 0 10px;gap:var(--gutter);flex-wrap:wrap;}
 .precio-fam{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;padding:8px 12px;background:var(--accent-soft);border-radius:9px;font-size:13px;color:var(--ink-soft);}
 @media (max-width:640px){.summary3{grid-template-columns:1fr;}}
-@media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow{grid-template-columns:1fr 1fr;}.statrow{grid-template-columns:1fr 1fr;}.pendbanner{flex-wrap:wrap;}}
+@media (max-width:760px){.appshell{flex-direction:column;height:auto;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;align-items:center;padding:10px 12px;gap:4px;overflow-x:auto;overflow-y:visible;}.sidebar-logo{display:none;}.sidebar-nav{flex-direction:row;flex:none;}.sidebar-foot{display:none;}.mainarea{height:auto;overflow-y:visible;}#modcontent{padding:20px 16px 100px;}.navitem{width:auto;}.navitem-label{display:none;}.statrow{grid-template-columns:1fr 1fr;}.pendbanner{flex-wrap:wrap;}}
 @media (max-width:480px){.statrow{grid-template-columns:1fr;}}
 @media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}.hometiles{grid-template-columns:1fr;grid-auto-rows:auto;}.tile.hero{grid-column:span 1;grid-row:span 1;}}
 @media print{.subnav,.actions,.backbtn,button{display:none !important;}}
@@ -284,6 +295,51 @@ function confirmarAccion(mensaje, textoBoton='Eliminar'){
     overlay.querySelector('#confirm-no').addEventListener('click', ()=>cerrar(false));
     overlay.querySelector('#confirm-si').addEventListener('click', ()=>cerrar(true));
   });
+}
+
+function abrirModal(html){
+  let overlay = document.getElementById('editmodal');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.className = 'confirmoverlay';
+    overlay.id = 'editmodal';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) cerrarModal(); });
+  }
+  overlay.innerHTML = `<div class="confirmbox wide">${html}</div>`;
+  requestAnimationFrame(()=>overlay.classList.add('show'));
+}
+let modalNodoOrigen = null;
+function abrirModalConNodo(node, headerHtml=''){
+  let overlay = document.getElementById('editmodal');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.className = 'confirmoverlay';
+    overlay.id = 'editmodal';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) cerrarModal(); });
+  }
+  modalNodoOrigen = { node, parent: node.parentNode, next: node.nextSibling };
+  const box = document.createElement('div');
+  box.className = 'confirmbox wide';
+  if(headerHtml) box.innerHTML = headerHtml;
+  box.appendChild(node);
+  overlay.innerHTML = '';
+  overlay.appendChild(box);
+  requestAnimationFrame(()=>overlay.classList.add('show'));
+}
+function cerrarModal(){
+  const overlay = document.getElementById('editmodal');
+  if(!overlay) return;
+  overlay.classList.remove('show');
+  setTimeout(()=>{
+    if(modalNodoOrigen){
+      const {node, parent, next} = modalNodoOrigen;
+      if(parent){ parent.insertBefore(node, next); }
+      modalNodoOrigen = null;
+    }
+    overlay.remove();
+  }, 180);
 }
 
 /* columnas de candidatas que vienen del form / ficha (nombres = columnas reales de la tabla) */
@@ -431,13 +487,7 @@ let dashPendientesHoy = [];
 
 function renderApp(){
   document.getElementById('app').innerHTML = `
-    <header>
-      <div class="topbar">
-        <div><img src="logo.png" alt="Parents Break" style="height:34px;"></div>
-        <div class="who">${session.user.email}<br><button onclick="logout()">Cerrar sesión</button></div>
-      </div>
-    </header>
-    <div class="applayout">
+    <div class="appshell">
       <aside class="sidebar" id="sidebar"></aside>
       <main id="modcontent" class="mainarea"></main>
     </div>
@@ -449,13 +499,19 @@ function setModulo(k){ moduloActivo=k; renderModulo(); }
 function renderSidebar(){
   const activeTop = (moduloActivo===null || moduloActivo==='hoy') ? 'hoy' : (MODULOS.some(m=>m.key===moduloActivo) ? moduloActivo : null);
   document.getElementById('sidebar').innerHTML = `
-    <button class="navitem ${activeTop==='hoy'?'active':''}" onclick="setModulo(null)" title="Hoy">
-      <div class="navitem-ic">${ICONS.hoy}</div><div class="navitem-label">Hoy</div>
-    </button>
-    ${MODULOS.map(m=>`
-      <button class="navitem ${activeTop===m.key?'active':''}" onclick="setModulo('${m.key}')" title="${m.label}">
-        <div class="navitem-ic">${ICONS[m.key]}</div><div class="navitem-label">${m.label}</div>
-      </button>`).join('')}
+    <img src="logo.png" alt="Parents Break" class="sidebar-logo">
+    <nav class="sidebar-nav">
+      <button class="navitem ${activeTop==='hoy'?'active':''}" onclick="setModulo(null)" title="Hoy">
+        <div class="navitem-ic">${ICONS.hoy}</div><div class="navitem-label">Hoy</div>
+      </button>
+      ${MODULOS.map(m=>`
+        <button class="navitem ${activeTop===m.key?'active':''}" onclick="setModulo('${m.key}')" title="${m.label}">
+          <div class="navitem-ic">${ICONS[m.key]}</div><div class="navitem-label">${m.label}</div>
+        </button>`).join('')}
+    </nav>
+    <div class="sidebar-foot">
+      ${session.user.email}<br><button onclick="logout()">Cerrar sesión</button>
+    </div>
   `;
 }
 
@@ -466,38 +522,31 @@ function fechaHoyLarga(){
   return f.charAt(0).toUpperCase() + f.slice(1);
 }
 
+let dashChart = null;
 async function renderDashboard(cont){
   cont.innerHTML = `
     <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1></div>
     <div class="statrow" id="statrow">
-      <div class="statcard"><div class="statnum">—</div><div class="statlabel">En proceso</div></div>
-      <div class="statcard"><div class="statnum">—</div><div class="statlabel">Niñeras activas</div></div>
-      <div class="statcard"><div class="statnum">—</div><div class="statlabel">Familias</div></div>
+      <div class="statcard"><div class="statnum">—</div><div class="statlabel">En proceso</div><div class="statnum-trend" id="trend-proceso"></div></div>
+      <div class="statcard"><div class="statnum">—</div><div class="statlabel">Niñeras activas</div><div class="statnum-trend" id="trend-ninieras"></div></div>
+      <div class="statcard"><div class="statnum">—</div><div class="statlabel">Familias</div><div class="statnum-trend" id="trend-familias"></div></div>
     </div>
-    <div class="moneyrow">
-      <button class="moneycard accent" onclick="setModulo('finanzas')">
-        <div class="moneytop"><span>Ingresos del mes</span>${ICONS.moneyIn}</div>
-        <div class="moneynum" id="dash-ingresos">—</div>
-        <div class="moneylink">Ver detalle →</div>
-      </button>
-      <button class="moneycard clay" onclick="setModulo('finanzas')">
-        <div class="moneytop"><span>Gastos del mes</span>${ICONS.moneyOut}</div>
-        <div class="moneynum" id="dash-gastos">—</div>
-        <div class="moneylink">Ver detalle →</div>
-      </button>
+    <div class="chartcard">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <h2 style="margin:0;">Ingresos y gastos por mes</h2>
+        <div class="chartlegend"><span><span class="chartdot" style="background:var(--accent);"></span>Ingresos</span><span><span class="chartdot" style="background:var(--clay);"></span>Gastos</span></div>
+      </div>
+      <div style="position:relative;height:170px;" id="finmesChartWrap"><canvas id="finmesChart" role="img" aria-label="Ingresos y gastos por mes, calculados a partir de los sittings, traslados y gastos generales reales"></canvas></div>
     </div>
     <button class="pendbanner" onclick="setModulo('pend-hoy')">
       <div class="pendbanner-left">
         <div class="pendbanner-num" id="dash-pend-num">—</div>
         <div class="pendbanner-label">Sittings/traslados de hoy sin registrar</div>
       </div>
-      <div class="pendbanner-link">Ver →</div>
+      <div class="pendbanner-link">Ver</div>
     </button>
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h2>Agenda de hoy · ${DIAS_LABEL[diaHoy()]}</h2>
-        <span style="font-size:11px;color:var(--ink-soft);">deslizá para ver más ↓</span>
-      </div>
+      <h2>Agenda de hoy · ${DIAS_LABEL[diaHoy()]}</h2>
       <div id="agenda" class="agendabox"><div class="empty">Cargando…</div></div>
     </div>
   `;
@@ -505,48 +554,108 @@ async function renderDashboard(cont){
 }
 async function loadDashboardData(){
   try{
-    const [{count:pipeline}, {count:activas}, {count:famCount}] = await Promise.all([
-      sb.from('candidatas').select('*', {count:'exact', head:true}).in('estado', ['intake','entrevistada']),
-      sb.from('ninieras').select('*', {count:'exact', head:true}).eq('activa', true),
-      sb.from('familias').select('*', {count:'exact', head:true}),
+    const [{data:pipelineRows}, {data:ninierasRows}, {data:familiasRows}] = await Promise.all([
+      sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
+      sb.from('ninieras').select('tipo').eq('activa', true),
+      sb.from('familias').select('cobro_hora'),
     ]);
     const nums = document.querySelectorAll('#statrow .statnum');
-    if(nums[0]) nums[0].textContent = pipeline ?? 0;
-    if(nums[1]) nums[1].textContent = activas ?? 0;
-    if(nums[2]) nums[2].textContent = famCount ?? 0;
+    const pipeline = pipelineRows||[];
+    const sinEntrevistar = pipeline.filter(r=>r.estado==='intake').length;
+    const entrevistadas = pipeline.filter(r=>r.estado==='entrevistada').length;
+    if(nums[0]) nums[0].textContent = pipeline.length;
+    const tProceso = document.getElementById('trend-proceso');
+    if(tProceso) tProceso.textContent = pipeline.length ? `${sinEntrevistar} sin entrevistar · ${entrevistadas} entrevistada${entrevistadas===1?'':'s'}` : 'Nadie en el pipeline ahora';
+
+    const ninieras = ninierasRows||[];
+    if(nums[1]) nums[1].textContent = ninieras.length;
+    const soloNinera = ninieras.filter(n=>(n.tipo||'Niñera')==='Niñera').length;
+    const traslados = ninieras.filter(n=>n.tipo==='Traslados').length;
+    const ambas = ninieras.filter(n=>n.tipo==='Ambas').length;
+    const tNin = document.getElementById('trend-ninieras');
+    if(tNin) tNin.textContent = `${soloNinera} niñera · ${traslados} traslados · ${ambas} ambas`;
+
+    const familias = familiasRows||[];
+    if(nums[2]) nums[2].textContent = familias.length;
+    const conTarifa = familias.filter(f=>f.cobro_hora!==null && f.cobro_hora!=='').length;
+    const tFam = document.getElementById('trend-familias');
+    if(tFam) tFam.textContent = `${conTarifa} con tarifa fija cargada`;
   }catch(e){}
 
   try{
-    const mesActual = currentMonthStr();
-    const [y,m] = mesActual.split('-').map(Number);
-    const desde = `${mesActual}-01`;
-    const hasta = new Date(y, m, 1).toISOString().slice(0,10);
     const [{data:sits}, {data:gastos}] = await Promise.all([
-      sb.from('sittings_traslados').select('cobro_familia,pago_ninera').gte('fecha', desde).lt('fecha', hasta),
-      sb.from('gastos_generales').select('monto').gte('fecha', desde).lt('fecha', hasta),
+      sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera'),
+      sb.from('gastos_generales').select('fecha,monto'),
     ]);
-    const ingresos = (sits||[]).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
-    const egresos = (sits||[]).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0) + (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0);
-    const elIng = document.getElementById('dash-ingresos'); if(elIng) elIng.textContent = '$'+ingresos.toLocaleString('es-UY');
-    const elGas = document.getElementById('dash-gastos'); if(elGas) elGas.textContent = '$'+egresos.toLocaleString('es-UY');
+    const porMes = {};
+    (sits||[]).forEach(r=>{
+      if(!r.fecha) return;
+      const mes = r.fecha.slice(0,7);
+      if(!porMes[mes]) porMes[mes] = {ingresos:0, gastos:0};
+      porMes[mes].ingresos += Number(r.cobro_familia)||0;
+      porMes[mes].gastos += Number(r.pago_ninera)||0;
+    });
+    (gastos||[]).forEach(g=>{
+      if(!g.fecha) return;
+      const mes = g.fecha.slice(0,7);
+      if(!porMes[mes]) porMes[mes] = {ingresos:0, gastos:0};
+      porMes[mes].gastos += Number(g.monto)||0;
+    });
+    const meses = Object.keys(porMes).sort().slice(-6);
+    const wrap = document.getElementById('finmesChartWrap');
+    const canvas = document.getElementById('finmesChart');
+    if(canvas && meses.length && window.Chart){
+      const labels = meses.map(m=>{
+        const [y,mm] = m.split('-').map(Number);
+        const f = new Intl.DateTimeFormat('es-UY', {month:'short'}).format(new Date(y, mm-1, 1));
+        return (f.charAt(0).toUpperCase()+f.slice(1)).replace('.','');
+      });
+      if(dashChart){ dashChart.destroy(); dashChart = null; }
+      dashChart = new Chart(canvas, {
+        type:'bar',
+        data:{ labels, datasets:[
+          {label:'Ingresos', data:meses.map(m=>Math.round(porMes[m].ingresos)), backgroundColor:'#757CBB', borderRadius:4, barThickness:22},
+          {label:'Gastos', data:meses.map(m=>Math.round(porMes[m].gastos)), backgroundColor:'#DF8386', borderRadius:4, barThickness:22},
+        ]},
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+          scales:{
+            y:{ grid:{color:'#E3E1EE'}, ticks:{color:'#6C6A84', font:{size:10}, callback:v=>'$'+Math.round(v/1000)+'k'} },
+            x:{ grid:{display:false}, ticks:{color:'#6C6A84', font:{size:11.5}} }
+          } }
+      });
+    } else if(wrap){
+      wrap.innerHTML = '<div class="empty">Todavía no hay suficientes sittings o gastos cargados para graficar por mes.</div>';
+    }
   }catch(e){}
 
   const box = document.getElementById('agenda');
   let agendaItems = [];
   try{
-    const { data, error } = await sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false});
+    const [{ data, error }, { data: ninTipos }] = await Promise.all([
+      sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false}),
+      sb.from('ninieras').select('nombre,tipo'),
+    ]);
     if(error){ box.innerHTML = errBox(error); return; }
+    const tipoPorNinera = {};
+    (ninTipos||[]).forEach(n=>{ tipoPorNinera[normaliza(n.nombre)] = n.tipo || 'Niñera'; });
     const hoy = diaHoy();
     agendaItems = (data||[]).filter(a => Array.isArray(a.dias) && a.dias.includes(hoy));
     if(!agendaItems.length){
       box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>';
     } else {
-      box.innerHTML = agendaItems.map(a=>`
+      box.innerHTML = agendaItems.map(a=>{
+        const esTraslado = tipoPorNinera[normaliza(a.ninera_nombre)] === 'Traslados';
+        const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : 'Sin horario';
+        return `
         <div class="agendarow">
-          <div class="agendatime">${a.hora_inicio ? a.hora_inicio.slice(0,5) : '—'}</div>
-          <div class="agendadot"></div>
-          <div><b>${a.ninera_nombre}</b> → ${a.familias?.nombre || 'familia sin nombre'}${a.hora_fin ? ' · hasta '+a.hora_fin.slice(0,5) : ''}</div>
-        </div>`).join('');
+          <div class="agendatime">${horario}</div>
+          <div class="agendaicon ${esTraslado?'traslado':'sitting'}">${esTraslado?ICONS.sittings:ICONS.ninieras}</div>
+          <div class="agendabody">
+            <div><b>${a.ninera_nombre}</b> con <b>${a.familias?.nombre || 'familia sin nombre'}</b></div>
+            <div class="agendatype">${esTraslado?'Traslado':'Sitting'}</div>
+          </div>
+        </div>`;
+      }).join('');
     }
   }catch(e){ box.innerHTML = errBox(e); return; }
 
@@ -588,6 +697,17 @@ async function renderFinanzas(cont){
       <div class="field" style="margin:0;max-width:200px;"><label>Mes</label><input type="month" id="fin-mes" value="${finMes}" onchange="cambiarFinMes()"></div>
     </div>
     <div class="summary3" id="fin-summary"></div>
+    <div class="chartcard" id="fin-breakdown-card" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div style="position:relative;width:96px;height:96px;flex-shrink:0;"><canvas id="finBreakdownChart" role="img" aria-label="Composición de gastos: pagos a niñeras vs gastos generales"></canvas></div>
+          <div>
+            <h2 style="margin:0 0 6px;">Composición de gastos</h2>
+            <div class="chartlegend" id="fin-breakdown-legend" style="flex-direction:column;gap:5px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="card">
       <h2>Registrar gasto general</h2>
       <div class="helper">Alquiler, insumos u otro gasto del negocio que no sea pago a una niñera.</div>
@@ -621,6 +741,36 @@ async function eliminarGastoGeneral(id){
   if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
   cargarFinanzas();
 }
+function editarGastoGeneral(id){
+  const g = finGastosItems.find(x=>x.id===id);
+  if(!g) return;
+  abrirModal(`
+    <h2 style="margin:0 0 18px;">Editar gasto</h2>
+    <div class="grid3">
+      <div class="field"><label>Fecha</label><input type="date" id="ed-gasto-fecha" value="${g.fecha||''}"></div>
+      <div class="field"><label>Concepto</label><input type="text" id="ed-gasto-concepto" value="${g.concepto||''}"></div>
+      <div class="field"><label>Monto</label><input type="number" id="ed-gasto-monto" value="${g.monto||0}"></div>
+    </div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="guardarEdicionGasto('${id}')">Guardar</button>
+    </div>`);
+}
+async function guardarEdicionGasto(id){
+  const cambios = {
+    fecha: document.getElementById('ed-gasto-fecha').value,
+    concepto: document.getElementById('ed-gasto-concepto').value.trim(),
+    monto: Number(document.getElementById('ed-gasto-monto').value)||0,
+  };
+  if(!cambios.fecha || !cambios.concepto){ toast('Faltan fecha o concepto.','bad'); return; }
+  const { error } = await sb.from('gastos_generales').update(cambios).eq('id', id);
+  if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  cerrarModal();
+  toast('Cambios guardados.');
+  cargarFinanzas();
+}
+let finGastosItems = [];
+let finBreakdownChart = null;
 async function cargarFinanzas(){
   const summary = document.getElementById('fin-summary');
   const movsBox = document.getElementById('fin-movs');
@@ -633,6 +783,7 @@ async function cargarFinanzas(){
     sb.from('gastos_generales').select('*').gte('fecha', desde).lt('fecha', hasta),
   ]);
   if(e1 || e2){ movsBox.innerHTML = errBox(e1||e2); return; }
+  finGastosItems = gastos || [];
   const ingresos = (sits||[]).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
   const egresosNinieras = (sits||[]).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
   const egresosGenerales = (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0);
@@ -642,6 +793,23 @@ async function cargarFinanzas(){
     <div class="summarycard"><div class="statlabel">Gastos de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--clay-text);">$${egresos.toLocaleString('es-UY')}</div></div>
     <div class="summarycard" style="border-left:3px solid var(--accent);"><div class="statlabel">Balance</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${(ingresos-egresos).toLocaleString('es-UY')}</div></div>
   `;
+  const chartCard = document.getElementById('fin-breakdown-card');
+  if(chartCard){
+    if(egresos>0 && window.Chart){
+      chartCard.style.display = '';
+      if(finBreakdownChart){ finBreakdownChart.destroy(); finBreakdownChart = null; }
+      finBreakdownChart = new Chart(document.getElementById('finBreakdownChart'), {
+        type:'doughnut',
+        data:{ labels:['Pagos a niñeras','Gastos generales'], datasets:[{ data:[Math.round(egresosNinieras), Math.round(egresosGenerales)], backgroundColor:['#757CBB','#DF8386'], borderWidth:0 }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, cutout:'62%' }
+      });
+      document.getElementById('fin-breakdown-legend').innerHTML = `
+        <span><span class="chartdot" style="background:#757CBB;"></span>Pagos a niñeras · $${Math.round(egresosNinieras).toLocaleString('es-UY')}</span>
+        <span><span class="chartdot" style="background:#DF8386;"></span>Gastos generales · $${Math.round(egresosGenerales).toLocaleString('es-UY')}</span>`;
+    } else {
+      chartCard.style.display = 'none';
+    }
+  }
   const movs = [];
   (sits||[]).forEach(r=>{
     if(Number(r.cobro_familia)) movs.push({fecha:r.fecha, texto:`${r.familia_nombre} — ${r.tipo==='sitting'?'sitting':'traslado'} (${r.ninera_nombre})`, monto:Number(r.cobro_familia)});
@@ -656,9 +824,9 @@ async function cargarFinanzas(){
     const fechaFmt = new Date(mv.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
     return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
       <div>${fechaFmt} · ${mv.texto}</div>
-      <div style="display:flex;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${mv.monto>0?'var(--good)':'var(--clay-text)'};">${mv.monto>0?'+':''}$${mv.monto.toLocaleString('es-UY')}</span>
-        ${mv.gastoId ? `<button class="smallbtn danger" onclick="eliminarGastoGeneral('${mv.gastoId}')">Eliminar</button>` : ''}
+        ${mv.gastoId ? `<button class="smallbtn" onclick="editarGastoGeneral('${mv.gastoId}')">Editar</button><button class="smallbtn danger" onclick="eliminarGastoGeneral('${mv.gastoId}')">Eliminar</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -992,13 +1160,45 @@ async function cargarMarketing(){
       </div>
       ${f.sugerencia?`<div class="helper" style="margin-top:8px;">${f.sugerencia}</div>`:''}
       ${f.notas?`<div class="helper">${f.notas}</div>`:''}
-      <div class="actions" style="margin-top:10px;"><button class="smallbtn danger" onclick="eliminarFechaMarketing('${f.id}')">Eliminar</button></div>
+      <div class="actions" style="margin-top:10px;"><button class="smallbtn" onclick="editarFechaMarketing('${f.id}')">Editar</button><button class="smallbtn danger" onclick="eliminarFechaMarketing('${f.id}')">Eliminar</button></div>
     </div>`;
   };
   let html = '';
   if(proximas.length){ html += `<div class="card-section-title">Próximas</div>` + proximas.map(filaHTML).join(''); }
   if(pasadas.length){ html += `<div class="card-section-title">Pasadas</div>` + pasadas.map(filaHTML).join(''); }
   cont.innerHTML = html;
+}
+function editarFechaMarketing(id){
+  const f = marketingItems.find(x=>x.id===id);
+  if(!f) return;
+  abrirModal(`
+    <h2 style="margin:0 0 18px;">Editar fecha especial</h2>
+    <div class="grid3">
+      <div class="field"><label>Fecha</label><input type="date" id="ed-mk-fecha" value="${f.fecha||''}"></div>
+      <div class="field"><label>Título</label><input type="text" id="ed-mk-titulo" value="${f.titulo||''}"></div>
+      <div class="field"><label>¿Ya publicado?</label><select id="ed-mk-publicado"><option value="false" ${!f.publicado?'selected':''}>No</option><option value="true" ${f.publicado?'selected':''}>Sí</option></select></div>
+    </div>
+    <div class="field"><label>Idea de contenido</label><textarea id="ed-mk-sugerencia">${f.sugerencia||''}</textarea></div>
+    <div class="field"><label>Notas</label><textarea id="ed-mk-notas">${f.notas||''}</textarea></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="guardarEdicionFechaMarketing('${id}')">Guardar</button>
+    </div>`);
+}
+async function guardarEdicionFechaMarketing(id){
+  const cambios = {
+    fecha: document.getElementById('ed-mk-fecha').value,
+    titulo: document.getElementById('ed-mk-titulo').value.trim(),
+    publicado: document.getElementById('ed-mk-publicado').value === 'true',
+    sugerencia: document.getElementById('ed-mk-sugerencia').value || null,
+    notas: document.getElementById('ed-mk-notas').value || null,
+  };
+  if(!cambios.fecha || !cambios.titulo){ toast('Faltan fecha o título.','bad'); return; }
+  const { error } = await sb.from('fechas_marketing').update(cambios).eq('id', id);
+  if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  cerrarModal();
+  toast('Cambios guardados.');
+  cargarMarketing();
 }
 async function togglePublicadoMarketing(id, val){
   const { error } = await sb.from('fechas_marketing').update({publicado: val}).eq('id', id);
@@ -1052,7 +1252,7 @@ function renderIntake(body){
     <div class="pillfilters">
       ${['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="pillbtn ${intakeFiltro===t?'selected':''}" onclick="intakeFiltro='${t}';loadIntake();">${t}</button>`).join('')}
     </div>
-    <div class="cardgrid" id="intakegrid"></div>
+    <div id="intakegrid"></div>
   `;
   loadIntake();
 }
@@ -1077,18 +1277,23 @@ async function loadIntake(){
   if(error){ grid.innerHTML = errBox(error); return; }
   intakeItems = data;
   if(!intakeItems.length){ grid.innerHTML = '<div class="empty">No hay candidatas esperando entrevista.</div>'; return; }
-  grid.innerHTML = intakeItems.map((c,i)=>`
-    <div class="pcard">
-      <div class="ph">${c.foto_url?`<img src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.innerHTML='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
-      ${c.autoriza_foto===false?'<div style="background:var(--clay-soft);color:var(--clay-text);font-weight:600;font-size:10.5px;text-align:center;padding:4px 6px;border-radius:6px;margin-bottom:6px;">⚠️ No autoriza foto/datos</div>':''}
-      <div class="name">${c.nombre} ${c.apellido||''} <span class="badge brand" style="font-size:10px;padding:2px 8px;">${c.tipo||'Niñera'}</span></div>
-      <div class="meta">${c.zona||'zona s/d'} · ${c.edad?c.edad+(String(c.edad).length<=2?' años':''):'edad s/d'}<br>${c.origen||''} ${c.telefono?'· '+c.telefono:''}</div>
+  grid.innerHTML = '<div class="person-list">' + intakeItems.map((c,i)=>`
+    <div class="person-row">
+      <div class="av">${c.foto_url?`<img src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.textContent='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="info">
+        <div class="name">${c.nombre} ${c.apellido||''}</div>
+        <div class="meta">${c.zona||'zona s/d'} · ${c.edad?c.edad+(String(c.edad).length<=2?' años':''):'edad s/d'}${c.origen?' · '+c.origen:''}</div>
+      </div>
+      <div class="badge-slot">
+        <span class="badge brand" style="font-size:10px;padding:2px 8px;">${c.tipo||'Niñera'}</span>
+        ${c.autoriza_foto===false?'<div class="badge bad" style="font-size:9px;padding:2px 6px;margin-top:4px;">No autoriza foto</div>':''}
+      </div>
       <div class="rowbtns">
         <button class="smallbtn" onclick="verFichaIntake(${i})">Ver ficha</button>
-        <button class="smallbtn" onclick="agendarDesdeIntake(${i})">Agendar entrevista</button>
+        <button class="smallbtn" onclick="agendarDesdeIntake(${i})">Agendar</button>
         <button class="smallbtn danger" onclick="descartarIntake('${c.id}')">Descartar</button>
       </div>
-    </div>`).join('') + '<div id="intakedetalle" style="grid-column:1/-1;"></div>';
+    </div>`).join('') + '</div>' + '<div id="intakedetalle"></div>';
 }
 function verFichaIntake(i){
   const c = intakeItems[i];
@@ -1413,7 +1618,7 @@ function renderNinieras(body){
       <div class="field" style="margin:0;"><label>Zona</label><select id="filt-zona" onchange="filtrarNinieras()"><option value="">Todas las zonas</option></select></div>
       <div class="field" style="margin:0;"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
     </div></div>
-    <div class="cardgrid" id="ninierasgrid"></div>
+    <div id="ninierasgrid"></div>
     <div id="ninieradetalle"></div>
   `;
   cargarNinieras();
@@ -1444,20 +1649,23 @@ function filtrarNinieras(){
     const matchTipo = !ft || (n.tipo||'Niñera')===ft;
     return matchTexto && matchZona && matchTipo;
   });
-  const countMsg = `<div class="helper" style="grid-column:1/-1;margin:0 0 4px;">${filtradas.length} de ${ninierasItems.length} niñeras</div>`;
-  if(!filtradas.length){ grid.innerHTML = countMsg + '<div class="empty" style="grid-column:1/-1;">Ninguna niñera coincide con la búsqueda.</div>'; return; }
-  grid.innerHTML = countMsg + filtradas.map(n=>`
-    <div class="pcard">
-      <button class="pcard-delete" onclick="eliminarNinera('${n.id}')" title="Eliminar niñera" aria-label="Eliminar niñera">${ICONS.trash}</button>
-      <div class="ph">${n.foto?`<img src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.innerHTML='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
-      <div class="name">${n.nombre} <span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span></div>
-      <div class="meta">${n.zona||'zona s/d'}${n.candidatas?.edad?' · '+n.candidatas.edad:''}<br>${n.candidatas?.universidad||''}${n.candidatas?.idiomas?' · '+n.candidatas.idiomas:''}</div>
+  const countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${ninierasItems.length} niñeras</div>`;
+  if(!filtradas.length){ grid.innerHTML = countMsg + '<div class="empty">Ninguna niñera coincide con la búsqueda.</div>'; return; }
+  grid.innerHTML = countMsg + '<div class="person-list">' + filtradas.map(n=>`
+    <div class="person-row">
+      <div class="av">${n.foto?`<img src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="info">
+        <div class="name">${n.nombre}</div>
+        <div class="meta">${n.zona||'zona s/d'}${n.candidatas?.edad?' · '+n.candidatas.edad:''}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
+      </div>
+      <div class="badge-slot"><span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span></div>
       <div class="rowbtns">
         <button class="smallbtn" onclick="verNinera('${n.id}')">Ver ficha</button>
         <button class="smallbtn" onclick="editarNinera('${n.id}')">Editar</button>
-        <button class="smallbtn" onclick="generarMensajeCV('${n.id}')">Generar CV</button>
+        <button class="smallbtn" onclick="generarMensajeCV('${n.id}')">CV</button>
+        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarNinera('${n.id}')" title="Eliminar niñera" aria-label="Eliminar niñera">${ICONS.trash}</button>
       </div>
-    </div>`).join('');
+    </div>`).join('') + '</div>';
 }
 async function verNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
@@ -1528,35 +1736,39 @@ function renderNineraHistorial(id){
 }
 function editarNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
-  document.getElementById('ninieradetalle').innerHTML = `
-    <div class="card">
-      <button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cancelar</button>
-      <h2>Editar a ${n.nombre}</h2>
-      <div class="grid3">
-        <div class="field"><label>Nombre</label><input type="text" id="ed-nombre" value="${n.nombre||''}"></div>
-        <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${n.telefono||''}"></div>
-        <div class="field"><label>Zona</label><input type="text" id="ed-zona" value="${n.zona||''}"></div>
-      </div>
-      <div class="grid2">
-        <div class="field"><label>Foto (URL)</label><input type="text" id="ed-foto" value="${n.foto||''}"></div>
-        <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-cuenta" value="${n.cuenta_bancaria||''}"></div>
-      </div>
-      <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
-      <button class="btn primary" onclick="guardarEdicionNinera('${id}')">Guardar cambios</button>
-    </div>`;
+  const tipos = ['Niñera','Traslados','Ambas'];
+  abrirModal(`
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+      <div style="width:46px;height:46px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-family:'Baloo 2',sans-serif;font-weight:600;font-size:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">${n.foto?`<img src="${n.foto}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
+      <h2 style="margin:0;">Editar a ${n.nombre}</h2>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Nombre</label><input type="text" id="ed-nombre" value="${n.nombre||''}"></div>
+      <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${n.telefono||''}"></div>
+      <div class="field"><label>Zona</label><input type="text" id="ed-zona" value="${n.zona||''}"></div>
+      <div class="field"><label>Tipo</label><select id="ed-tipo">${tipos.map(t=>`<option ${n.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="field"><label>Foto (URL)</label><input type="text" id="ed-foto" value="${n.foto||''}"></div>
+      <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-cuenta" value="${n.cuenta_bancaria||''}"></div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="guardarEdicionNinera('${id}')">Guardar</button>
+    </div>`);
 }
 async function guardarEdicionNinera(id){
   const cambios = {
     nombre: document.getElementById('ed-nombre').value,
     telefono: document.getElementById('ed-telefono').value,
     zona: document.getElementById('ed-zona').value,
+    tipo: document.getElementById('ed-tipo').value,
     foto: document.getElementById('ed-foto').value,
     cuenta_bancaria: document.getElementById('ed-cuenta').value,
     notas: document.getElementById('ed-notas').value,
   };
   const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
-  document.getElementById('ninieradetalle').innerHTML = '';
+  cerrarModal();
   toast('Cambios guardados.');
   cargarNinieras();
 }
@@ -1625,6 +1837,7 @@ function descargarMensajeCV(id){
 let familiasItems = [];
 let famBusqueda = '';
 let famZonaFiltro = '';
+let famDetalleAbierta = null;
 function renderFamilias(body){
   body.innerHTML = `
     <div class="card">
@@ -1654,7 +1867,9 @@ function renderFamilias(body){
       </div>
     </div>
     <div id="familiaslist"></div>
+    <div id="familiadetalle"></div>
   `;
+  famDetalleAbierta = null;
   cargarFamilias();
 }
 async function addFamilia(){
@@ -1708,6 +1923,10 @@ async function cargarFamilias(){
     zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(z=>`<option value="${z}" ${famZonaFiltro===z?'selected':''}>${z}</option>`).join('');
   }
   renderFamiliasList();
+  if(famDetalleAbierta){
+    if(familiasItems.some(f=>f.id===famDetalleAbierta)) verFamilia(famDetalleAbierta);
+    else { famDetalleAbierta = null; document.getElementById('familiadetalle').innerHTML = ''; }
+  }
 }
 function renderFamiliasList(){
   const cont = document.getElementById('familiaslist');
@@ -1719,48 +1938,74 @@ function renderFamiliasList(){
     const matchZona = !famZonaFiltro || (f.zona||'').trim()===famZonaFiltro;
     return matchNombre && matchZona;
   });
-  const dl = `<datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${n.nombre}">`).join('')}</datalist>`;
-  if(!filtradas.length){ cont.innerHTML = dl + '<div class="empty">Ninguna familia coincide con la búsqueda.</div>'; return; }
-  const countMsg = `<div class="helper" style="margin-bottom:8px;">${filtradas.length} de ${familiasItems.length} familias</div>`;
-  cont.innerHTML = dl + countMsg + filtradas.map(f=>{
+  const countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${familiasItems.length} familias</div>`;
+  if(!filtradas.length){ cont.innerHTML = countMsg + '<div class="empty">Ninguna familia coincide con la búsqueda.</div>'; return; }
+  cont.innerHTML = countMsg + '<div class="person-list">' + filtradas.map(f=>{
     const margenFam = (Number(f.cobro_hora)||0) - (Number(f.pago_hora)||0);
-    const precioHtml = (f.cobro_hora||f.pago_hora) ? `<div class="precio-fam"><span>Cobro: <b>$${f.cobro_hora||0}/h</b></span><span>Pago: <b>$${f.pago_hora||0}/h</b></span><span class="${margenFam>=0?'margenpos':'margenneg'}">Margen: <b>$${margenFam}/h</b></span></div>` : '<div class="helper" style="color:var(--clay-text);">⚠ Sin precio cargado — editá la familia para ponerlo.</div>';
-    const asigRows = (f.asignaciones||[]).map(a=>{
-      const dias = (a.dias||[]).join(' ');
-      const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : '—';
-      return `<tr><td>${a.ninera_nombre}</td><td>${dias||'—'} · ${horario}</td><td><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></td></tr>`;
-    }).join('');
-    const historialFam = famHistorialPorFamilia[normaliza(f.nombre)] || {};
-    const historialNombres = Object.keys(historialFam);
-    const historialHtml = historialNombres.length ? `
-      <div style="margin-top:12px;">
-        <div class="eyebrow" style="margin-bottom:6px;">Niñeras que trabajaron con esta familia</div>
-        ${historialNombres.map(nn=>{
-          const cant = historialFam[nn];
-          const res = famResenaPorNinera[normaliza(nn)];
-          const promedio = res ? (res.suma/res.cant).toFixed(1) : null;
-          const colorProm = promedio===null ? 'var(--ink-soft)' : (Number(promedio)>=4 ? 'var(--good)' : Number(promedio)>=3 ? '#7A5A16' : 'var(--clay-text)');
-          return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
-            <div>${nn} <span style="color:var(--ink-soft);font-size:12px;">· ${cant} ${cant===1?'sitting/traslado':'sittings/traslados'}</span></div>
-            <div style="font-weight:600;color:${colorProm};">${promedio!==null ? '★ '+promedio+'/5 ('+res.cant+')' : 'Sin reseñas'}</div>
-          </div>`;
-        }).join('')}
-      </div>` : '';
+    const tieneTarifa = f.cobro_hora || f.pago_hora;
+    const badge = tieneTarifa
+      ? `<span class="badge ${margenFam>=0?'good':'bad'}" style="font-size:10px;padding:2px 8px;">$${f.cobro_hora||0}/h</span>`
+      : `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin tarifa</span>`;
     return `
+    <div class="person-row">
+      <div class="av">${(f.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="info">
+        <div class="name">${f.nombre}</div>
+        <div class="meta">${f.zona||'zona s/d'}${f.ninos?' · niños: '+f.ninos:''}</div>
+      </div>
+      <div class="badge-slot">${badge}</div>
+      <div class="rowbtns">
+        <button class="smallbtn" onclick="verFamilia('${f.id}')">Ver ficha</button>
+        <button class="smallbtn" onclick="editarFamilia('${f.id}')">Editar</button>
+        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarFamilia('${f.id}')" title="Eliminar familia" aria-label="Eliminar familia">${ICONS.trash}</button>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+function verFamilia(id){
+  const f = familiasItems.find(x=>x.id===id);
+  if(!f) return;
+  famDetalleAbierta = id;
+  const margenFam = (Number(f.cobro_hora)||0) - (Number(f.pago_hora)||0);
+  const precioHtml = (f.cobro_hora||f.pago_hora) ? `<div class="precio-fam"><span>Cobro: <b>$${f.cobro_hora||0}/h</b></span><span>Pago: <b>$${f.pago_hora||0}/h</b></span><span class="${margenFam>=0?'margenpos':'margenneg'}">Margen: <b>$${margenFam}/h</b></span></div>` : '<div class="helper" style="color:var(--clay-text);">Sin precio cargado — editá la familia para ponerlo.</div>';
+  const asigRows = (f.asignaciones||[]).map(a=>{
+    const dias = (a.dias||[]).join(' ');
+    const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : '—';
+    return `<tr><td>${a.ninera_nombre}</td><td>${dias||'—'} · ${horario}</td><td><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></td></tr>`;
+  }).join('');
+  const historialFam = famHistorialPorFamilia[normaliza(f.nombre)] || {};
+  const historialNombres = Object.keys(historialFam);
+  const historialHtml = historialNombres.length ? `
+    <div style="margin-top:14px;">
+      <div class="card-section-title">Niñeras que trabajaron con esta familia</div>
+      ${historialNombres.map(nn=>{
+        const cant = historialFam[nn];
+        const res = famResenaPorNinera[normaliza(nn)];
+        const promedio = res ? (res.suma/res.cant).toFixed(1) : null;
+        const colorProm = promedio===null ? 'var(--ink-soft)' : (Number(promedio)>=4 ? 'var(--good)' : Number(promedio)>=3 ? '#7A5A16' : 'var(--clay-text)');
+        return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
+          <div>${nn} <span style="color:var(--ink-soft);font-size:12px;">· ${cant} ${cant===1?'sitting/traslado':'sittings/traslados'}</span></div>
+          <div style="font-weight:600;color:${colorProm};">${promedio!==null ? '★ '+promedio+'/5 ('+res.cant+')' : 'Sin reseñas'}</div>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+  document.getElementById('familiadetalle').innerHTML = `
     <div class="card">
+      <button class="detailback" onclick="famDetalleAbierta=null;document.getElementById('familiadetalle').innerHTML=''">← Cerrar</button>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-        <h2>${f.nombre}</h2>
+        <h2 style="margin:0;">${f.nombre}</h2>
         <button class="smallbtn" onclick="editarFamilia('${f.id}')">Editar</button>
       </div>
       <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
       ${precioHtml}
-      ${f.direccion?`<div class="helper">📍 ${f.direccion}</div>`:''}
+      ${f.direccion?`<div class="helper">Dirección: ${f.direccion}</div>`:''}
       ${f.cuenta_bancaria?`<div class="helper">Cuenta: ${f.cuenta_bancaria}</div>`:''}
       ${f.notas?`<div class="helper">${f.notas}</div>`:''}
       ${historialHtml}
-      <div id="fam-editbox-${f.id}"></div>
+      <div class="card-section-title">Niñeras asignadas</div>
       <div class="tablewrap"><table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
         <tbody>${asigRows || '<tr><td colspan="3" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table></div>
+      <datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${n.nombre}">`).join('')}</datalist>
       <div class="grid3" style="margin-top:14px;">
         <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
         <div class="field"><label>Hora inicio</label><input type="time" id="asig-horaini-${f.id}"></div>
@@ -1772,50 +2017,47 @@ function renderFamiliasList(){
         </div>
       </div>
       <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Asignar niñera</button>
-      <div class="actions" style="margin-top:16px;padding-top:12px;border-top:1px dashed var(--line);"><button class="smallbtn danger" onclick="eliminarFamilia('${f.id}')">Eliminar familia</button></div>
     </div>`;
-  }).join('');
 }
 function editarFamilia(id){
   const f = familiasItems.find(x=>x.id===id);
   if(!f) return;
-  document.getElementById('fam-editbox-'+id).innerHTML = `
-    <div class="card" style="background:var(--bg);box-shadow:none;">
-      <div class="grid3">
-        <div class="field"><label>Nombre</label><input type="text" id="ed-fam-nombre-${id}" value="${f.nombre||''}"></div>
-        <div class="field"><label>Zona</label><input type="text" id="ed-fam-zona-${id}" value="${f.zona||''}"></div>
-        <div class="field"><label>Teléfono</label><input type="tel" id="ed-fam-telefono-${id}" value="${f.telefono||''}"></div>
-      </div>
-      <div class="grid3">
-        <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="ed-fam-cobro-${id}" value="${f.cobro_hora??''}"></div>
-        <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="ed-fam-pago-${id}" value="${f.pago_hora??''}"></div>
-        <div class="field"><label>Niños (edades)</label><input type="text" id="ed-fam-ninos-${id}" value="${f.ninos||''}"></div>
-      </div>
-      <div class="grid2">
-        <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion-${id}" value="${f.direccion||''}"></div>
-        <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-fam-cuenta-${id}" value="${f.cuenta_bancaria||''}"></div>
-      </div>
-      <div class="field"><label>Notas</label><textarea id="ed-fam-notas-${id}">${f.notas||''}</textarea></div>
-      <div class="actions">
-        <button class="btn primary" onclick="guardarEdicionFamilia('${id}')">Guardar cambios</button>
-        <button class="btn ghost" onclick="document.getElementById('fam-editbox-${id}').innerHTML=''">Cancelar</button>
-      </div>
-    </div>`;
+  abrirModal(`
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+      <div style="width:46px;height:46px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-family:'Baloo 2',sans-serif;font-weight:600;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${(f.nombre||'?').charAt(0).toUpperCase()}</div>
+      <h2 style="margin:0;">Editar a ${f.nombre}</h2>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Nombre</label><input type="text" id="ed-fam-nombre" value="${f.nombre||''}"></div>
+      <div class="field"><label>Zona</label><input type="text" id="ed-fam-zona" value="${f.zona||''}"></div>
+      <div class="field"><label>Teléfono</label><input type="tel" id="ed-fam-telefono" value="${f.telefono||''}"></div>
+      <div class="field"><label>Niños (edades)</label><input type="text" id="ed-fam-ninos" value="${f.ninos||''}"></div>
+      <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="ed-fam-cobro" value="${f.cobro_hora??''}"></div>
+      <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="ed-fam-pago" value="${f.pago_hora??''}"></div>
+      <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion" value="${f.direccion||''}"></div>
+      <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-fam-cuenta" value="${f.cuenta_bancaria||''}"></div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="ed-fam-notas">${f.notas||''}</textarea></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="guardarEdicionFamilia('${id}')">Guardar</button>
+    </div>`);
 }
 async function guardarEdicionFamilia(id){
   const cambios = {
-    nombre: document.getElementById('ed-fam-nombre-'+id).value,
-    zona: document.getElementById('ed-fam-zona-'+id).value,
-    telefono: document.getElementById('ed-fam-telefono-'+id).value,
-    cobro_hora: document.getElementById('ed-fam-cobro-'+id).value||null,
-    pago_hora: document.getElementById('ed-fam-pago-'+id).value||null,
-    ninos: document.getElementById('ed-fam-ninos-'+id).value,
-    direccion: document.getElementById('ed-fam-direccion-'+id).value,
-    cuenta_bancaria: document.getElementById('ed-fam-cuenta-'+id).value,
-    notas: document.getElementById('ed-fam-notas-'+id).value,
+    nombre: document.getElementById('ed-fam-nombre').value,
+    zona: document.getElementById('ed-fam-zona').value,
+    telefono: document.getElementById('ed-fam-telefono').value,
+    cobro_hora: document.getElementById('ed-fam-cobro').value||null,
+    pago_hora: document.getElementById('ed-fam-pago').value||null,
+    ninos: document.getElementById('ed-fam-ninos').value,
+    direccion: document.getElementById('ed-fam-direccion').value,
+    cuenta_bancaria: document.getElementById('ed-fam-cuenta').value,
+    notas: document.getElementById('ed-fam-notas').value,
   };
   const { error } = await sb.from('familias').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  cerrarModal();
   toast('Cambios guardados.');
   cargarFamilias();
 }
@@ -1839,6 +2081,7 @@ async function eliminarFamilia(id){
   if(!(await confirmarAccion('¿Eliminar esta familia? No se puede deshacer.'))) return;
   const { error } = await sb.from('familias').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
+  if(famDetalleAbierta===id){ famDetalleAbierta=null; document.getElementById('familiadetalle').innerHTML=''; }
   cargarFamilias();
 }
 
@@ -2205,11 +2448,13 @@ async function guardarSitting(){
   toast(sitEditId ? 'Registro actualizado.' : 'Registro guardado.');
   sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
   renderSitForm();
+  cerrarModal();
   cargarSitLista();
 }
 function cancelarEdicionSitting(){
   sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
   renderSitForm();
+  cerrarModal();
 }
 function editarSitting(id){
   const r = sitItems.find(x=>x.id===id);
@@ -2237,8 +2482,9 @@ function editarSitting(id){
       if(document.getElementById('sit-destino')) document.getElementById('sit-destino').value = r.destino || '';
     }
     calcSitMargen();
+    const wrap = document.getElementById('sit-form-wrap');
+    if(wrap) abrirModalConNodo(wrap);
   }, 30);
-  window.scrollTo({top:0, behavior:'smooth'});
 }
 async function eliminarSitting(id){
   if(!(await confirmarAccion('¿Eliminar este registro? No se puede deshacer.'))) return;
@@ -2275,7 +2521,7 @@ async function cargarSitLista(){
     <tbody>${sitItems.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td>${r.tipo==='sitting'?'Sitting':'Traslado'}</td><td>${r.familia_nombre}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="editarSitting('${r.id}')">Editar</button><button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></div></td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${r.familia_nombre}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="editarSitting('${r.id}')">Editar</button><button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></div></td></tr>`;
     }).join('')}</tbody></table></div>
   `;
 }
