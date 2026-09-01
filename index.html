@@ -61,7 +61,11 @@ h1{font-size:27px;font-weight:600;}
 .subtab:hover{color:var(--accent);}
 .subtab.active{color:var(--accent);border-bottom-color:var(--accent);}
 .card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-bottom:16px;box-shadow:var(--shadow-sm);animation:fadeIn var(--ease);}
-.card h2{font-size:16.5px;font-weight:600;letter-spacing:-0.01em;}
+.card h2{font-size:16.5px;font-weight:600;letter-spacing:-0.01em;margin:0 0 10px;}
+.card h2:first-child{margin-top:0;}
+.card>.helper:first-child{margin-top:0;}
+.card-section-title{font-size:14px;font-weight:700;font-family:'Baloo 2',sans-serif;margin:18px 0 10px;}
+.card-section-title:first-child{margin-top:0;}
 .helper{color:var(--ink-soft);font-size:13px;margin:4px 0 12px;line-height:1.5;}
 label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
 input[type=text],input[type=tel],input[type=date],input[type=number],input[type=email],input[type=password],select,textarea{
@@ -211,6 +215,16 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .pendcard:hover{transform:translateY(-2px);border-color:#C8C6DC;}
 .pendnum{font-family:'Baloo 2',sans-serif;font-size:19px;font-weight:700;color:var(--ink);}
 .pendlabel{font-size:11px;color:var(--ink-soft);margin-top:1px;}
+.pendbanner{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;text-align:left;width:100%;font-family:'Inter',sans-serif;transition:transform var(--ease), border-color var(--ease);box-shadow:var(--shadow-sm);}
+.pendbanner:hover{transform:translateY(-2px);border-color:#C8C6DC;}
+.pendbanner-left{display:flex;align-items:center;gap:12px;}
+.pendbanner-num{font-family:'Baloo 2',sans-serif;font-size:19px;font-weight:700;color:var(--clay-text);}
+.pendbanner-label{font-size:13px;color:var(--ink);}
+.pendbanner-link{font-size:12px;color:var(--accent);font-weight:600;white-space:nowrap;}
+.pillfilters{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;}
+.pillbtn{background:#fff;border:1px solid var(--line);border-radius:100px;padding:6px 13px;font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:'Inter',sans-serif;transition:all var(--ease);}
+.pillbtn:hover{border-color:var(--accent);color:var(--accent);}
+.pillbtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
 .agendabox{max-height:190px;overflow-y:auto;}
 .agendabox::-webkit-scrollbar{width:6px;}
 .agendabox::-webkit-scrollbar-thumb{background:var(--line);border-radius:10px;}
@@ -237,7 +251,8 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .mesbar{display:flex;justify-content:space-between;align-items:flex-end;margin:16px 0 10px;gap:10px;flex-wrap:wrap;}
 .precio-fam{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;padding:8px 12px;background:var(--accent-soft);border-radius:9px;font-size:13px;color:var(--ink-soft);}
 @media (max-width:640px){.summary3{grid-template-columns:1fr;}}
-@media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow,.pendrow{grid-template-columns:1fr 1fr;}}
+@media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow,.pendrow{grid-template-columns:1fr 1fr;}.statrow{grid-template-columns:1fr 1fr;}.pendbanner{flex-wrap:wrap;}}
+@media (max-width:480px){.statrow{grid-template-columns:1fr;}}
 @media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}.hometiles{grid-template-columns:1fr;grid-auto-rows:auto;}.tile.hero{grid-column:span 1;grid-row:span 1;}}
 @media print{.subnav,.actions,.backbtn,button{display:none !important;}}
 </style>
@@ -451,11 +466,11 @@ function setModulo(k){ moduloActivo=k; renderModulo(); }
 function renderSidebar(){
   const activeTop = (moduloActivo===null || moduloActivo==='hoy') ? 'hoy' : (MODULOS.some(m=>m.key===moduloActivo) ? moduloActivo : null);
   document.getElementById('sidebar').innerHTML = `
-    <button class="navitem ${activeTop==='hoy'?'active':''}" onclick="setModulo(null)">
+    <button class="navitem ${activeTop==='hoy'?'active':''}" onclick="setModulo(null)" title="Hoy">
       <div class="navitem-ic">${ICONS.hoy}</div><div class="navitem-label">Hoy</div>
     </button>
     ${MODULOS.map(m=>`
-      <button class="navitem ${activeTop===m.key?'active':''}" onclick="setModulo('${m.key}')">
+      <button class="navitem ${activeTop===m.key?'active':''}" onclick="setModulo('${m.key}')" title="${m.label}">
         <div class="navitem-ic">${ICONS[m.key]}</div><div class="navitem-label">${m.label}</div>
       </button>`).join('')}
   `;
@@ -488,12 +503,13 @@ async function renderDashboard(cont){
         <div class="moneylink">Ver detalle →</div>
       </button>
     </div>
-    <div class="pendrow" style="grid-template-columns:1fr;">
-      <button class="pendcard" onclick="setModulo('pend-hoy')">
-        <div class="pendnum" id="dash-pend-num">—</div>
-        <div class="pendlabel">Sittings/traslados de hoy sin registrar</div>
-      </button>
-    </div>
+    <button class="pendbanner" onclick="setModulo('pend-hoy')">
+      <div class="pendbanner-left">
+        <div class="pendbanner-num" id="dash-pend-num">—</div>
+        <div class="pendbanner-label">Sittings/traslados de hoy sin registrar</div>
+      </div>
+      <div class="pendbanner-link">Ver →</div>
+    </button>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <h2>Agenda de hoy · ${DIAS_LABEL[diaHoy()]}</h2>
@@ -653,7 +669,7 @@ async function cargarFinanzas(){
   });
   movs.sort((a,b)=> b.fecha.localeCompare(a.fecha));
   if(!movs.length){ movsBox.innerHTML = `<div class="empty">No hay movimientos cargados en ${monthLabel(finMes)} todavía.</div>`; return; }
-  movsBox.innerHTML = `<h2 style="margin-bottom:10px;">Movimientos de ${monthLabel(finMes)}</h2>` + movs.map(mv=>{
+  movsBox.innerHTML = `<h2>Movimientos de ${monthLabel(finMes)}</h2>` + movs.map(mv=>{
     const fechaFmt = new Date(mv.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
     return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
       <div>${fechaFmt} · ${mv.texto}</div>
@@ -948,8 +964,8 @@ async function cargarMarketing(){
     </div>`;
   };
   let html = '';
-  if(proximas.length){ html += `<h2 style="margin:18px 0 10px;">Próximas</h2>` + proximas.map(filaHTML).join(''); }
-  if(pasadas.length){ html += `<h2 style="margin:18px 0 10px;">Pasadas</h2>` + pasadas.map(filaHTML).join(''); }
+  if(proximas.length){ html += `<div class="card-section-title">Próximas</div>` + proximas.map(filaHTML).join(''); }
+  if(pasadas.length){ html += `<div class="card-section-title">Pasadas</div>` + pasadas.map(filaHTML).join(''); }
   cont.innerHTML = html;
 }
 async function togglePublicadoMarketing(id, val){
@@ -1001,8 +1017,8 @@ function renderIntake(body){
       <div class="field"><label>Tipo</label><select id="in-tipo"><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
       <button class="btn primary" onclick="addIntake()">Agregar candidata</button>
     </div>
-    <div class="subnav" style="border-bottom:none;margin:0 0 10px;">
-      ${['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="smallbtn" onclick="intakeFiltro='${t}';loadIntake();" style="${intakeFiltro===t?'background:var(--accent);color:#fff;border-color:var(--accent);':''}">${t}</button>`).join(' ')}
+    <div class="pillfilters">
+      ${['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="pillbtn ${intakeFiltro===t?'selected':''}" onclick="intakeFiltro='${t}';loadIntake();">${t}</button>`).join('')}
     </div>
     <div class="cardgrid" id="intakegrid"></div>
   `;
@@ -2220,7 +2236,7 @@ async function cargarSitLista(){
   `;
   if(!sitItems.length){ wrap.innerHTML = `<div class="empty">No hay registros cargados en ${monthLabel(sitMes)} todavía.</div>`; return; }
   wrap.innerHTML = `
-    <h2 style="margin-bottom:10px;">Registros de ${monthLabel(sitMes)}</h2>
+    <h2>Registros de ${monthLabel(sitMes)}</h2>
     <table class="asigtable"><thead><tr><th>Fecha</th><th>Tipo</th><th>Familia</th><th>Niñera</th><th>Cobro</th><th>Pago</th><th>Margen</th><th></th></tr></thead>
     <tbody>${sitItems.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
