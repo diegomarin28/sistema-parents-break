@@ -235,6 +235,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .summary3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;}
 .summarycard{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
 .mesbar{display:flex;justify-content:space-between;align-items:flex-end;margin:16px 0 10px;gap:10px;flex-wrap:wrap;}
+.precio-fam{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;padding:8px 12px;background:var(--accent-soft);border-radius:9px;font-size:13px;color:var(--ink-soft);}
 @media (max-width:640px){.summary3{grid-template-columns:1fr;}}
 @media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow,.pendrow{grid-template-columns:1fr 1fr;}}
 @media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}.hometiles{grid-template-columns:1fr;grid-auto-rows:auto;}.tile.hero{grid-column:span 1;grid-row:span 1;}}
@@ -986,7 +987,7 @@ function renderIntake(body){
   body.innerHTML = `
     <div class="card">
       <h2>Cargar candidata manualmente</h2>
-      <div class="helper">Para carga rápida. Para traer la ficha completa del form, usá el importador CSV de abajo.</div>
+      <div class="helper">Cargá acá las candidatas nuevas que lleguen fuera del form de babysitters (el form ya entra solo — ver "Form (auto)").</div>
       <div class="grid3">
         <div class="field"><label>Nombre</label><input type="text" id="in-nombre"></div>
         <div class="field"><label>Teléfono</label><input type="tel" id="in-tel"></div>
@@ -1000,18 +1001,11 @@ function renderIntake(body){
       <div class="field"><label>Tipo</label><select id="in-tipo"><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
       <button class="btn primary" onclick="addIntake()">Agregar candidata</button>
     </div>
-    <div class="card">
-      <h2>Importar desde CSV (form de Google)</h2>
-      <div class="helper">Descargá la planilla "Entrevistadas" del Drive como CSV y subila acá.</div>
-      <input type="file" id="csvfile" accept=".csv">
-      <div id="importbox"></div>
-    </div>
     <div class="subnav" style="border-bottom:none;margin:0 0 10px;">
       ${['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="smallbtn" onclick="intakeFiltro='${t}';loadIntake();" style="${intakeFiltro===t?'background:var(--accent);color:#fff;border-color:var(--accent);':''}">${t}</button>`).join(' ')}
     </div>
     <div class="cardgrid" id="intakegrid"></div>
   `;
-  document.getElementById('csvfile').addEventListener('change', handleCSV);
   loadIntake();
 }
 async function addIntake(){
@@ -1084,69 +1078,6 @@ function renderFichaOrigen(){
   if(!c){ box.innerHTML=''; return; }
   const rows = FICHA_CAMPOS.filter(f=>c[f.key] && !['nombre','apellido','telefono','zona'].includes(f.key)).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
   box.innerHTML = `<div class="card"><h2>Ficha del formulario</h2><div class="helper">Cargada por ella misma antes de la entrevista — no editable acá.</div><div class="fichadl">${rows||'<div>Sin más datos.</div>'}</div></div>`;
-}
-
-/* ---- Importador CSV ---- */
-function parseCSV(text){
-  const rows = []; let row=[], cur='', inQ=false;
-  for(let i=0;i<text.length;i++){
-    const ch=text[i];
-    if(inQ){ if(ch==='"' && text[i+1]==='"'){cur+='"';i++;} else if(ch==='"'){inQ=false;} else cur+=ch; }
-    else{ if(ch==='"') inQ=true; else if(ch===','){row.push(cur);cur='';}
-      else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n')i++; row.push(cur);cur=''; if(row.some(v=>v!=='')) rows.push(row); row=[]; }
-      else cur+=ch; }
-  }
-  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
-  return rows;
-}
-let csvRows=[], csvHeaders=[];
-function handleCSV(e){
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{ const rows = parseCSV(reader.result); csvHeaders = rows[0]||[]; csvRows = rows.slice(1).filter(r=>r.length && r.some(v=>v.trim()!=='')); renderImportMap(); };
-  reader.readAsText(file, 'UTF-8');
-}
-function renderImportMap(){
-  const box = document.getElementById('importbox');
-  const opts = ['<option value="">— no mapear —</option>'].concat(csvHeaders.map((h,i)=>`<option value="${i}">${h||'(columna '+(i+1)+')'}</option>`)).join('');
-  box.innerHTML = `
-    <div class="helper" style="margin-top:12px;">Se detectaron ${csvRows.length} filas. Revisá el mapeo:</div>
-    ${FICHA_CAMPOS.map(f=>`<div class="maprow"><label style="margin:0;">${f.label}${f.key==='nombre'?' *':''}</label><select id="map-${f.key}">${opts}</select></div>`).join('')}
-    <table class="importtable"><thead><tr>${csvHeaders.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
-      <tbody>${csvRows.slice(0,3).map(r=>`<tr>${r.map(v=>`<td>${v}</td>`).join('')}</tr>`).join('')}</tbody>
-    </table>
-    <button class="btn primary" onclick="importarCSV()">Importar ${csvRows.length} candidatas</button>
-    <div id="importresult"></div>
-  `;
-  const usados = new Set();
-  FICHA_CAMPOS.forEach(f=>{
-    let idx=-1;
-    for(let i=0;i<csvHeaders.length;i++){
-      if(usados.has(i)) continue;
-      const h = normaliza(csvHeaders[i]);
-      if(f.hints.some(hint=>h.includes(normaliza(hint)))){ idx=i; break; }
-    }
-    if(idx>-1){ document.getElementById('map-'+f.key).value = idx; usados.add(idx); }
-  });
-}
-async function importarCSV(){
-  const map = {};
-  FICHA_CAMPOS.forEach(f=>{ const v = document.getElementById('map-'+f.key).value; map[f.key] = v===''? null : parseInt(v); });
-  if(map.nombre===null){ document.getElementById('importresult').innerHTML = '<div class="warnbox">Tenés que mapear al menos el campo Nombre.</div>'; return; }
-  const registros = [];
-  for(const row of csvRows){
-    const nombre = (row[map.nombre]||'').trim();
-    if(!nombre) continue;
-    const item = { origen:'Instagram / Form', tipo:'Niñera', estado:'intake' };
-    FICHA_CAMPOS.forEach(f=>{ if(map[f.key]!==null) item[f.key] = (row[map[f.key]]||'').trim(); });
-    registros.push(item);
-  }
-  const { error } = await sb.from('candidatas').insert(registros);
-  if(error){ document.getElementById('importresult').innerHTML = `<div class="warnbox">Error al importar: ${error.message}</div>`; return; }
-  document.getElementById('importresult').innerHTML = '';
-  toast(`Se importaron ${registros.length} candidatas.`);
-  loadIntake();
 }
 
 /* ---- Entrevista ---- */
@@ -1566,23 +1497,35 @@ function descargarMensajeCV(id){
 
 /* ================= FAMILIAS ================= */
 let familiasItems = [];
+let famBusqueda = '';
+let famZonaFiltro = '';
 function renderFamilias(body){
   body.innerHTML = `
     <div class="card">
       <h2>Nueva familia</h2>
-      <div class="helper">Acá vive el precio: cuánto le cobramos a la familia por hora y cuánto le pagamos a cada niñera — el margen se calcula solo.</div>
+      <div class="helper">El precio es por familia: cuánto le cobramos por hora y cuánto le pagamos a la niñera. El margen se calcula solo.</div>
       <div class="grid3">
         <div class="field"><label>Nombre de la familia</label><input type="text" id="fam-nombre"></div>
         <div class="field"><label>Zona</label><input type="text" id="fam-zona"></div>
         <div class="field"><label>Teléfono</label><input type="tel" id="fam-telefono"></div>
       </div>
-      <div class="grid2">
+      <div class="grid3">
+        <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="fam-cobro"></div>
+        <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="fam-pago"></div>
         <div class="field"><label>Niños (edades)</label><input type="text" id="fam-ninos" placeholder="Ej: 3 y 6 años"></div>
-        <div class="field"><label>Dirección</label><input type="text" id="fam-direccion" placeholder="Para sugerir origen en traslados"></div>
       </div>
-      <div class="field"><label>Cuenta bancaria</label><input type="text" id="fam-cuenta"></div>
+      <div class="grid2">
+        <div class="field"><label>Dirección</label><input type="text" id="fam-direccion" placeholder="Para sugerir origen en traslados"></div>
+        <div class="field"><label>Cuenta bancaria</label><input type="text" id="fam-cuenta"></div>
+      </div>
       <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
       <button class="btn primary" onclick="addFamilia()">Agregar familia</button>
+    </div>
+    <div class="card" style="padding:14px 18px;">
+      <div class="grid2">
+        <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
+        <div class="field" style="margin:0;"><label>Zona</label><select id="fam-zonafiltro" onchange="famZonaFiltro=this.value;renderFamiliasList();"></select></div>
+      </div>
     </div>
     <div id="familiaslist"></div>
   `;
@@ -1592,14 +1535,17 @@ async function addFamilia(){
   const nombre = document.getElementById('fam-nombre').value.trim();
   if(!nombre){ toast('Falta el nombre de la familia.','bad'); return; }
   const fam = { nombre, zona:document.getElementById('fam-zona').value, telefono:document.getElementById('fam-telefono').value,
+    cobro_hora:document.getElementById('fam-cobro').value||null, pago_hora:document.getElementById('fam-pago').value||null,
     ninos:document.getElementById('fam-ninos').value, direccion:document.getElementById('fam-direccion').value,
     cuenta_bancaria:document.getElementById('fam-cuenta').value, notas:document.getElementById('fam-notas').value };
   const { error } = await sb.from('familias').insert(fam);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
-  ['fam-nombre','fam-zona','fam-telefono','fam-ninos','fam-direccion','fam-cuenta','fam-notas'].forEach(id=>document.getElementById(id).value='');
+  ['fam-nombre','fam-zona','fam-telefono','fam-cobro','fam-pago','fam-ninos','fam-direccion','fam-cuenta','fam-notas'].forEach(id=>document.getElementById(id).value='');
   toast('Familia agregada.');
   cargarFamilias();
 }
+let famResenaPorNinera = {};
+let famHistorialPorFamilia = {};
 async function cargarFamilias(){
   const cont = document.getElementById('familiaslist');
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
@@ -1610,46 +1556,64 @@ async function cargarFamilias(){
     sb.from('sittings_traslados').select('familia_nombre,ninera_nombre'),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
   ]);
-  // Promedio de reseñas por niñera (normalizado, para que no importe tilde/mayúscula)
-  const resenaPorNinera = {};
+  famResenaPorNinera = {};
   (resenas||[]).forEach(r=>{
     if(r.puntuacion==null) return;
     const k = normaliza(r.ninera_nombre||'');
     if(!k) return;
-    if(!resenaPorNinera[k]) resenaPorNinera[k] = {suma:0, cant:0};
-    resenaPorNinera[k].suma += Number(r.puntuacion);
-    resenaPorNinera[k].cant += 1;
+    if(!famResenaPorNinera[k]) famResenaPorNinera[k] = {suma:0, cant:0};
+    famResenaPorNinera[k].suma += Number(r.puntuacion);
+    famResenaPorNinera[k].cant += 1;
   });
-  // Cuántos sittings/traslados hizo cada niñera con cada familia (historial real)
-  const historialPorFamilia = {};
+  famHistorialPorFamilia = {};
   (sittings||[]).forEach(s=>{
     const kf = normaliza(s.familia_nombre||'');
     const kn = s.ninera_nombre;
     if(!kf || !kn) return;
-    if(!historialPorFamilia[kf]) historialPorFamilia[kf] = {};
-    historialPorFamilia[kf][kn] = (historialPorFamilia[kf][kn]||0) + 1;
+    if(!famHistorialPorFamilia[kf]) famHistorialPorFamilia[kf] = {};
+    famHistorialPorFamilia[kf][kn] = (famHistorialPorFamilia[kf][kn]||0) + 1;
   });
   familiasItems = familias.map(f => ({...f, asignaciones: (asignaciones||[]).filter(a=>a.familia_id===f.id)}));
   if(!ninierasItems.length){ try{ const r = await sb.from('ninieras').select('nombre'); ninierasItems = r.data||ninierasItems; }catch(e){} }
+  // llenar el filtro de zonas con las zonas reales presentes
+  const zonaSel = document.getElementById('fam-zonafiltro');
+  if(zonaSel){
+    const zonas = [...new Set(familiasItems.map(f=>(f.zona||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(z=>`<option value="${z}" ${famZonaFiltro===z?'selected':''}>${z}</option>`).join('');
+  }
+  renderFamiliasList();
+}
+function renderFamiliasList(){
+  const cont = document.getElementById('familiaslist');
+  if(!cont) return;
   if(!familiasItems.length){ cont.innerHTML='<div class="empty">Todavía no hay familias cargadas.</div>'; return; }
+  const q = normaliza(famBusqueda);
+  const filtradas = familiasItems.filter(f=>{
+    const matchNombre = !q || normaliza(f.nombre).includes(q);
+    const matchZona = !famZonaFiltro || (f.zona||'').trim()===famZonaFiltro;
+    return matchNombre && matchZona;
+  });
   const dl = `<datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${n.nombre}">`).join('')}</datalist>`;
-  cont.innerHTML = dl + familiasItems.map(f=>{
+  if(!filtradas.length){ cont.innerHTML = dl + '<div class="empty">Ninguna familia coincide con la búsqueda.</div>'; return; }
+  const countMsg = `<div class="helper" style="margin-bottom:8px;">${filtradas.length} de ${familiasItems.length} familias</div>`;
+  cont.innerHTML = dl + countMsg + filtradas.map(f=>{
+    const margenFam = (Number(f.cobro_hora)||0) - (Number(f.pago_hora)||0);
+    const precioHtml = (f.cobro_hora||f.pago_hora) ? `<div class="precio-fam"><span>Cobro: <b>$${f.cobro_hora||0}/h</b></span><span>Pago: <b>$${f.pago_hora||0}/h</b></span><span class="${margenFam>=0?'margenpos':'margenneg'}">Margen: <b>$${margenFam}/h</b></span></div>` : '<div class="helper" style="color:var(--clay-text);">⚠ Sin precio cargado — editá la familia para ponerlo.</div>';
     const asigRows = (f.asignaciones||[]).map(a=>{
-      const margen = (Number(a.cobro_hora)||0) - (Number(a.pago_hora)||0);
       const dias = (a.dias||[]).join(' ');
       const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : '—';
-      return `<tr><td>${a.ninera_nombre}</td><td>${dias||'—'} · ${horario}</td><td>$${a.cobro_hora||0}/h</td><td>$${a.pago_hora||0}/h</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}/h</td><td><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></td></tr>`;
+      return `<tr><td>${a.ninera_nombre}</td><td>${dias||'—'} · ${horario}</td><td><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></td></tr>`;
     }).join('');
-    const historialFam = historialPorFamilia[normaliza(f.nombre)] || {};
+    const historialFam = famHistorialPorFamilia[normaliza(f.nombre)] || {};
     const historialNombres = Object.keys(historialFam);
     const historialHtml = historialNombres.length ? `
       <div style="margin-top:12px;">
         <div class="eyebrow" style="margin-bottom:6px;">Niñeras que trabajaron con esta familia</div>
         ${historialNombres.map(nn=>{
           const cant = historialFam[nn];
-          const res = resenaPorNinera[normaliza(nn)];
+          const res = famResenaPorNinera[normaliza(nn)];
           const promedio = res ? (res.suma/res.cant).toFixed(1) : null;
-          const colorProm = promedio===null ? 'var(--ink-soft)' : (Number(promedio)>=4 ? 'var(--good)' : Number(promedio)>=3 ? 'var(--warn-soft-text, #7A5A16)' : 'var(--clay-text)');
+          const colorProm = promedio===null ? 'var(--ink-soft)' : (Number(promedio)>=4 ? 'var(--good)' : Number(promedio)>=3 ? '#7A5A16' : 'var(--clay-text)');
           return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
             <div>${nn} <span style="color:var(--ink-soft);font-size:12px;">· ${cant} ${cant===1?'sitting/traslado':'sittings/traslados'}</span></div>
             <div style="font-weight:600;color:${colorProm};">${promedio!==null ? '★ '+promedio+'/5 ('+res.cant+')' : 'Sin reseñas'}</div>
@@ -1663,28 +1627,25 @@ async function cargarFamilias(){
         <button class="smallbtn" onclick="editarFamilia('${f.id}')">Editar</button>
       </div>
       <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
+      ${precioHtml}
       ${f.direccion?`<div class="helper">📍 ${f.direccion}</div>`:''}
       ${f.cuenta_bancaria?`<div class="helper">Cuenta: ${f.cuenta_bancaria}</div>`:''}
       ${f.notas?`<div class="helper">${f.notas}</div>`:''}
       ${historialHtml}
       <div id="fam-editbox-${f.id}"></div>
-      <table class="asigtable"><thead><tr><th>Niñera</th><th>Días y horario</th><th>Cobro a familia</th><th>Pago a niñera</th><th>Margen</th><th></th></tr></thead>
-        <tbody>${asigRows || '<tr><td colspan="6" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table>
+      <table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
+        <tbody>${asigRows || '<tr><td colspan="3" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table>
       <div class="grid3" style="margin-top:14px;">
         <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
-        <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="asig-cobro-${f.id}"></div>
-        <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="asig-pago-${f.id}"></div>
+        <div class="field"><label>Hora inicio</label><input type="time" id="asig-horaini-${f.id}"></div>
+        <div class="field"><label>Hora fin</label><input type="time" id="asig-horafin-${f.id}"></div>
       </div>
       <div class="field"><label>Días</label>
         <div class="dayrow" id="asig-dias-${f.id}">
           ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" onclick="this.classList.toggle('selected')">${d}</button>`).join('')}
         </div>
       </div>
-      <div class="grid2">
-        <div class="field"><label>Hora inicio</label><input type="time" id="asig-horaini-${f.id}"></div>
-        <div class="field"><label>Hora fin</label><input type="time" id="asig-horafin-${f.id}"></div>
-      </div>
-      <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Agregar asignación</button>
+      <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Asignar niñera</button>
       <div class="actions" style="margin-top:14px;"><button class="smallbtn danger" onclick="eliminarFamilia('${f.id}')">Eliminar familia</button></div>
     </div>`;
   }).join('');
@@ -1699,11 +1660,15 @@ function editarFamilia(id){
         <div class="field"><label>Zona</label><input type="text" id="ed-fam-zona-${id}" value="${f.zona||''}"></div>
         <div class="field"><label>Teléfono</label><input type="tel" id="ed-fam-telefono-${id}" value="${f.telefono||''}"></div>
       </div>
-      <div class="grid2">
+      <div class="grid3">
+        <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="ed-fam-cobro-${id}" value="${f.cobro_hora??''}"></div>
+        <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="ed-fam-pago-${id}" value="${f.pago_hora??''}"></div>
         <div class="field"><label>Niños (edades)</label><input type="text" id="ed-fam-ninos-${id}" value="${f.ninos||''}"></div>
-        <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion-${id}" value="${f.direccion||''}"></div>
       </div>
-      <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-fam-cuenta-${id}" value="${f.cuenta_bancaria||''}"></div>
+      <div class="grid2">
+        <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion-${id}" value="${f.direccion||''}"></div>
+        <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-fam-cuenta-${id}" value="${f.cuenta_bancaria||''}"></div>
+      </div>
       <div class="field"><label>Notas</label><textarea id="ed-fam-notas-${id}">${f.notas||''}</textarea></div>
       <div class="actions">
         <button class="btn primary" onclick="guardarEdicionFamilia('${id}')">Guardar cambios</button>
@@ -1716,6 +1681,8 @@ async function guardarEdicionFamilia(id){
     nombre: document.getElementById('ed-fam-nombre-'+id).value,
     zona: document.getElementById('ed-fam-zona-'+id).value,
     telefono: document.getElementById('ed-fam-telefono-'+id).value,
+    cobro_hora: document.getElementById('ed-fam-cobro-'+id).value||null,
+    pago_hora: document.getElementById('ed-fam-pago-'+id).value||null,
     ninos: document.getElementById('ed-fam-ninos-'+id).value,
     direccion: document.getElementById('ed-fam-direccion-'+id).value,
     cuenta_bancaria: document.getElementById('ed-fam-cuenta-'+id).value,
@@ -1730,11 +1697,11 @@ async function addAsignacion(famId){
   const nombre = document.getElementById('asig-nombre-'+famId).value.trim();
   if(!nombre){ toast('Falta el nombre de la niñera.','bad'); return; }
   const dias = Array.from(document.querySelectorAll(`#asig-dias-${famId} .daybtn.selected`)).map(b=>b.textContent);
-  const asig = { familia_id:famId, ninera_nombre:nombre, cobro_hora:document.getElementById('asig-cobro-'+famId).value||null, pago_hora:document.getElementById('asig-pago-'+famId).value||null,
-    dias, hora_inicio:document.getElementById('asig-horaini-'+famId).value||null, hora_fin:document.getElementById('asig-horafin-'+famId).value||null };
+  const asig = { familia_id:famId, ninera_nombre:nombre, dias,
+    hora_inicio:document.getElementById('asig-horaini-'+famId).value||null, hora_fin:document.getElementById('asig-horafin-'+famId).value||null };
   const { error } = await sb.from('asignaciones').insert(asig);
   if(error){ toast('No se pudo agregar: '+error.message,'bad'); return; }
-  toast('Asignación agregada.');
+  toast('Niñera asignada.');
   cargarFamilias();
 }
 async function quitarAsignacion(id){
@@ -1752,7 +1719,6 @@ async function eliminarFamilia(id){
 /* ================= SITTINGS & TRASLADOS ================= */
 let sitFamilias = [];
 let sitNinieras = [];
-let sitAsignaciones = [];
 let sitItems = [];
 let sitTipo = 'sitting';
 let sitEditId = null;
@@ -1788,14 +1754,12 @@ async function renderSittings(body){
   cargarSitLista();
 }
 async function cargarSitBase(){
-  const [{data:fams}, {data:nins}, {data:asigs}] = await Promise.all([
-    sb.from('familias').select('id,nombre,direccion').order('nombre'),
+  const [{data:fams}, {data:nins}] = await Promise.all([
+    sb.from('familias').select('id,nombre,direccion,cobro_hora,pago_hora').order('nombre'),
     sb.from('ninieras').select('id,nombre').eq('activa', true).order('nombre'),
-    sb.from('asignaciones').select('familia_id,ninera_nombre,cobro_hora,pago_hora'),
   ]);
   sitFamilias = fams || [];
   sitNinieras = nins || [];
-  sitAsignaciones = asigs || [];
 }
 
 function sitFormHTML(){
@@ -1884,6 +1848,14 @@ function onSitFamiliaInput(){
   box.innerHTML = (val && !sitFamiliaSel) ? `<button type="button" class="createbtn" onclick="crearFamiliaRapida()">+ Crear familia "${val}"</button>` : '';
   sitOrigenAuto = true;
   if(sitTipo==='traslado') aplicarDireccionSugerida();
+  // Autocompletar cobro/pago desde la tarifa fija de la familia
+  if(sitFamiliaSel && (sitFamiliaSel.cobro_hora!=null || sitFamiliaSel.pago_hora!=null)){
+    const cobroInput = document.getElementById('sit-cobro');
+    const pagoInput = document.getElementById('sit-pago');
+    if(cobroInput && (!cobroInput.value || cobroInput.value==='0') && sitFamiliaSel.cobro_hora!=null) cobroInput.value = sitFamiliaSel.cobro_hora;
+    if(pagoInput && (!pagoInput.value || pagoInput.value==='0') && sitFamiliaSel.pago_hora!=null) pagoInput.value = sitFamiliaSel.pago_hora;
+    calcSitMargen();
+  }
   actualizarTarifaExtra();
 }
 function onSitNineraInput(){
@@ -1943,11 +1915,6 @@ function toggleSitExtra(){
   box.style.display = opening ? 'block' : 'none';
   if(opening) actualizarTarifaExtra();
 }
-function tarifaParaSeleccion(){
-  if(!sitFamiliaSel || !sitNineraSel) return null;
-  const nomb = normaliza(sitNineraSel.nombre);
-  return sitAsignaciones.find(a => a.familia_id===sitFamiliaSel.id && normaliza(a.ninera_nombre||'')===nomb) || null;
-}
 function extraManualHTML(msg){
   return `<div class="helper" style="margin:0 0 8px;">${msg}</div>
     <div class="grid2">
@@ -1959,20 +1926,21 @@ function extraManualHTML(msg){
 function actualizarTarifaExtra(){
   const box = document.getElementById('sit-extra-box');
   if(!box || box.style.display==='none') return;
-  if(!sitFamiliaSel || !sitNineraSel){
-    box.innerHTML = extraManualHTML('Elegí una familia y una niñera ya cargadas para calcular el extra según su tarifa, o cargalo a mano.');
+  if(!sitFamiliaSel){
+    box.innerHTML = extraManualHTML('Elegí una familia ya cargada para calcular el extra según su tarifa, o cargalo a mano.');
     return;
   }
-  const asig = tarifaParaSeleccion();
-  if(asig && (Number(asig.cobro_hora)||Number(asig.pago_hora))){
+  const cobroH = Number(sitFamiliaSel.cobro_hora)||0;
+  const pagoH = Number(sitFamiliaSel.pago_hora)||0;
+  if(cobroH || pagoH){
     box.innerHTML = `
-      <div class="helper" style="margin:0 0 6px;">Tarifa encontrada para ${sitNineraSel.nombre} × ${sitFamiliaSel.nombre}: $${asig.cobro_hora||0}/h cobro · $${asig.pago_hora||0}/h pago</div>
+      <div class="helper" style="margin:0 0 6px;">Tarifa de ${sitFamiliaSel.nombre}: $${cobroH}/h cobro · $${pagoH}/h pago</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${[30,60,90,120].map(min=>`<button type="button" class="durbtn" onclick="aplicarExtraHoras(${min}, ${Number(asig.cobro_hora)||0}, ${Number(asig.pago_hora)||0})">${min<60 ? min+' min' : (min/60)+' h'}</button>`).join('')}
+        ${[30,60,90,120].map(min=>`<button type="button" class="durbtn" onclick="aplicarExtraHoras(${min}, ${cobroH}, ${pagoH})">${min<60 ? min+' min' : (min/60)+' h'}</button>`).join('')}
       </div>
       <div id="sit-extra-result" style="font-size:12.5px;margin-top:8px;color:var(--ink-soft);"></div>`;
   } else {
-    box.innerHTML = extraManualHTML('No encontramos una tarifa por hora cargada para esta niñera y familia (revisá Familias) — cargá el extra a mano.');
+    box.innerHTML = extraManualHTML('Esta familia no tiene tarifa por hora cargada (ponela en Familias) — cargá el extra a mano.');
   }
 }
 function aplicarExtraHoras(min, tarifaCobro, tarifaPago){
