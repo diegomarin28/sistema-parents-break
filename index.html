@@ -1107,21 +1107,28 @@ async function eliminarContrato(id){
 let marketingItems = [];
 function renderMarketing(cont){
   cont.innerHTML = moduloHeader('Marketing') + `
-    <div class="helper">Calendario de fechas especiales para ir armando contenido de Instagram con anticipación.</div>
-    <div class="card">
-      <h2>Agregar fecha especial</h2>
-      <div class="grid3">
-        <div class="field"><label>Fecha</label><input type="date" id="mk-fecha"></div>
-        <div class="field"><label>Título</label><input type="text" id="mk-titulo" placeholder="Ej: Día del Niño"></div>
-        <div class="field"><label>¿Ya publicado?</label><select id="mk-publicado"><option value="false">No</option><option value="true">Sí</option></select></div>
-      </div>
-      <div class="field"><label>Idea de contenido</label><textarea id="mk-sugerencia" placeholder="Qué publicar y cuándo conviene hacerlo"></textarea></div>
-      <div class="field"><label>Notas</label><textarea id="mk-notas"></textarea></div>
-      <button class="btn primary" onclick="addFechaMarketing()">Agregar fecha</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:var(--gutter);">
+      <div class="helper" style="margin:0;">Calendario de fechas especiales para ir armando contenido de Instagram con anticipación.</div>
+      <button class="btn primary" onclick="abrirModalNuevaFechaMarketing()">+ Agregar fecha especial</button>
     </div>
     <div id="mk-list"></div>
   `;
   cargarMarketing();
+}
+function abrirModalNuevaFechaMarketing(){
+  abrirModal(`
+    <h2 style="margin:0 0 18px;">Agregar fecha especial</h2>
+    <div class="grid3">
+      <div class="field"><label>Fecha</label><input type="date" id="mk-fecha"></div>
+      <div class="field"><label>Título</label><input type="text" id="mk-titulo" placeholder="Ej: Día del Niño"></div>
+      <div class="field"><label>¿Ya publicado?</label><select id="mk-publicado"><option value="false">No</option><option value="true">Sí</option></select></div>
+    </div>
+    <div class="field"><label>Idea de contenido</label><textarea id="mk-sugerencia" placeholder="Qué publicar y cuándo conviene hacerlo"></textarea></div>
+    <div class="field"><label>Notas</label><textarea id="mk-notas"></textarea></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="addFechaMarketing()">Agregar fecha</button>
+    </div>`);
 }
 async function addFechaMarketing(){
   const fecha = document.getElementById('mk-fecha').value;
@@ -1131,8 +1138,7 @@ async function addFechaMarketing(){
     publicado: document.getElementById('mk-publicado').value === 'true', notas: document.getElementById('mk-notas').value || null };
   const { error } = await sb.from('fechas_marketing').insert(item);
   if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
-  ['mk-fecha','mk-titulo','mk-sugerencia','mk-notas'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('mk-publicado').value = 'false';
+  cerrarModal();
   toast('Fecha agregada.');
   cargarMarketing();
 }
