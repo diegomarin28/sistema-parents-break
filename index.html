@@ -1355,12 +1355,13 @@ function descargarCSV(headers, rows, filename){
 
 /* ---- Niñeras ---- */
 let ninierasItems = [];
+let sitHistResenas = {};
 function renderNinieras(body){
   body.innerHTML = `
-    <div class="card"><h2>Buscar</h2><div class="grid3">
-      <div class="field"><label>Nombre</label><input type="text" id="filt-nombre" oninput="filtrarNinieras()"></div>
-      <div class="field"><label>Zona</label><input type="text" id="filt-zona" oninput="filtrarNinieras()"></div>
-      <div class="field"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
+    <div class="card" style="padding:14px 18px;"><div class="grid3">
+      <div class="field" style="margin:0;"><label>Buscar (nombre, universidad, idioma...)</label><input type="text" id="filt-nombre" placeholder="Escribí para filtrar..." oninput="filtrarNinieras()"></div>
+      <div class="field" style="margin:0;"><label>Zona</label><select id="filt-zona" onchange="filtrarNinieras()"><option value="">Todas las zonas</option></select></div>
+      <div class="field" style="margin:0;"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
     </div></div>
     <div class="cardgrid" id="ninierasgrid"></div>
     <div id="ninieradetalle"></div>
@@ -1368,22 +1369,36 @@ function renderNinieras(body){
   cargarNinieras();
 }
 async function cargarNinieras(){
-  const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true);
+  const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true).order('nombre');
   if(error){ document.getElementById('ninierasgrid').innerHTML = errBox(error); return; }
   ninierasItems = data;
+  // llenar desplegable de zonas con las zonas reales
+  const zonaSel = document.getElementById('filt-zona');
+  if(zonaSel){
+    const zonas = [...new Set(ninierasItems.map(n=>(n.zona||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(z=>`<option value="${z}">${z}</option>`).join('');
+  }
   filtrarNinieras();
 }
 function filtrarNinieras(){
   const grid = document.getElementById('ninierasgrid');
   if(!grid) return;
-  const fn = (document.getElementById('filt-nombre')?.value||'').toLowerCase();
-  const fz = (document.getElementById('filt-zona')?.value||'').toLowerCase();
+  const fn = normaliza(document.getElementById('filt-nombre')?.value||'');
+  const fz = document.getElementById('filt-zona')?.value||'';
   const ft = document.getElementById('filt-tipo')?.value||'';
-  const filtradas = ninierasItems.filter(n => (n.nombre||'').toLowerCase().includes(fn) && (n.zona||'').toLowerCase().includes(fz) && (!ft || (n.tipo||'Niñera')===ft));
-  if(!filtradas.length){ grid.innerHTML='<div class="empty">No hay niñeras que coincidan. Contratá candidatas desde "Candidatas guardadas" para que aparezcan acá.</div>'; return; }
-  grid.innerHTML = filtradas.map(n=>`
+  const filtradas = ninierasItems.filter(n => {
+    const cd = n.candidatas || {};
+    const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia].filter(Boolean).join(' '));
+    const matchTexto = !fn || blob.includes(fn);
+    const matchZona = !fz || (n.zona||'').trim()===fz;
+    const matchTipo = !ft || (n.tipo||'Niñera')===ft;
+    return matchTexto && matchZona && matchTipo;
+  });
+  const countMsg = `<div class="helper" style="grid-column:1/-1;margin:0 0 4px;">${filtradas.length} de ${ninierasItems.length} niñeras</div>`;
+  if(!filtradas.length){ grid.innerHTML = countMsg + '<div class="empty" style="grid-column:1/-1;">Ninguna niñera coincide con la búsqueda.</div>'; return; }
+  grid.innerHTML = countMsg + filtradas.map(n=>`
     <div class="pcard">
-      <div class="ph">${n.foto?`<img src="${n.foto}">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="ph">${n.foto?`<img src="${n.foto}" onerror="this.parentElement.innerHTML='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="name">${n.nombre} <span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span></div>
       <div class="meta">${n.zona||'zona s/d'}${n.candidatas?.edad?' · '+n.candidatas.edad:''}<br>${n.candidatas?.universidad||''}${n.candidatas?.idiomas?' · '+n.candidatas.idiomas:''}</div>
       <div class="rowbtns">
@@ -1394,11 +1409,72 @@ function filtrarNinieras(){
       </div>
     </div>`).join('');
 }
-function verNinera(id){
+async function verNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
   const cd = n.candidatas || {};
   const rows = FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
-  document.getElementById('ninieradetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cerrar</button><h2>${n.nombre}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos.</div>'}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div></div>`;
+  const fotoHtml = n.foto ? `<img src="${n.foto}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;" onerror="this.style.display='none'">` : '';
+  document.getElementById('ninieradetalle').innerHTML = `
+    <div class="card">
+      <button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cerrar</button>
+      ${fotoHtml}
+      <h2>${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
+      <div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos.</div>'}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+      <div style="margin-top:18px;">
+        <h2 style="font-size:15px;">Sittings y traslados de ${n.nombre.split(' ')[0]}</h2>
+        <div class="grid2">
+          <div class="field"><label>Familia</label><select id="vn-familia" onchange="renderNineraHistorial('${n.id}')"><option value="">Todas</option></select></div>
+          <div class="field"><label>Período</label><select id="vn-periodo" onchange="renderNineraHistorial('${n.id}')">
+            <option value="0">Todo</option><option value="7">Últimos 7 días</option><option value="15">Últimos 15 días</option><option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option>
+          </select></div>
+        </div>
+        <div id="vn-historial"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
+      </div>
+    </div>`;
+  // cargar los sittings de esta niñera
+  const { data } = await sb.from('sittings_traslados').select('*').eq('ninera_nombre', n.nombre).order('fecha', {ascending:false});
+  nineraHistItems = data || [];
+  // reseñas (si no están cargadas ya globalmente)
+  if(!Object.keys(sitHistResenas).length){
+    const { data: resenas } = await sb.from('resenas_ninieras').select('ninera_nombre,puntuacion');
+    (resenas||[]).forEach(r=>{
+      if(r.puntuacion==null) return;
+      const k = normaliza(r.ninera_nombre||'');
+      if(!k) return;
+      if(!sitHistResenas[k]) sitHistResenas[k] = {suma:0, cant:0};
+      sitHistResenas[k].suma += Number(r.puntuacion);
+      sitHistResenas[k].cant += 1;
+    });
+  }
+  const sel = document.getElementById('vn-familia');
+  if(sel){
+    const fams = [...new Set(nineraHistItems.map(s=>s.familia_nombre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    sel.innerHTML = `<option value="">Todas</option>` + fams.map(f=>`<option value="${f}">${f}</option>`).join('');
+  }
+  renderNineraHistorial(n.id);
+}
+let nineraHistItems = [];
+function renderNineraHistorial(id){
+  const cont = document.getElementById('vn-historial');
+  if(!cont) return;
+  const famF = document.getElementById('vn-familia')?.value||'';
+  const periodo = parseInt(document.getElementById('vn-periodo')?.value||'0');
+  let items = nineraHistItems.slice();
+  if(famF) items = items.filter(s=>s.familia_nombre===famF);
+  if(periodo>0){
+    const limite = new Date(); limite.setDate(limite.getDate()-periodo);
+    const limiteISO = limite.toISOString().slice(0,10);
+    items = items.filter(s=>s.fecha && s.fecha >= limiteISO);
+  }
+  if(!items.length){ cont.innerHTML = '<div class="empty">No hay sittings registrados con estos filtros.</div>'; return; }
+  const totalPago = items.reduce((s,r)=>s+(Number(r.pago_ninera)||0),0);
+  cont.innerHTML = `
+    <div class="helper" style="margin:8px 0;">${items.length} registro(s) · total pagado a la niñera: $${totalPago.toLocaleString('es-UY')}</div>
+    <table class="asigtable"><thead><tr><th>Fecha</th><th>Familia</th><th>Cobro</th><th>Pago</th></tr></thead>
+    <tbody>${items.map(r=>{
+      const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
+      return `<tr><td>${fechaFmt}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td></tr>`;
+    }).join('')}</tbody></table>`;
 }
 function editarNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
@@ -1748,10 +1824,79 @@ async function renderSittings(body){
     </div>
     <div class="summary3" id="sit-summary"></div>
     <div class="card" id="sit-list-wrap"></div>
+    <div class="card">
+      <h2>Historial con filtros</h2>
+      <div class="helper">Todos los sittings y traslados registrados, con búsqueda por familia y por período.</div>
+      <div class="grid3">
+        <div class="field"><label>Familia</label><select id="sithist-familia" onchange="renderSitHistorial()"><option value="">Todas</option></select></div>
+        <div class="field"><label>Período</label><select id="sithist-periodo" onchange="renderSitHistorial()">
+          <option value="0">Todo</option><option value="7">Últimos 7 días</option><option value="15">Últimos 15 días</option><option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option>
+        </select></div>
+        <div class="field"><label>Tipo</label><select id="sithist-tipo" onchange="renderSitHistorial()"><option value="">Todos</option><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
+      </div>
+      <div id="sithist-lista"></div>
+    </div>
   `;
   await cargarSitBase();
   renderSitForm();
   cargarSitLista();
+  cargarSitHistorial();
+}
+let sitHistItems = [];
+async function cargarSitHistorial(){
+  const [{data:todos}, {data:resenas}] = await Promise.all([
+    sb.from('sittings_traslados').select('*').order('fecha', {ascending:false}),
+    sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
+  ]);
+  sitHistItems = todos || [];
+  sitHistResenas = {};
+  (resenas||[]).forEach(r=>{
+    if(r.puntuacion==null) return;
+    const k = normaliza(r.ninera_nombre||'');
+    if(!k) return;
+    if(!sitHistResenas[k]) sitHistResenas[k] = {suma:0, cant:0};
+    sitHistResenas[k].suma += Number(r.puntuacion);
+    sitHistResenas[k].cant += 1;
+  });
+  // llenar desplegable de familias solo con las que aparecen en el historial
+  const sel = document.getElementById('sithist-familia');
+  if(sel){
+    const fams = [...new Set(sitHistItems.map(s=>s.familia_nombre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    sel.innerHTML = `<option value="">Todas</option>` + fams.map(f=>`<option value="${f}">${f}</option>`).join('');
+  }
+  renderSitHistorial();
+}
+function resenaBadge(nineraNombre){
+  const res = sitHistResenas[normaliza(nineraNombre||'')];
+  if(!res) return '<span style="color:var(--ink-soft);">—</span>';
+  const prom = (res.suma/res.cant).toFixed(1);
+  const color = Number(prom)>=4 ? 'var(--good)' : Number(prom)>=3 ? '#7A5A16' : 'var(--clay-text)';
+  return `<span style="font-weight:600;color:${color};">★ ${prom} (${res.cant})</span>`;
+}
+function renderSitHistorial(){
+  const cont = document.getElementById('sithist-lista');
+  if(!cont) return;
+  const famF = document.getElementById('sithist-familia')?.value||'';
+  const periodo = parseInt(document.getElementById('sithist-periodo')?.value||'0');
+  const tipoF = document.getElementById('sithist-tipo')?.value||'';
+  let items = sitHistItems.slice();
+  if(famF) items = items.filter(s=>s.familia_nombre===famF);
+  if(tipoF) items = items.filter(s=>s.tipo===tipoF);
+  if(periodo>0){
+    const limite = new Date(); limite.setDate(limite.getDate()-periodo);
+    const limiteISO = limite.toISOString().slice(0,10);
+    items = items.filter(s=>s.fecha && s.fecha >= limiteISO);
+  }
+  if(!items.length){ cont.innerHTML = '<div class="empty">No hay registros que coincidan con estos filtros.</div>'; return; }
+  const totalCobro = items.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
+  const totalPago = items.reduce((s,r)=>s+(Number(r.pago_ninera)||0),0);
+  cont.innerHTML = `
+    <div class="helper" style="margin:8px 0;">${items.length} registro(s) · cobrado $${totalCobro.toLocaleString('es-UY')} · pagado $${totalPago.toLocaleString('es-UY')}</div>
+    <table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
+    <tbody>${items.map(r=>{
+      const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
+      return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
+    }).join('')}</tbody></table>`;
 }
 async function cargarSitBase(){
   const [{data:fams}, {data:nins}] = await Promise.all([
