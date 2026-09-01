@@ -88,7 +88,8 @@ textarea{resize:vertical;min-height:54px;}
 .flag-row span{font-size:13.5px;line-height:1.4;}
 .flag-row.critical span::after{content:" · crítico";color:var(--bad);font-size:11px;font-weight:600;}
 .refrow{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;margin-bottom:8px;align-items:center;}
-.refrow .chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);white-space:nowrap;}
+.chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;}
+.refrow .chk{gap:6px;}
 .smallbtn{background:none;border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:12.5px;cursor:pointer;color:var(--ink-soft);font-family:'Inter',sans-serif;}
 .smallbtn:hover{border-color:var(--accent);color:var(--accent);}
 .smallbtn.danger:hover{border-color:var(--bad);color:var(--bad);}
@@ -400,7 +401,7 @@ function renderLogin(){
               <input type="password" id="login-pass">
             </div>
           </div>
-          <label class="chk" style="display:flex;align-items:center;gap:7px;margin-bottom:16px;"><input type="checkbox" id="login-recordar" checked> Recordarme en este dispositivo</label>
+          <label class="chk" style="margin-bottom:16px;"><input type="checkbox" id="login-recordar" checked> Recordarme en este dispositivo</label>
           <button class="btn primary" id="loginbtn" style="width:100%;" onclick="login()"><span id="loginbtn-label">Entrar</span></button>
           <div id="loginwarn"></div>
         </div>
@@ -681,7 +682,7 @@ async function cargarFinanzas(){
     return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
       <div>${fechaFmt} · ${mv.texto}</div>
       <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${mv.monto>0?'var(--good)':'var(--bad)'};">${mv.monto>0?'+':''}$${mv.monto.toLocaleString('es-UY')}</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${mv.monto>0?'var(--good)':'var(--clay-text)'};">${mv.monto>0?'+':''}$${mv.monto.toLocaleString('es-UY')}</span>
         ${mv.gastoId ? `<button class="smallbtn danger" onclick="eliminarGastoGeneral('${mv.gastoId}')">Eliminar</button>` : ''}
       </div>
     </div>`;
@@ -845,7 +846,7 @@ function generarContrato(){
     .replace(/{{FRECUENCIA_PAGO}}/g, frecuencia)
     .replace(/{{FECHA}}/g, fechaFmt);
   document.getElementById('leg-resultado').innerHTML = `
-    <h2 style="margin-top:18px;">${tpl.titulo} — ${nombre}</h2>
+    <h2 class="card-section-title">${tpl.titulo} — ${nombre}</h2>
     <textarea id="leg-texto-generado" readonly style="min-height:320px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">${texto}</textarea>
     <div class="actions">
       <button class="btn primary" onclick="copiarContrato()">Copiar texto</button>
@@ -961,7 +962,7 @@ async function cargarMarketing(){
           <div class="eyebrow" style="margin-bottom:2px;">${fechaFmt}</div>
           <h2 style="margin:0;">${f.titulo}</h2>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft);white-space:nowrap;">
+        <label class="chk" style="font-size:12.5px;">
           <input type="checkbox" onchange="togglePublicadoMarketing('${f.id}', this.checked)" ${f.publicado?'checked':''}> Publicado
         </label>
       </div>
