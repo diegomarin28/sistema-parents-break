@@ -26,7 +26,7 @@
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
 h1,h2,h3{font-family:'Baloo 2',sans-serif;margin:0;}
 .wrap{max-width:980px;margin:0 auto;padding:24px 20px 100px;}
-.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--clay);margin-bottom:6px;}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--clay-text);margin-bottom:6px;}
 h1{font-size:27px;font-weight:600;}
 .sub{color:var(--ink-soft);font-size:14px;margin-top:5px;max-width:640px;line-height:1.5;}
 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}
@@ -34,25 +34,6 @@ h1{font-size:27px;font-weight:600;}
 .who button{background:none;border:none;color:var(--accent);font-weight:600;cursor:pointer;font-size:12.5px;padding:0;margin-top:3px;}
 .homeintro{margin:12px 0 28px;}
 .homeintro h1{font-size:26px;margin-top:4px;}
-.hometiles{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:130px;gap:16px;}
-.tile{
-  background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px;
-  text-align:left;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform var(--ease), box-shadow var(--ease), border-color var(--ease);
-  display:flex;flex-direction:column;gap:10px;font-family:'Inter',sans-serif;position:relative;overflow:hidden;
-  opacity:0;animation:tileIn 480ms cubic-bezier(.2,.8,.2,1) forwards;
-}
-.tile.hero{grid-column:span 2;grid-row:span 2;padding:30px;justify-content:flex-end;}
-.tile.hero .tile-icon{width:56px;height:56px;border-radius:16px;}
-.tile.hero .tile-icon svg{width:28px;height:28px;}
-.tile.hero .tile-title{font-size:22px;}
-.tile.hero .tile-desc{font-size:14px;max-width:320px;}
-.tile.hero::after{content:'';position:absolute;width:220px;height:220px;border-radius:50%;background:var(--tile-accent-soft);top:-90px;right:-90px;z-index:0;}
-@keyframes tileIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
-.tile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--tile-accent);}
-.tile-icon{width:46px;height:46px;border-radius:13px;background:var(--tile-accent-soft);color:var(--tile-accent);display:flex;align-items:center;justify-content:center;position:relative;z-index:1;}
-.tile-icon svg{width:23px;height:23px;}
-.tile-title{font-family:'Baloo 2',sans-serif;font-size:17px;font-weight:700;color:var(--ink);position:relative;z-index:1;}
-.tile-desc{font-size:13px;color:var(--ink-soft);line-height:1.5;position:relative;z-index:1;}
 .backbtn{background:var(--paper);border:1px solid var(--line);border-radius:100px;padding:8px 16px;font-weight:600;font-size:13.5px;color:var(--ink-soft);cursor:pointer;transition:all var(--ease);font-family:'Inter',sans-serif;}
 .backbtn:hover{border-color:var(--accent);color:var(--accent);}
 .modtitle{font-size:24px;margin:14px 0 20px;}
@@ -73,6 +54,8 @@ input[type=text],input[type=tel],input[type=date],input[type=number],input[type=
   transition:border-color var(--ease), box-shadow var(--ease);
 }
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+button:focus-visible{border-radius:8px;}
 textarea{resize:vertical;min-height:54px;}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
@@ -80,7 +63,7 @@ textarea{resize:vertical;min-height:54px;}
 .q{background:var(--accent-soft);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:13.5px;color:var(--ink);line-height:1.45;}
 .scorebar{display:flex;gap:6px;margin-top:10px;}
 .scorebtn{flex:1;text-align:center;padding:9px 0;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);}
-.scorebtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
+.scorebtn.selected{background:#666EAE;border-color:#666EAE;color:#fff;}
 .scorelabels{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-soft);margin-top:4px;}
 .flag-row{display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-bottom:1px dashed var(--line);}
 .flag-row:last-child{border-bottom:none;}
@@ -107,8 +90,8 @@ textarea{resize:vertical;min-height:54px;}
 .resultnote{font-size:13px;color:var(--ink-soft);margin-top:6px;line-height:1.5;}
 .actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;}
 .btn{font-weight:600;font-size:14px;border-radius:10px;padding:11px 20px;border:none;cursor:pointer;font-family:'Inter',sans-serif;transition:transform var(--ease), box-shadow var(--ease), background var(--ease);}
-.btn.primary{background:var(--accent);color:#fff;box-shadow:var(--shadow-sm);}
-.btn.primary:hover:not(:disabled){background:#666EAE;box-shadow:var(--shadow-md);}
+.btn.primary{background:#666EAE;color:#fff;box-shadow:var(--shadow-sm);}
+.btn.primary:hover:not(:disabled){background:#5D64A0;box-shadow:var(--shadow-md);}
 .btn.primary:active:not(:disabled){transform:scale(.98);}
 .btn.primary:disabled{background:#C7C6DA;cursor:not-allowed;}
 .btn.ghost{background:none;border:1px solid var(--line);color:var(--ink-soft);}
@@ -134,7 +117,7 @@ textarea{resize:vertical;min-height:54px;}
 .pcard .meta{font-size:12.5px;color:var(--ink-soft);margin:3px 0 10px;line-height:1.5;}
 .pcard .rowbtns{display:flex;gap:6px;flex-wrap:wrap;}
 .empty{color:var(--ink-soft);font-size:14px;text-align:center;padding:40px 0;}
-.candlist .item{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform var(--ease), box-shadow var(--ease), border-color var(--ease);}
+.candlist .item{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform var(--ease), box-shadow var(--ease), border-color var(--ease);width:100%;text-align:left;font-family:'Inter',sans-serif;}
 .candlist .item:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow-md);}
 .candlist .item .name{font-family:'Baloo 2',sans-serif;font-size:16px;font-weight:600;}
 .candlist .item .meta{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
@@ -145,9 +128,6 @@ textarea{resize:vertical;min-height:54px;}
 details.crit{margin-top:8px;font-size:13px;color:var(--ink-soft);}
 details.crit summary{cursor:pointer;font-weight:600;color:var(--accent);}
 details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
-.importtable{width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0;}
-.importtable th,.importtable td{border:1px solid var(--line);padding:5px 7px;text-align:left;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;}
-.maprow{display:grid;grid-template-columns:180px 1fr;gap:10px;align-items:center;margin-bottom:8px;}
 .placeholder{text-align:center;padding:50px 20px;color:var(--ink-soft);}
 .placeholder h2{font-size:19px;margin-bottom:8px;color:var(--ink);}
 .placeholder p{max-width:440px;margin:0 auto;line-height:1.6;font-size:14px;}
@@ -194,7 +174,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .mainarea{flex:1;min-width:0;}
 .navitem{display:flex;align-items:center;gap:10px;background:none;border:none;border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;transition:background var(--ease);font-family:'Inter',sans-serif;width:100%;}
 .navitem:hover{background:var(--bg);}
-.navitem.active{background:var(--accent);}
+.navitem.active{background:#666EAE;}
 .navitem.active .navitem-label{color:#fff;}
 .navitem.active .navitem-ic{background:rgba(255,255,255,.25);color:#fff;}
 .navitem-ic{width:28px;height:28px;border-radius:8px;background:var(--bg);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -217,11 +197,6 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .moneylink{font-size:11px;margin-top:4px;}
 .moneycard.accent .moneylink{color:var(--accent);}
 .moneycard.clay .moneylink{color:var(--clay-text);}
-.pendrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
-.pendcard{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:13px 14px;text-align:left;cursor:pointer;transition:transform var(--ease), border-color var(--ease);font-family:'Inter',sans-serif;}
-.pendcard:hover{transform:translateY(-2px);border-color:#C8C6DC;}
-.pendnum{font-family:'Baloo 2',sans-serif;font-size:19px;font-weight:700;color:var(--ink);}
-.pendlabel{font-size:11px;color:var(--ink-soft);margin-top:1px;}
 .pendbanner{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;text-align:left;width:100%;font-family:'Inter',sans-serif;transition:transform var(--ease), border-color var(--ease);box-shadow:var(--shadow-sm);}
 .pendbanner:hover{transform:translateY(-2px);border-color:#C8C6DC;}
 .pendbanner-left{display:flex;align-items:center;gap:12px;}
@@ -231,7 +206,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .pillfilters{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;}
 .pillbtn{background:#fff;border:1px solid var(--line);border-radius:100px;padding:6px 13px;font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:'Inter',sans-serif;transition:all var(--ease);}
 .pillbtn:hover{border-color:var(--accent);color:var(--accent);}
-.pillbtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
+.pillbtn.selected{background:#666EAE;border-color:#666EAE;color:#fff;}
 .agendabox{max-height:190px;overflow-y:auto;}
 .agendabox::-webkit-scrollbar{width:6px;}
 .agendabox::-webkit-scrollbar-thumb{background:var(--line);border-radius:10px;}
@@ -241,10 +216,10 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .agendadot{width:7px;height:7px;border-radius:50%;background:var(--clay);flex-shrink:0;}
 .dayrow{display:flex;gap:6px;margin-bottom:10px;}
 .daybtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all var(--ease);}
-.daybtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
+.daybtn.selected{background:#666EAE;border-color:#666EAE;color:#fff;}
 .tiporow{display:flex;gap:8px;margin-bottom:14px;}
 .tipobtn{flex:1;text-align:center;padding:10px;border-radius:10px;border:1px solid var(--line);background:#fff;font-weight:600;font-size:13.5px;color:var(--ink-soft);cursor:pointer;font-family:'Inter',sans-serif;transition:all var(--ease);}
-.tipobtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
+.tipobtn.selected{background:#666EAE;border-color:#666EAE;color:#fff;}
 .createhint{margin-top:5px;}
 .createbtn{background:none;border:1px solid var(--clay);color:var(--clay-text);font-size:11.5px;font-weight:600;border-radius:7px;padding:5px 10px;cursor:pointer;font-family:'Inter',sans-serif;}
 .createbtn:hover{background:var(--clay-soft);}
@@ -258,7 +233,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .mesbar{display:flex;justify-content:space-between;align-items:flex-end;margin:16px 0 10px;gap:10px;flex-wrap:wrap;}
 .precio-fam{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;padding:8px 12px;background:var(--accent-soft);border-radius:9px;font-size:13px;color:var(--ink-soft);}
 @media (max-width:640px){.summary3{grid-template-columns:1fr;}}
-@media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow,.pendrow{grid-template-columns:1fr 1fr;}.statrow{grid-template-columns:1fr 1fr;}.pendbanner{flex-wrap:wrap;}}
+@media (max-width:760px){.applayout{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;}.navitem{width:auto;}.navitem-label{display:none;}.moneyrow{grid-template-columns:1fr 1fr;}.statrow{grid-template-columns:1fr 1fr;}.pendbanner{flex-wrap:wrap;}}
 @media (max-width:480px){.statrow{grid-template-columns:1fr;}}
 @media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}.hometiles{grid-template-columns:1fr;grid-auto-rows:auto;}.tile.hero{grid-column:span 1;grid-row:span 1;}}
 @media print{.subnav,.actions,.backbtn,button{display:none !important;}}
@@ -1055,7 +1030,7 @@ async function loadIntake(){
   if(!intakeItems.length){ grid.innerHTML = '<div class="empty">No hay candidatas esperando entrevista.</div>'; return; }
   grid.innerHTML = intakeItems.map((c,i)=>`
     <div class="pcard">
-      <div class="ph">${c.foto_url?`<img src="${c.foto_url}" onerror="this.parentElement.innerHTML='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="ph">${c.foto_url?`<img src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.innerHTML='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
       ${c.autoriza_foto===false?'<div style="background:var(--clay-soft);color:var(--clay-text);font-weight:600;font-size:10.5px;text-align:center;padding:4px 6px;border-radius:6px;margin-bottom:6px;">⚠️ No autoriza foto/datos</div>':''}
       <div class="name">${c.nombre} ${c.apellido||''} <span class="badge brand" style="font-size:10px;padding:2px 8px;">${c.tipo||'Niñera'}</span></div>
       <div class="meta">${c.zona||'zona s/d'} · ${c.edad?c.edad+(String(c.edad).length<=2?' años':''):'edad s/d'}<br>${c.origen||''} ${c.telefono?'· '+c.telefono:''}</div>
@@ -1069,7 +1044,7 @@ async function loadIntake(){
 function verFichaIntake(i){
   const c = intakeItems[i];
   const rows = FICHA_CAMPOS.filter(f=>c[f.key]).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
-  const fotoHtml = c.foto_url ? `<img src="${c.foto_url}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;" onerror="this.outerHTML='<div class=&quot;helper&quot; style=&quot;margin-bottom:12px;&quot;>No se pudo mostrar la foto — <a href=&quot;${c.foto_url}&quot; target=&quot;_blank&quot;>abrirla en Drive</a>.</div>'">` : '';
+  const fotoHtml = c.foto_url ? `<img src="${c.foto_url}" alt="Foto de ${c.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;" onerror="this.outerHTML='<div class=&quot;helper&quot; style=&quot;margin-bottom:12px;&quot;>No se pudo mostrar la foto — <a href=&quot;${c.foto_url}&quot; target=&quot;_blank&quot;>abrirla en Drive</a>.</div>'">` : '';
   const avisoHtml = c.autoriza_foto === false ? `<div style="background:var(--clay-soft);color:var(--clay-text);font-weight:600;font-size:13px;padding:10px 14px;border-radius:10px;margin-bottom:14px;border:1px solid var(--clay);">⚠️ No autorizó el uso de su foto ni sus datos para el proceso de selección — no usar su imagen ni compartir su información fuera de la evaluación.</div>` : '';
   document.getElementById('intakedetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('intakedetalle').innerHTML=''">← Cerrar</button>${avisoHtml}${fotoHtml}<h2>${c.nombre} ${c.apellido||''}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos cargados.</div>'}</div></div>`;
 }
@@ -1303,10 +1278,10 @@ async function cargarGuardadas(){
   if(!candidatasItems.length){ cont.innerHTML='<div class="empty">Todavía no hay candidatas guardadas.</div>'; return; }
   cont.innerHTML = candidatasItems.map((c,i)=>{
     const cd = c.candidatas;
-    return `<div class="item" onclick="verDetalle(${i})">
+    return `<button type="button" class="item" onclick="verDetalle(${i})">
       <div><div class="name">${cd.nombre} ${cd.estado==='contratada'?'✓':''}</div><div class="meta">${c.fecha||'sin fecha'} · ${cd.zona||'zona s/d'} · ${c.rol||'rol s/d'}</div></div>
       <div class="sc"><div class="n">${Number(c.total).toFixed(1)} / 5</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${cd.estado==='contratada'?'Contratada':c.recomendacion}</span></div>
-    </div>`;
+    </button>`;
   }).join('');
 }
 function verDetalle(i){
@@ -1425,7 +1400,7 @@ function filtrarNinieras(){
   grid.innerHTML = countMsg + filtradas.map(n=>`
     <div class="pcard">
       <button class="pcard-delete" onclick="eliminarNinera('${n.id}')" title="Eliminar niñera" aria-label="Eliminar niñera">${ICONS.trash}</button>
-      <div class="ph">${n.foto?`<img src="${n.foto}" onerror="this.parentElement.innerHTML='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="ph">${n.foto?`<img src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.innerHTML='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="name">${n.nombre} <span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span></div>
       <div class="meta">${n.zona||'zona s/d'}${n.candidatas?.edad?' · '+n.candidatas.edad:''}<br>${n.candidatas?.universidad||''}${n.candidatas?.idiomas?' · '+n.candidatas.idiomas:''}</div>
       <div class="rowbtns">
@@ -1439,7 +1414,7 @@ async function verNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
   const cd = n.candidatas || {};
   const rows = FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
-  const fotoHtml = n.foto ? `<img src="${n.foto}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;" onerror="this.style.display='none'">` : '';
+  const fotoHtml = n.foto ? `<img src="${n.foto}" alt="Foto de ${n.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;" onerror="this.style.display='none'">` : '';
   document.getElementById('ninieradetalle').innerHTML = `
     <div class="card">
       <button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cerrar</button>
