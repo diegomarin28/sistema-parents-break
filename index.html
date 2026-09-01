@@ -62,6 +62,11 @@ textarea{resize:vertical;min-height:54px;}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--gutter);}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--gutter);}
 .field{margin-bottom:12px;}
+.mesnav{display:inline-flex;align-items:center;gap:2px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:4px;box-shadow:var(--shadow-sm);}
+.mesnav button{width:30px;height:30px;border-radius:8px;border:none;background:none;color:var(--ink-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background var(--ease), color var(--ease);}
+.mesnav button:hover{background:var(--bg);color:var(--accent);}
+.mesnav button svg{width:15px;height:15px;}
+.mesnav-label{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:14.5px;color:var(--ink);padding:0 10px;min-width:150px;text-align:center;}
 .q{background:var(--accent-soft);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:13.5px;color:var(--ink);line-height:1.45;}
 .scorebar{display:flex;gap:6px;margin-top:10px;}
 .scorebtn{flex:1;text-align:center;padding:9px 0;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);}
@@ -102,7 +107,9 @@ textarea{resize:vertical;min-height:54px;}
 .btn.danger:hover{background:#9C4448;}
 .confirmoverlay{position:fixed;inset:0;background:rgba(49,47,69,.35);display:flex;align-items:center;justify-content:center;z-index:300;opacity:0;transition:opacity 180ms ease;padding:20px;}
 .confirmoverlay.show{opacity:1;}
-.confirmbox{background:var(--paper);border-radius:16px;padding:22px 24px;max-width:380px;width:100%;box-shadow:var(--shadow-md);transform:translateY(8px) scale(.98);transition:transform 180ms cubic-bezier(.2,.8,.2,1);}
+.confirmbox{background:var(--paper);border-radius:16px;padding:22px 24px;max-width:380px;width:100%;box-shadow:var(--shadow-md);transform:translateY(8px) scale(.98);transition:transform 180ms cubic-bezier(.2,.8,.2,1);position:relative;}
+.modal-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:50%;border:none;background:var(--bg);color:var(--ink-soft);font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background var(--ease), color var(--ease);}
+.modal-close:hover{background:var(--clay-soft);color:var(--clay-text);}
 .confirmoverlay.show .confirmbox{transform:translateY(0) scale(1);}
 .confirmmsg{font-size:14.5px;color:var(--ink);line-height:1.5;margin-bottom:18px;}
 .confirmbtns{display:flex;justify-content:flex-end;gap:10px;}
@@ -174,18 +181,18 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .sidebar{width:196px;flex-shrink:0;height:100%;background:#5B5FA0;padding:22px 14px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
 .sidebar-logo{height:30px;filter:brightness(0) invert(1);margin:0 6px 30px;align-self:flex-start;}
 .sidebar-nav{display:flex;flex-direction:column;gap:2px;flex:1;}
-.sidebar-foot{border-top:1px solid rgba(255,255,255,.18);padding:14px 6px 2px;font-size:11.5px;color:rgba(255,255,255,.6);line-height:1.5;}
-.sidebar-foot button{background:none;border:none;color:#fff;font-weight:600;cursor:pointer;font-size:11.5px;padding:0;margin-top:3px;font-family:'Inter',sans-serif;}
+.sidebar-foot{border-top:1px solid rgba(255,255,255,.18);padding:14px 6px 2px;font-size:12.5px;color:rgba(255,255,255,.68);line-height:1.6;}
+.sidebar-foot button{background:none;border:none;color:#fff;font-weight:600;cursor:pointer;font-size:12.5px;padding:0;margin-top:3px;font-family:'Inter',sans-serif;}
 .mainarea{flex:1;min-width:0;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 #modcontent{max-width:960px;margin:0 auto;padding:26px 32px 100px;}
 .navitem{display:flex;align-items:center;gap:10px;background:none;border:none;border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;transition:background var(--ease);font-family:'Inter',sans-serif;width:100%;}
 .navitem:hover{background:rgba(255,255,255,.1);}
 .navitem.active{background:rgba(255,255,255,.2);}
 .navitem.active .navitem-label{color:#fff;}
-.navitem.active .navitem-ic{background:rgba(255,255,255,.3);color:#fff;}
-.navitem-ic{width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.navitem-ic svg{width:13px;height:13px;}
-.navitem-label{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:12.5px;color:rgba(255,255,255,.85);}
+.navitem.active .navitem-ic{background:rgba(255,255,255,.32);color:#fff;}
+.navitem-ic{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.14);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.navitem-ic svg{width:14px;height:14px;stroke-width:2.1;}
+.navitem-label{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13.5px;color:rgba(255,255,255,.92);}
 .statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gutter);margin-bottom:var(--gutter);}
 .statcard{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);}
 .statnum{font-family:'Baloo 2',sans-serif;font-size:26px;font-weight:700;color:var(--ink);}
@@ -219,12 +226,21 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .agendarow{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed var(--line);font-size:13.5px;}
 .agendarow:last-child{border-bottom:none;}
 .agendatime{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);min-width:82px;line-height:1.3;flex-shrink:0;}
-.agendaicon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.agendaicon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;z-index:1;}
 .agendaicon svg{width:13px;height:13px;}
 .agendaicon.sitting{background:var(--accent-soft);color:var(--accent);}
 .agendaicon.traslado{background:var(--clay-soft);color:var(--clay-text);}
 .agendabody{flex:1;min-width:0;}
 .agendatype{font-size:11px;color:var(--ink-soft);margin-top:1px;}
+.timeline{position:relative;}
+.timeline::before{content:'';position:absolute;top:14px;bottom:14px;left:108px;width:2px;background:var(--line);}
+.timeline .agendarow{border-bottom:none;padding:8px 0;}
+.timeline .agendarow.pasado{opacity:.5;}
+.timeline .agendarow.pasado .agendaicon{background:var(--bg);color:var(--ink-soft);}
+.timeline-now{display:flex;align-items:center;gap:12px;padding:2px 0;}
+.timeline-now .agendatime{color:var(--clay-text);font-weight:700;min-width:82px;}
+.timeline-now-line{flex:1;height:2px;background:var(--clay);border-radius:2px;position:relative;}
+.timeline-now-line::before{content:'';position:absolute;left:-3px;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;background:var(--clay);}
 .dayrow{display:flex;gap:6px;margin-bottom:10px;}
 .daybtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all var(--ease);}
 .daybtn.selected{background:#666EAE;border-color:#666EAE;color:#fff;}
@@ -261,6 +277,10 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 function normaliza(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+function scrollToDetalle(id){
+  const el = document.getElementById(id);
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
 
 function toast(msg, type='good'){
   let stack = document.querySelector('.toaststack');
@@ -297,7 +317,9 @@ function confirmarAccion(mensaje, textoBoton='Eliminar'){
   });
 }
 
+let modalToken = 0;
 function abrirModal(html){
+  modalToken++;
   let overlay = document.getElementById('editmodal');
   if(!overlay){
     overlay = document.createElement('div');
@@ -306,11 +328,12 @@ function abrirModal(html){
     document.body.appendChild(overlay);
     overlay.addEventListener('click', (e)=>{ if(e.target===overlay) cerrarModal(); });
   }
-  overlay.innerHTML = `<div class="confirmbox wide">${html}</div>`;
+  overlay.innerHTML = `<div class="confirmbox wide"><button class="modal-close" onclick="cerrarModal()" aria-label="Cerrar">×</button>${html}</div>`;
   requestAnimationFrame(()=>overlay.classList.add('show'));
 }
 let modalNodoOrigen = null;
 function abrirModalConNodo(node, headerHtml=''){
+  modalToken++;
   let overlay = document.getElementById('editmodal');
   if(!overlay){
     overlay = document.createElement('div');
@@ -322,7 +345,8 @@ function abrirModalConNodo(node, headerHtml=''){
   modalNodoOrigen = { node, parent: node.parentNode, next: node.nextSibling };
   const box = document.createElement('div');
   box.className = 'confirmbox wide';
-  if(headerHtml) box.innerHTML = headerHtml;
+  box.innerHTML = `<button class="modal-close" onclick="cerrarModal()" aria-label="Cerrar">×</button>`;
+  if(headerHtml) box.innerHTML += headerHtml;
   box.appendChild(node);
   overlay.innerHTML = '';
   overlay.appendChild(box);
@@ -331,8 +355,10 @@ function abrirModalConNodo(node, headerHtml=''){
 function cerrarModal(){
   const overlay = document.getElementById('editmodal');
   if(!overlay) return;
+  const myToken = modalToken;
   overlay.classList.remove('show');
   setTimeout(()=>{
+    if(modalToken !== myToken) return; // se abrió un modal nuevo mientras este se cerraba — no lo pisemos
     if(modalNodoOrigen){
       const {node, parent, next} = modalNodoOrigen;
       if(parent){ parent.insertBefore(node, next); }
@@ -525,7 +551,9 @@ function fechaHoyLarga(){
 let dashChart = null;
 async function renderDashboard(cont){
   cont.innerHTML = `
-    <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1></div>
+    <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1>
+      <div class="helper" style="margin-top:6px;max-width:640px;">Este es el resumen del día: lo que está en curso ahora mismo (postulantes, niñeras, familias), la plata que entró y salió, y quién tiene un sitting o traslado agendado hoy. Los sittings y traslados se cargan desde <b>Sittings &amp; traslados</b> a medida que pasan — de ahí sale todo lo demás.</div>
+    </div>
     <div class="statrow" id="statrow">
       <div class="statcard"><div class="statnum">—</div><div class="statlabel">En proceso</div><div class="statnum-trend" id="trend-proceso"></div></div>
       <div class="statcard"><div class="statnum">—</div><div class="statlabel">Niñeras activas</div><div class="statnum-trend" id="trend-ninieras"></div></div>
@@ -643,11 +671,24 @@ async function loadDashboardData(){
     if(!agendaItems.length){
       box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>';
     } else {
-      box.innerHTML = agendaItems.map(a=>{
+      const ahora = new Date();
+      const minAhora = ahora.getHours()*60 + ahora.getMinutes();
+      const minDe = (hhmm) => { if(!hhmm) return null; const [h,m] = hhmm.split(':').map(Number); return h*60+m; };
+      let nowInsertado = false;
+      const filas = agendaItems.map(a=>{
         const esTraslado = tipoPorNinera[normaliza(a.ninera_nombre)] === 'Traslados';
         const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : 'Sin horario';
-        return `
-        <div class="agendarow">
+        const finMin = minDe(a.hora_fin) ?? minDe(a.hora_inicio);
+        const yaPaso = finMin !== null && finMin < minAhora;
+        let nowMarker = '';
+        const inicioMin = minDe(a.hora_inicio);
+        if(!nowInsertado && inicioMin !== null && inicioMin >= minAhora){
+          nowInsertado = true;
+          const ahoraFmt = ahora.toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit'});
+          nowMarker = `<div class="timeline-now"><div class="agendatime">${ahoraFmt}</div><div class="timeline-now-line"></div></div>`;
+        }
+        return `${nowMarker}
+        <div class="agendarow ${yaPaso?'pasado':''}">
           <div class="agendatime">${horario}</div>
           <div class="agendaicon ${esTraslado?'traslado':'sitting'}">${esTraslado?ICONS.sittings:ICONS.ninieras}</div>
           <div class="agendabody">
@@ -655,7 +696,8 @@ async function loadDashboardData(){
             <div class="agendatype">${esTraslado?'Traslado':'Sitting'}</div>
           </div>
         </div>`;
-      }).join('');
+      });
+      box.innerHTML = `<div class="timeline">${filas.join('')}${nowInsertado ? '' : `<div class="timeline-now"><div class="agendatime">${ahora.toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit'})}</div><div class="timeline-now-line"></div></div>`}</div>`;
     }
   }catch(e){ box.innerHTML = errBox(e); return; }
 
@@ -694,7 +736,12 @@ async function renderFinanzas(cont){
   cont.innerHTML = moduloHeader('Finanzas') + `
     <div class="helper">Ingresos y pagos a niñeras vienen automáticos desde Sittings &amp; traslados. Los demás gastos del negocio (alquiler, insumos, etc.) se cargan acá a mano. La conciliación con el estado de cuenta de Itaú sigue siendo un paso aparte por ahora.</div>
     <div class="mesbar">
-      <div class="field" style="margin:0;max-width:200px;"><label>Mes</label><input type="month" id="fin-mes" value="${finMes}" onchange="cambiarFinMes()"></div>
+      <div class="mesnav">
+        <button onclick="cambiarFinMesRel(-1)" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="mesnav-label" id="fin-mes-label">${monthLabel(finMes)}</div>
+        <button onclick="cambiarFinMesRel(1)" aria-label="Mes siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+      <button class="btn primary" onclick="abrirModalNuevoGasto()">+ Registrar gasto</button>
     </div>
     <div class="summary3" id="fin-summary"></div>
     <div class="chartcard" id="fin-breakdown-card" style="display:none;">
@@ -709,20 +756,35 @@ async function renderFinanzas(cont){
       </div>
     </div>
     <div class="card">
-      <h2>Registrar gasto general</h2>
-      <div class="helper">Alquiler, insumos u otro gasto del negocio que no sea pago a una niñera.</div>
-      <div class="grid3">
-        <div class="field"><label>Fecha</label><input type="date" id="fin-gasto-fecha" value="${todayISO()}"></div>
-        <div class="field"><label>Concepto</label><input type="text" id="fin-gasto-concepto" placeholder="Alquiler, insumos..."></div>
-        <div class="field"><label>Monto</label><input type="number" id="fin-gasto-monto"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <div><h2 style="margin:0;">Gastos fijos mensuales</h2><div class="helper" style="margin:2px 0 0;">Suscripciones y gastos que se repiten todos los meses (Claude, Canva, etc.) — se suman solos al total, sin tener que recargarlos cada mes.</div></div>
+        <button class="smallbtn" onclick="abrirModalNuevoGastoFijo()">+ Agregar gasto fijo</button>
       </div>
-      <button class="btn primary" onclick="guardarGastoGeneral()">Agregar gasto</button>
+      <div id="fin-fijos-list" style="margin-top:10px;"></div>
     </div>
     <div class="card" id="fin-movs"></div>
   `;
   cargarFinanzas();
 }
-function cambiarFinMes(){ finMes = document.getElementById('fin-mes').value; cargarFinanzas(); }
+function cambiarFinMesRel(delta){
+  finMes = shiftMes(finMes, delta);
+  const lbl = document.getElementById('fin-mes-label'); if(lbl) lbl.textContent = monthLabel(finMes);
+  cargarFinanzas();
+}
+function abrirModalNuevoGasto(){
+  abrirModal(`
+    <h2 style="margin:0 0 6px;">Registrar gasto</h2>
+    <div class="helper" style="margin-bottom:14px;">Alquiler, insumos u otro gasto puntual del negocio que no sea pago a una niñera.</div>
+    <div class="grid3">
+      <div class="field"><label>Fecha</label><input type="date" id="fin-gasto-fecha" value="${todayISO()}"></div>
+      <div class="field"><label>Concepto</label><input type="text" id="fin-gasto-concepto" placeholder="Alquiler, insumos..."></div>
+      <div class="field"><label>Monto</label><input type="number" id="fin-gasto-monto"></div>
+    </div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="guardarGastoGeneral()">Agregar gasto</button>
+    </div>`);
+}
 async function guardarGastoGeneral(){
   const fecha = document.getElementById('fin-gasto-fecha').value;
   const concepto = document.getElementById('fin-gasto-concepto').value.trim();
@@ -730,9 +792,8 @@ async function guardarGastoGeneral(){
   if(!fecha || !concepto || !monto){ toast('Faltan fecha, concepto o monto.', 'bad'); return; }
   const { error } = await sb.from('gastos_generales').insert({fecha, concepto, monto});
   if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  cerrarModal();
   toast('Gasto agregado.');
-  document.getElementById('fin-gasto-concepto').value = '';
-  document.getElementById('fin-gasto-monto').value = '';
   cargarFinanzas();
 }
 async function eliminarGastoGeneral(id){
@@ -770,7 +831,75 @@ async function guardarEdicionGasto(id){
   cargarFinanzas();
 }
 let finGastosItems = [];
+let finFijosItems = [];
 let finBreakdownChart = null;
+function abrirModalNuevoGastoFijo(){
+  abrirModal(`
+    <h2 style="margin:0 0 6px;">Agregar gasto fijo</h2>
+    <div class="helper" style="margin-bottom:14px;">Se va a sumar automáticamente todos los meses desde la fecha que pongas.</div>
+    <div class="grid3">
+      <div class="field"><label>Concepto</label><input type="text" id="ff-concepto" placeholder="Ej: Claude, Canva..."></div>
+      <div class="field"><label>Monto mensual</label><input type="number" id="ff-monto"></div>
+      <div class="field"><label>Desde</label><input type="date" id="ff-desde" value="${todayISO()}"></div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="ff-notas"></textarea></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="guardarGastoFijo()">Agregar</button>
+    </div>`);
+}
+async function guardarGastoFijo(){
+  const concepto = document.getElementById('ff-concepto').value.trim();
+  const monto = Number(document.getElementById('ff-monto').value)||0;
+  const desde = document.getElementById('ff-desde').value || todayISO();
+  if(!concepto || !monto){ toast('Faltan concepto o monto.','bad'); return; }
+  const { error } = await sb.from('gastos_fijos').insert({concepto, monto, desde, notas: document.getElementById('ff-notas').value || null});
+  if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  cerrarModal();
+  toast('Gasto fijo agregado.');
+  cargarFinanzas();
+}
+function editarGastoFijo(id){
+  const g = finFijosItems.find(x=>x.id===id);
+  if(!g) return;
+  abrirModal(`
+    <h2 style="margin:0 0 18px;">Editar gasto fijo</h2>
+    <div class="grid3">
+      <div class="field"><label>Concepto</label><input type="text" id="ef-concepto" value="${g.concepto||''}"></div>
+      <div class="field"><label>Monto mensual</label><input type="number" id="ef-monto" value="${g.monto||0}"></div>
+      <div class="field"><label>Desde</label><input type="date" id="ef-desde" value="${g.desde||''}"></div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="ef-notas">${g.notas||''}</textarea></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="guardarEdicionGastoFijo('${id}')">Guardar</button>
+    </div>`);
+}
+async function guardarEdicionGastoFijo(id){
+  const cambios = {
+    concepto: document.getElementById('ef-concepto').value.trim(),
+    monto: Number(document.getElementById('ef-monto').value)||0,
+    desde: document.getElementById('ef-desde').value,
+    notas: document.getElementById('ef-notas').value || null,
+  };
+  if(!cambios.concepto || !cambios.desde){ toast('Faltan concepto o fecha.','bad'); return; }
+  const { error } = await sb.from('gastos_fijos').update(cambios).eq('id', id);
+  if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  cerrarModal();
+  toast('Cambios guardados.');
+  cargarFinanzas();
+}
+async function toggleGastoFijo(id, activo){
+  const { error } = await sb.from('gastos_fijos').update({activo}).eq('id', id);
+  if(error){ toast('No se pudo actualizar: '+error.message,'bad'); return; }
+  cargarFinanzas();
+}
+async function eliminarGastoFijo(id){
+  if(!(await confirmarAccion('¿Eliminar este gasto fijo? No se puede deshacer.'))) return;
+  const { error } = await sb.from('gastos_fijos').delete().eq('id', id);
+  if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
+  cargarFinanzas();
+}
 async function cargarFinanzas(){
   const summary = document.getElementById('fin-summary');
   const movsBox = document.getElementById('fin-movs');
@@ -778,15 +907,42 @@ async function cargarFinanzas(){
   const [y,m] = finMes.split('-').map(Number);
   const desde = `${finMes}-01`;
   const hasta = new Date(y, m, 1).toISOString().slice(0,10);
-  const [{data:sits, error:e1}, {data:gastos, error:e2}] = await Promise.all([
+  const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}] = await Promise.all([
     sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('*').gte('fecha', desde).lt('fecha', hasta),
+    sb.from('gastos_fijos').select('*').order('concepto'),
   ]);
-  if(e1 || e2){ movsBox.innerHTML = errBox(e1||e2); return; }
+  if(e1 || e2 || e3){ movsBox.innerHTML = errBox(e1||e2||e3); return; }
   finGastosItems = gastos || [];
+  finFijosItems = fijos || [];
+  const fijosDelMes = finFijosItems.filter(g => g.activo && g.desde && g.desde < hasta);
+  const totalFijos = fijosDelMes.reduce((s,g)=>s+(Number(g.monto)||0), 0);
+  const fijosList = document.getElementById('fin-fijos-list');
+  if(fijosList){
+    if(!finFijosItems.length){
+      fijosList.innerHTML = '<div class="empty">Todavía no cargaste gastos fijos (suscripciones tipo Claude, Canva, etc.).</div>';
+    } else {
+      fijosList.innerHTML = finFijosItems.map(g=>{
+        const aplicaEsteMes = g.activo && g.desde && g.desde < hasta;
+        return `<div class="agendarow" style="border-bottom:1px solid var(--line);${g.activo?'':'opacity:.5;'}">
+          <div>
+            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" ${g.activo?'checked':''} onchange="toggleGastoFijo('${g.id}', this.checked)">
+              ${g.concepto} <span style="color:var(--ink-soft);font-size:12px;">· desde ${g.desde ? new Date(g.desde+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—'}${aplicaEsteMes?'':' · no aplica este mes'}</span>
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${Number(g.monto||0).toLocaleString('es-UY')}/mes</span>
+            <button class="smallbtn" onclick="editarGastoFijo('${g.id}')">Editar</button>
+            <button class="smallbtn danger" onclick="eliminarGastoFijo('${g.id}')">Eliminar</button>
+          </div>
+        </div>`;
+      }).join('') + (totalFijos>0 ? `<div class="helper" style="margin-top:8px;">Total fijos aplicados a ${monthLabel(finMes)}: <b>$${totalFijos.toLocaleString('es-UY')}</b></div>` : '');
+    }
+  }
   const ingresos = (sits||[]).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
   const egresosNinieras = (sits||[]).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
-  const egresosGenerales = (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0);
+  const egresosGenerales = (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos;
   const egresos = egresosNinieras + egresosGenerales;
   summary.innerHTML = `
     <div class="summarycard"><div class="statlabel">Ingresos de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${ingresos.toLocaleString('es-UY')}</div></div>
@@ -1240,13 +1396,22 @@ let intakeFiltro = 'Todas';
 function renderIntake(body){
   body.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:var(--gutter);">
-      <div class="pillfilters" style="margin:0;">
-        ${['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="pillbtn ${intakeFiltro===t?'selected':''}" onclick="intakeFiltro='${t}';loadIntake();">${t}</button>`).join('')}
-      </div>
+      <div class="pillfilters" id="intake-pillfilters" style="margin:0;"></div>
       <button class="btn primary" onclick="abrirModalNuevaCandidata()">+ Cargar candidata</button>
     </div>
     <div id="intakegrid"></div>
   `;
+  renderIntakePills();
+  loadIntake();
+}
+function renderIntakePills(){
+  const box = document.getElementById('intake-pillfilters');
+  if(!box) return;
+  box.innerHTML = ['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="pillbtn ${intakeFiltro===t?'selected':''}" onclick="setIntakeFiltro('${t}')">${t}</button>`).join('');
+}
+function setIntakeFiltro(t){
+  intakeFiltro = t;
+  renderIntakePills();
   loadIntake();
 }
 function abrirModalNuevaCandidata(){
@@ -1307,14 +1472,14 @@ async function loadIntake(){
         <button class="smallbtn" onclick="agendarDesdeIntake(${i})">Agendar</button>
         <button class="smallbtn danger" onclick="descartarIntake('${c.id}')">Descartar</button>
       </div>
-    </div>`).join('') + '</div>' + '<div id="intakedetalle"></div>';
+    </div>`).join('') + '</div>';
 }
 function verFichaIntake(i){
   const c = intakeItems[i];
   const rows = FICHA_CAMPOS.filter(f=>c[f.key]).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
   const fotoHtml = c.foto_url ? `<img src="${c.foto_url}" alt="Foto de ${c.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;" onerror="this.outerHTML='<div class=&quot;helper&quot; style=&quot;margin-bottom:12px;&quot;>No se pudo mostrar la foto — <a href=&quot;${c.foto_url}&quot; target=&quot;_blank&quot;>abrirla en Drive</a>.</div>'">` : '';
   const avisoHtml = c.autoriza_foto === false ? `<div style="background:var(--clay-soft);color:var(--clay-text);font-weight:600;font-size:13px;padding:10px 14px;border-radius:10px;margin-bottom:14px;border:1px solid var(--clay);">⚠️ No autorizó el uso de su foto ni sus datos para el proceso de selección — no usar su imagen ni compartir su información fuera de la evaluación.</div>` : '';
-  document.getElementById('intakedetalle').innerHTML = `<div class="card"><button class="detailback" onclick="document.getElementById('intakedetalle').innerHTML=''">← Cerrar</button>${avisoHtml}${fotoHtml}<h2>${c.nombre} ${c.apellido||''}</h2><div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos cargados.</div>'}</div></div>`;
+  abrirModal(`${avisoHtml}${fotoHtml}<h2 style="margin:0 0 10px;">${c.nombre} ${c.apellido||''}</h2><div class="fichadl">${rows||'<div>Sin más datos cargados.</div>'}</div>`);
 }
 async function descartarIntake(id){
   if(!(await confirmarAccion('¿Descartar esta candidata? No se puede deshacer.', 'Descartar'))) return;
@@ -1532,7 +1697,6 @@ function renderGuardadas(body){
       <h2>Candidatas guardadas</h2><div class="helper" style="margin:2px 0 0;">Ya entrevistadas, todavía no son niñeras.</div>
     </div>
     <div class="candlist" id="candlist"></div>
-    <div id="detalle"></div>
   `;
   cargarGuardadas();
 }
@@ -1554,15 +1718,13 @@ async function cargarGuardadas(){
 function verDetalle(i){
   const c = candidatasItems[i];
   const cd = c.candidatas;
-  const det = document.getElementById('detalle');
   const compHtml = COMPETENCIAS.map(comp=>{ const d=c.puntajes[comp.key]||{}; return `<div class="card"><h2>${comp.titulo} — <span style="color:var(--accent)">${d.score||'—'}/5</span></h2><div class="helper" style="margin-top:6px;">${d.notes||'(sin notas)'}</div></div>`; }).join('');
   const flags = REDFLAGS.filter(f=>c.redflags[f.key]);
   const refs = c.referencias||[];
   const refsHtml = refs.length ? refs.map(r=>`<div class="q">${r.name||'(sin nombre)'} · ${r.phone||'sin tel'} · ${r.relacion||'—'} ${r.confirmado?'· ✓ confirmada':''}</div>`).join('') : '<div class="helper">Sin referencias.</div>';
   const psicoHtml = c.psico ? PSICO_IMGS.map(img=>`<div class="q"><b>${img.id}:</b> ${c.psico[img.id]||'(sin respuesta anotada)'}</div>`).join('') : '';
   const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
-  det.innerHTML = `
-    <button class="detailback" onclick="document.getElementById('detalle').innerHTML=''">← Volver</button>
+  abrirModal(`
     <div class="card resultcard">
       <div class="gauge" style="background:conic-gradient(${c.recomendacion==='Recomendada'?'var(--good)':c.recomendacion==='No recomendada'?'var(--bad)':'var(--warn)'} ${c.total/5*100}%, var(--line) 0);"><div class="inner"><div class="num">${Number(c.total).toFixed(1)}</div><div class="max">/ 5</div></div></div>
       <div><h2 style="font-size:20px;">${cd.nombre}</h2><div class="helper" style="margin:4px 0;">${c.fecha||''} · ${cd.zona||''} · ${c.rol||''} · tel ${cd.telefono||'—'}</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${c.recomendacion}</span></div>
@@ -1584,7 +1746,7 @@ function verDetalle(i){
       <button class="btn primary" onclick="contratar('${cd.id}')">Pasar a Niñeras</button>
     </div>`}
     <div class="actions"><button class="btn danger" onclick="eliminarCandidata('${cd.id}')">Eliminar candidata</button></div>
-  `;
+  `);
 }
 async function contratar(candidataId){
   const c = candidatasItems.find(x=>x.candidatas.id===candidataId);
@@ -1598,14 +1760,14 @@ async function contratar(candidataId){
   const { error: e2 } = await sb.from('candidatas').update({ estado:'contratada' }).eq('id', candidataId);
   if(e2){ toast('Niñera creada, pero no se pudo actualizar el estado: '+e2.message,'bad'); }
   toast('Pasó a Niñeras.');
-  document.getElementById('detalle').innerHTML='';
+  cerrarModal();
   cargarGuardadas();
 }
 async function eliminarCandidata(candidataId){
   if(!(await confirmarAccion('¿Eliminar esta candidata? No se puede deshacer.'))) return;
   const { error } = await sb.from('candidatas').delete().eq('id', candidataId);
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
-  document.getElementById('detalle').innerHTML='';
+  cerrarModal();
   cargarGuardadas();
 }
 function descargarCSV(headers, rows, filename){
@@ -1626,7 +1788,6 @@ function renderNinieras(body){
       <div class="field" style="margin:0;"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
     </div></div>
     <div id="ninierasgrid"></div>
-    <div id="ninieradetalle"></div>
   `;
   cargarNinieras();
 }
@@ -1634,11 +1795,18 @@ async function cargarNinieras(){
   const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true).order('nombre');
   if(error){ document.getElementById('ninierasgrid').innerHTML = errBox(error); return; }
   ninierasItems = data;
-  // llenar desplegable de zonas con las zonas reales
+  // llenar desplegable de zonas agrupando variantes de mayúsculas/tildes/espacios como la misma zona
   const zonaSel = document.getElementById('filt-zona');
   if(zonaSel){
-    const zonas = [...new Set(ninierasItems.map(n=>(n.zona||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(z=>`<option value="${z}">${z}</option>`).join('');
+    const zonaMap = new Map();
+    ninierasItems.forEach(n=>{
+      const raw = (n.zona||'').trim();
+      if(!raw) return;
+      const key = normaliza(raw);
+      if(!zonaMap.has(key)) zonaMap.set(key, raw);
+    });
+    const zonas = [...zonaMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+    zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
   }
   filtrarNinieras();
 }
@@ -1652,7 +1820,7 @@ function filtrarNinieras(){
     const cd = n.candidatas || {};
     const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia].filter(Boolean).join(' '));
     const matchTexto = !fn || blob.includes(fn);
-    const matchZona = !fz || (n.zona||'').trim()===fz;
+    const matchZona = !fz || normaliza(n.zona)===fz;
     const matchTipo = !ft || (n.tipo||'Niñera')===ft;
     return matchTexto && matchZona && matchTipo;
   });
@@ -1679,23 +1847,20 @@ async function verNinera(id){
   const cd = n.candidatas || {};
   const rows = FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
   const fotoHtml = n.foto ? `<img src="${n.foto}" alt="Foto de ${n.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;" onerror="this.style.display='none'">` : '';
-  document.getElementById('ninieradetalle').innerHTML = `
-    <div class="card">
-      <button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cerrar</button>
-      ${fotoHtml}
-      <h2>${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
-      <div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos.</div>'}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
-      <div style="margin-top:18px;">
-        <h2 class="card-section-title" style="margin-top:0;">Sittings y traslados de ${n.nombre.split(' ')[0]}</h2>
-        <div class="grid2">
-          <div class="field"><label>Familia</label><select id="vn-familia" onchange="renderNineraHistorial('${n.id}')"><option value="">Todas</option></select></div>
-          <div class="field"><label>Período</label><select id="vn-periodo" onchange="renderNineraHistorial('${n.id}')">
-            <option value="0">Todo</option><option value="7">Últimos 7 días</option><option value="15">Últimos 15 días</option><option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option>
-          </select></div>
-        </div>
-        <div id="vn-historial"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
+  abrirModal(`
+    ${fotoHtml}
+    <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
+    <div class="fichadl">${rows||'<div>Sin más datos.</div>'}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+    <div style="margin-top:18px;">
+      <h2 class="card-section-title" style="margin-top:0;">Sittings y traslados de ${n.nombre.split(' ')[0]}</h2>
+      <div class="grid2">
+        <div class="field"><label>Familia</label><select id="vn-familia" onchange="renderNineraHistorial('${n.id}')"><option value="">Todas</option></select></div>
+        <div class="field"><label>Período</label><select id="vn-periodo" onchange="renderNineraHistorial('${n.id}')">
+          <option value="0">Todo</option><option value="7">Últimos 7 días</option><option value="15">Últimos 15 días</option><option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option>
+        </select></div>
       </div>
-    </div>`;
+      <div id="vn-historial"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
+    </div>`);
   // cargar los sittings de esta niñera
   const { data } = await sb.from('sittings_traslados').select('*').eq('ninera_nombre', n.nombre).order('fecha', {ascending:false});
   nineraHistItems = data || [];
@@ -1713,8 +1878,15 @@ async function verNinera(id){
   }
   const sel = document.getElementById('vn-familia');
   if(sel){
-    const fams = [...new Set(nineraHistItems.map(s=>s.familia_nombre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    sel.innerHTML = `<option value="">Todas</option>` + fams.map(f=>`<option value="${f}">${f}</option>`).join('');
+    const famMap = new Map();
+    nineraHistItems.forEach(s=>{
+      const raw = (s.familia_nombre||'').trim();
+      if(!raw) return;
+      const key = normaliza(raw);
+      if(!famMap.has(key)) famMap.set(key, raw);
+    });
+    const fams = [...famMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+    sel.innerHTML = `<option value="">Todas</option>` + fams.map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
   }
   renderNineraHistorial(n.id);
 }
@@ -1725,7 +1897,7 @@ function renderNineraHistorial(id){
   const famF = document.getElementById('vn-familia')?.value||'';
   const periodo = parseInt(document.getElementById('vn-periodo')?.value||'0');
   let items = nineraHistItems.slice();
-  if(famF) items = items.filter(s=>s.familia_nombre===famF);
+  if(famF) items = items.filter(s=>normaliza(s.familia_nombre)===famF);
   if(periodo>0){
     const limite = new Date(); limite.setDate(limite.getDate()-periodo);
     const limiteISO = limite.toISOString().slice(0,10);
@@ -1809,17 +1981,14 @@ Usá como base el diseño "${CV_CANVA_DESIGN_NOMBRE}" (ID: ${CV_CANVA_DESIGN_ID}
 
 Datos de la niñera:
 ${datos.map(d=>'- '+d).join('\n')}`;
-  document.getElementById('ninieradetalle').innerHTML = `
-    <div class="card">
-      <button class="detailback" onclick="document.getElementById('ninieradetalle').innerHTML=''">← Cerrar</button>
-      <h2>Mensaje para pedirle el CV a Claude</h2>
-      <div class="helper">Copiá esto (o descargalo) y pegalo en un chat con Claude dentro de este Project — tiene todo lo que necesita para generar el CV de ${n.nombre} y mandártelo en PDF. Para que funcione, el Project tiene que tener cargados el archivo de instrucciones y una imagen de ejemplo de CV en su sección de Files.</div>
-      <textarea id="cv-msg-${id}" readonly style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">${mensaje}</textarea>
-      <div class="actions">
-        <button class="btn primary" onclick="copiarMensajeCV('${id}')">Copiar mensaje</button>
-        <button class="btn ghost" onclick="descargarMensajeCV('${id}')">Descargar .txt</button>
-      </div>
-    </div>`;
+  abrirModal(`
+    <h2 style="margin:0 0 10px;">Mensaje para pedirle el CV a Claude</h2>
+    <div class="helper">Copiá esto (o descargalo) y pegalo en un chat con Claude dentro de este Project — tiene todo lo que necesita para generar el CV de ${n.nombre} y mandártelo en PDF. Para que funcione, el Project tiene que tener cargados el archivo de instrucciones y una imagen de ejemplo de CV en su sección de Files.</div>
+    <textarea id="cv-msg-${id}" readonly style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">${mensaje}</textarea>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="descargarMensajeCV('${id}')">Descargar .txt</button>
+      <button class="btn primary" onclick="copiarMensajeCV('${id}')">Copiar mensaje</button>
+    </div>`);
 }
 async function copiarMensajeCV(id){
   const ta = document.getElementById('cv-msg-'+id);
@@ -1857,7 +2026,6 @@ function renderFamilias(body){
       </div>
     </div>
     <div id="familiaslist"></div>
-    <div id="familiadetalle"></div>
   `;
   famDetalleAbierta = null;
   cargarFamilias();
@@ -1930,16 +2098,23 @@ async function cargarFamilias(){
   });
   familiasItems = familias.map(f => ({...f, asignaciones: (asignaciones||[]).filter(a=>a.familia_id===f.id)}));
   if(!ninierasItems.length){ try{ const r = await sb.from('ninieras').select('nombre'); ninierasItems = r.data||ninierasItems; }catch(e){} }
-  // llenar el filtro de zonas con las zonas reales presentes
+  // llenar el filtro de zonas agrupando variantes de mayúsculas/tildes/espacios como la misma zona
   const zonaSel = document.getElementById('fam-zonafiltro');
   if(zonaSel){
-    const zonas = [...new Set(familiasItems.map(f=>(f.zona||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(z=>`<option value="${z}" ${famZonaFiltro===z?'selected':''}>${z}</option>`).join('');
+    const zonaMap = new Map();
+    familiasItems.forEach(f=>{
+      const raw = (f.zona||'').trim();
+      if(!raw) return;
+      const key = normaliza(raw);
+      if(!zonaMap.has(key)) zonaMap.set(key, raw);
+    });
+    const zonas = [...zonaMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+    zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(([key,label])=>`<option value="${key}" ${famZonaFiltro===key?'selected':''}>${label}</option>`).join('');
   }
   renderFamiliasList();
   if(famDetalleAbierta){
     if(familiasItems.some(f=>f.id===famDetalleAbierta)) verFamilia(famDetalleAbierta);
-    else { famDetalleAbierta = null; document.getElementById('familiadetalle').innerHTML = ''; }
+    else { famDetalleAbierta = null; cerrarModal(); }
   }
 }
 function renderFamiliasList(){
@@ -1949,7 +2124,7 @@ function renderFamiliasList(){
   const q = normaliza(famBusqueda);
   const filtradas = familiasItems.filter(f=>{
     const matchNombre = !q || normaliza(f.nombre).includes(q);
-    const matchZona = !famZonaFiltro || (f.zona||'').trim()===famZonaFiltro;
+    const matchZona = !famZonaFiltro || normaliza(f.zona)===famZonaFiltro;
     return matchNombre && matchZona;
   });
   const countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${familiasItems.length} familias</div>`;
@@ -2003,35 +2178,32 @@ function verFamilia(id){
         </div>`;
       }).join('')}
     </div>` : '';
-  document.getElementById('familiadetalle').innerHTML = `
-    <div class="card">
-      <button class="detailback" onclick="famDetalleAbierta=null;document.getElementById('familiadetalle').innerHTML=''">← Cerrar</button>
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-        <h2 style="margin:0;">${f.nombre}</h2>
-        <button class="smallbtn" onclick="editarFamilia('${f.id}')">Editar</button>
+  abrirModal(`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+      <h2 style="margin:0;">${f.nombre}</h2>
+      <button class="smallbtn" onclick="editarFamilia('${f.id}')">Editar</button>
+    </div>
+    <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
+    ${precioHtml}
+    ${f.direccion?`<div class="helper">Dirección: ${f.direccion}</div>`:''}
+    ${f.cuenta_bancaria?`<div class="helper">Cuenta: ${f.cuenta_bancaria}</div>`:''}
+    ${f.notas?`<div class="helper">${f.notas}</div>`:''}
+    ${historialHtml}
+    <div class="card-section-title">Niñeras asignadas</div>
+    <div class="tablewrap"><table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
+      <tbody>${asigRows || '<tr><td colspan="3" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table></div>
+    <datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${n.nombre}">`).join('')}</datalist>
+    <div class="grid3" style="margin-top:14px;">
+      <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
+      <div class="field"><label>Hora inicio</label><input type="time" id="asig-horaini-${f.id}"></div>
+      <div class="field"><label>Hora fin</label><input type="time" id="asig-horafin-${f.id}"></div>
+    </div>
+    <div class="field"><label>Días</label>
+      <div class="dayrow" id="asig-dias-${f.id}">
+        ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" onclick="this.classList.toggle('selected')">${d}</button>`).join('')}
       </div>
-      <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
-      ${precioHtml}
-      ${f.direccion?`<div class="helper">Dirección: ${f.direccion}</div>`:''}
-      ${f.cuenta_bancaria?`<div class="helper">Cuenta: ${f.cuenta_bancaria}</div>`:''}
-      ${f.notas?`<div class="helper">${f.notas}</div>`:''}
-      ${historialHtml}
-      <div class="card-section-title">Niñeras asignadas</div>
-      <div class="tablewrap"><table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
-        <tbody>${asigRows || '<tr><td colspan="3" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table></div>
-      <datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${n.nombre}">`).join('')}</datalist>
-      <div class="grid3" style="margin-top:14px;">
-        <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
-        <div class="field"><label>Hora inicio</label><input type="time" id="asig-horaini-${f.id}"></div>
-        <div class="field"><label>Hora fin</label><input type="time" id="asig-horafin-${f.id}"></div>
-      </div>
-      <div class="field"><label>Días</label>
-        <div class="dayrow" id="asig-dias-${f.id}">
-          ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" onclick="this.classList.toggle('selected')">${d}</button>`).join('')}
-        </div>
-      </div>
-      <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Asignar niñera</button>
-    </div>`;
+    </div>
+    <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Asignar niñera</button>`);
 }
 function editarFamilia(id){
   const f = familiasItems.find(x=>x.id===id);
@@ -2095,7 +2267,7 @@ async function eliminarFamilia(id){
   if(!(await confirmarAccion('¿Eliminar esta familia? No se puede deshacer.'))) return;
   const { error } = await sb.from('familias').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
-  if(famDetalleAbierta===id){ famDetalleAbierta=null; document.getElementById('familiadetalle').innerHTML=''; }
+  if(famDetalleAbierta===id){ famDetalleAbierta=null; cerrarModal(); }
   cargarFamilias();
 }
 
@@ -2111,6 +2283,7 @@ let sitOrigenAuto = true;
 let sitMes = null;
 
 function currentMonthStr(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function shiftMes(mesStr, delta){ const [y,m] = mesStr.split('-').map(Number); const d = new Date(y, m-1+delta, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function monthLabel(mesStr){
   const [y,m] = mesStr.split('-').map(Number);
@@ -2126,7 +2299,11 @@ async function renderSittings(body){
   body.innerHTML = `
     <div id="sit-form-wrap"><div class="card"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div></div>
     <div class="mesbar">
-      <div class="field" style="margin:0;max-width:200px;"><label>Mes</label><input type="month" id="sit-mes" value="${sitMes}" onchange="cambiarSitMes()"></div>
+      <div class="mesnav">
+        <button onclick="cambiarSitMesRel(-1)" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="mesnav-label" id="sit-mes-label">${monthLabel(sitMes)}</div>
+        <button onclick="cambiarSitMesRel(1)" aria-label="Mes siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
       <button class="smallbtn" onclick="exportarSitCSV()">Exportar CSV</button>
     </div>
     <div class="summary3" id="sit-summary"></div>
@@ -2165,11 +2342,18 @@ async function cargarSitHistorial(){
     sitHistResenas[k].suma += Number(r.puntuacion);
     sitHistResenas[k].cant += 1;
   });
-  // llenar desplegable de familias solo con las que aparecen en el historial
+  // llenar desplegable de familias agrupando variantes de mayúsculas/tildes/espacios como la misma familia
   const sel = document.getElementById('sithist-familia');
   if(sel){
-    const fams = [...new Set(sitHistItems.map(s=>s.familia_nombre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    sel.innerHTML = `<option value="">Todas</option>` + fams.map(f=>`<option value="${f}">${f}</option>`).join('');
+    const famMap = new Map();
+    sitHistItems.forEach(s=>{
+      const raw = (s.familia_nombre||'').trim();
+      if(!raw) return;
+      const key = normaliza(raw);
+      if(!famMap.has(key)) famMap.set(key, raw);
+    });
+    const fams = [...famMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+    sel.innerHTML = `<option value="">Todas</option>` + fams.map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
   }
   renderSitHistorial();
 }
@@ -2187,7 +2371,7 @@ function renderSitHistorial(){
   const periodo = parseInt(document.getElementById('sithist-periodo')?.value||'0');
   const tipoF = document.getElementById('sithist-tipo')?.value||'';
   let items = sitHistItems.slice();
-  if(famF) items = items.filter(s=>s.familia_nombre===famF);
+  if(famF) items = items.filter(s=>normaliza(s.familia_nombre)===famF);
   if(tipoF) items = items.filter(s=>s.tipo===tipoF);
   if(periodo>0){
     const limite = new Date(); limite.setDate(limite.getDate()-periodo);
@@ -2509,7 +2693,11 @@ async function eliminarSitting(id){
 }
 
 /* ---- lista del mes / resumen / export ---- */
-function cambiarSitMes(){ sitMes = document.getElementById('sit-mes').value; cargarSitLista(); }
+function cambiarSitMesRel(delta){
+  sitMes = shiftMes(sitMes, delta);
+  const lbl = document.getElementById('sit-mes-label'); if(lbl) lbl.textContent = monthLabel(sitMes);
+  cargarSitLista();
+}
 async function cargarSitLista(){
   const wrap = document.getElementById('sit-list-wrap');
   const summary = document.getElementById('sit-summary');
