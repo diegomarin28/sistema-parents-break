@@ -27,7 +27,7 @@
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
 h1,h2,h3{font-family:'Baloo 2',sans-serif;margin:0;}
-.wrap{max-width:980px;margin:0 auto;padding:24px 20px 100px;}
+.wrap{margin:0;}
 .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--clay-text);margin-bottom:6px;}
 h1{font-size:27px;font-weight:600;}
 .sub{color:var(--ink-soft);font-size:14px;margin-top:5px;max-width:640px;line-height:1.5;}
@@ -170,13 +170,13 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .toast.leaving{animation:toastOut 200ms ease forwards;}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
 @keyframes toastOut{to{opacity:0;transform:translateX(20px);}}
-.appshell{display:flex;height:100vh;}
-.sidebar{width:196px;flex-shrink:0;height:100vh;position:sticky;top:0;background:#5B5FA0;padding:22px 14px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+.appshell{position:fixed;inset:0;display:flex;}
+.sidebar{width:196px;flex-shrink:0;height:100%;background:#5B5FA0;padding:22px 14px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
 .sidebar-logo{height:30px;filter:brightness(0) invert(1);margin:0 6px 30px;align-self:flex-start;}
 .sidebar-nav{display:flex;flex-direction:column;gap:2px;flex:1;}
 .sidebar-foot{border-top:1px solid rgba(255,255,255,.18);padding:14px 6px 2px;font-size:11.5px;color:rgba(255,255,255,.6);line-height:1.5;}
 .sidebar-foot button{background:none;border:none;color:#fff;font-weight:600;cursor:pointer;font-size:11.5px;padding:0;margin-top:3px;font-family:'Inter',sans-serif;}
-.mainarea{flex:1;min-width:0;height:100vh;overflow-y:auto;}
+.mainarea{flex:1;min-width:0;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 #modcontent{max-width:960px;margin:0 auto;padding:26px 32px 100px;}
 .navitem{display:flex;align-items:center;gap:10px;background:none;border:none;border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;transition:background var(--ease);font-family:'Inter',sans-serif;width:100%;}
 .navitem:hover{background:rgba(255,255,255,.1);}
@@ -244,7 +244,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .mesbar{display:flex;justify-content:space-between;align-items:flex-end;margin:var(--gutter) 0 10px;gap:var(--gutter);flex-wrap:wrap;}
 .precio-fam{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;padding:8px 12px;background:var(--accent-soft);border-radius:9px;font-size:13px;color:var(--ink-soft);}
 @media (max-width:640px){.summary3{grid-template-columns:1fr;}}
-@media (max-width:760px){.appshell{flex-direction:column;height:auto;}.sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;align-items:center;padding:10px 12px;gap:4px;overflow-x:auto;overflow-y:visible;}.sidebar-logo{display:none;}.sidebar-nav{flex-direction:row;flex:none;}.sidebar-foot{display:none;}.mainarea{height:auto;overflow-y:visible;}#modcontent{padding:20px 16px 100px;}.navitem{width:auto;}.navitem-label{display:none;}.statrow{grid-template-columns:1fr 1fr;}.pendbanner{flex-wrap:wrap;}}
+@media (max-width:760px){.appshell{position:static;flex-direction:column;height:auto;}.sidebar{width:100%;height:auto;position:sticky;top:0;z-index:20;flex-direction:row;flex-wrap:wrap;align-items:center;padding:10px 12px;gap:4px;overflow-x:auto;overflow-y:visible;}.sidebar-logo{display:none;}.sidebar-nav{flex-direction:row;flex:none;}.sidebar-foot{display:none;}.mainarea{height:auto;overflow-y:visible;}#modcontent{padding:20px 16px 100px;}.navitem{width:auto;}.navitem-label{display:none;}.statrow{grid-template-columns:1fr 1fr;}.pendbanner{flex-wrap:wrap;}}
 @media (max-width:480px){.statrow{grid-template-columns:1fr;}}
 @media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}.refrow{grid-template-columns:1fr;}.fichadl{grid-template-columns:1fr;}.hometiles{grid-template-columns:1fr;grid-auto-rows:auto;}.tile.hero{grid-column:span 1;grid-row:span 1;}}
 @media print{.subnav,.actions,.backbtn,button{display:none !important;}}
