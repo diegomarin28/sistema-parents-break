@@ -1233,28 +1233,35 @@ let intakeItems = [];
 let intakeFiltro = 'Todas';
 function renderIntake(body){
   body.innerHTML = `
-    <div class="card">
-      <h2>Cargar candidata manualmente</h2>
-      <div class="helper">Cargá acá las candidatas nuevas que lleguen fuera del form de babysitters (el form ya entra solo — ver "Form (auto)").</div>
-      <div class="grid3">
-        <div class="field"><label>Nombre</label><input type="text" id="in-nombre"></div>
-        <div class="field"><label>Teléfono</label><input type="tel" id="in-tel"></div>
-        <div class="field"><label>Zona</label><input type="text" id="in-zona"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:var(--gutter);">
+      <div class="pillfilters" style="margin:0;">
+        ${['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="pillbtn ${intakeFiltro===t?'selected':''}" onclick="intakeFiltro='${t}';loadIntake();">${t}</button>`).join('')}
       </div>
-      <div class="grid3">
-        <div class="field"><label>Edad</label><input type="text" id="in-edad"></div>
-        <div class="field"><label>Cómo llegó</label><select id="in-origen"><option>Instagram / Form</option><option>Recomendada</option><option>Otro</option></select></div>
-        <div class="field"><label>Experiencia (resumen)</label><input type="text" id="in-exp"></div>
-      </div>
-      <div class="field"><label>Tipo</label><select id="in-tipo"><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
-      <button class="btn primary" onclick="addIntake()">Agregar candidata</button>
-    </div>
-    <div class="pillfilters">
-      ${['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="pillbtn ${intakeFiltro===t?'selected':''}" onclick="intakeFiltro='${t}';loadIntake();">${t}</button>`).join('')}
+      <button class="btn primary" onclick="abrirModalNuevaCandidata()">+ Cargar candidata</button>
     </div>
     <div id="intakegrid"></div>
   `;
   loadIntake();
+}
+function abrirModalNuevaCandidata(){
+  abrirModal(`
+    <h2 style="margin:0 0 6px;">Cargar candidata manualmente</h2>
+    <div class="helper" style="margin-bottom:14px;">Para candidatas nuevas que lleguen fuera del form de babysitters (el form ya entra solo).</div>
+    <div class="grid3">
+      <div class="field"><label>Nombre</label><input type="text" id="in-nombre"></div>
+      <div class="field"><label>Teléfono</label><input type="tel" id="in-tel"></div>
+      <div class="field"><label>Zona</label><input type="text" id="in-zona"></div>
+    </div>
+    <div class="grid3">
+      <div class="field"><label>Edad</label><input type="text" id="in-edad"></div>
+      <div class="field"><label>Cómo llegó</label><select id="in-origen"><option>Instagram / Form</option><option>Recomendada</option><option>Otro</option></select></div>
+      <div class="field"><label>Experiencia (resumen)</label><input type="text" id="in-exp"></div>
+    </div>
+    <div class="field"><label>Tipo</label><select id="in-tipo"><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="addIntake()">Agregar candidata</button>
+    </div>`);
 }
 async function addIntake(){
   const nombre = document.getElementById('in-nombre').value.trim();
@@ -1264,7 +1271,8 @@ async function addIntake(){
     tipo:document.getElementById('in-tipo').value, estado:'intake' };
   const { error } = await sb.from('candidatas').insert(item);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
-  ['in-nombre','in-tel','in-zona','in-edad','in-exp'].forEach(id=>document.getElementById(id).value='');
+  cerrarModal();
+  toast('Candidata agregada.');
   loadIntake();
 }
 async function loadIntake(){
@@ -1514,9 +1522,8 @@ function limpiarForm(){
 let candidatasItems = [];
 function renderGuardadas(body){
   body.innerHTML = `
-    <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
-      <div><h2>Candidatas guardadas</h2><div class="helper" style="margin:2px 0 0;">Ya entrevistadas, todavía no son niñeras.</div></div>
-      <button class="smallbtn" onclick="exportCSVcand()">Exportar CSV</button>
+    <div class="card">
+      <h2>Candidatas guardadas</h2><div class="helper" style="margin:2px 0 0;">Ya entrevistadas, todavía no son niñeras.</div>
     </div>
     <div class="candlist" id="candlist"></div>
     <div id="detalle"></div>
@@ -1594,12 +1601,6 @@ async function eliminarCandidata(candidataId){
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   document.getElementById('detalle').innerHTML='';
   cargarGuardadas();
-}
-function exportCSVcand(){
-  if(!candidatasItems.length){ toast('No hay candidatas para exportar.','bad'); return; }
-  const headers=['Nombre','Fecha','Zona','Rol','Teléfono','Puntaje','Recomendación','Contratada','Notas'];
-  const rows = candidatasItems.map(c=>[c.candidatas.nombre,c.fecha,c.candidatas.zona,c.rol,c.candidatas.telefono,c.total,c.recomendacion,c.candidatas.estado==='contratada'?'Sí':'No',(c.notas||'').replace(/\n/g,' ')]);
-  descargarCSV(headers, rows, 'candidatas_guardadas.csv');
 }
 function descargarCSV(headers, rows, filename){
   const csv = [headers, ...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -1840,30 +1841,13 @@ let famZonaFiltro = '';
 let famDetalleAbierta = null;
 function renderFamilias(body){
   body.innerHTML = `
-    <div class="card">
-      <h2>Nueva familia</h2>
-      <div class="helper">El precio es por familia: cuánto le cobramos por hora y cuánto le pagamos a la niñera. El margen se calcula solo.</div>
-      <div class="grid3">
-        <div class="field"><label>Nombre de la familia</label><input type="text" id="fam-nombre"></div>
-        <div class="field"><label>Zona</label><input type="text" id="fam-zona"></div>
-        <div class="field"><label>Teléfono</label><input type="tel" id="fam-telefono"></div>
-      </div>
-      <div class="grid3">
-        <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="fam-cobro"></div>
-        <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="fam-pago"></div>
-        <div class="field"><label>Niños (edades)</label><input type="text" id="fam-ninos" placeholder="Ej: 3 y 6 años"></div>
-      </div>
-      <div class="grid2">
-        <div class="field"><label>Dirección</label><input type="text" id="fam-direccion" placeholder="Para sugerir origen en traslados"></div>
-        <div class="field"><label>Cuenta bancaria</label><input type="text" id="fam-cuenta"></div>
-      </div>
-      <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
-      <button class="btn primary" onclick="addFamilia()">Agregar familia</button>
-    </div>
     <div class="card" style="padding:14px 18px;">
-      <div class="grid2">
-        <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
-        <div class="field" style="margin:0;"><label>Zona</label><select id="fam-zonafiltro" onchange="famZonaFiltro=this.value;renderFamiliasList();"></select></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+        <div class="grid2" style="flex:1;margin:0;min-width:260px;">
+          <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
+          <div class="field" style="margin:0;"><label>Zona</label><select id="fam-zonafiltro" onchange="famZonaFiltro=this.value;renderFamiliasList();"></select></div>
+        </div>
+        <button class="btn primary" onclick="abrirModalNuevaFamilia()">+ Agregar familia</button>
       </div>
     </div>
     <div id="familiaslist"></div>
@@ -1871,6 +1855,30 @@ function renderFamilias(body){
   `;
   famDetalleAbierta = null;
   cargarFamilias();
+}
+function abrirModalNuevaFamilia(){
+  abrirModal(`
+    <h2 style="margin:0 0 6px;">Nueva familia</h2>
+    <div class="helper" style="margin-bottom:14px;">El precio es por familia: cuánto le cobramos por hora y cuánto le pagamos a la niñera. El margen se calcula solo.</div>
+    <div class="grid3">
+      <div class="field"><label>Nombre de la familia</label><input type="text" id="fam-nombre"></div>
+      <div class="field"><label>Zona</label><input type="text" id="fam-zona"></div>
+      <div class="field"><label>Teléfono</label><input type="tel" id="fam-telefono"></div>
+    </div>
+    <div class="grid3">
+      <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="fam-cobro"></div>
+      <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="fam-pago"></div>
+      <div class="field"><label>Niños (edades)</label><input type="text" id="fam-ninos" placeholder="Ej: 3 y 6 años"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Dirección</label><input type="text" id="fam-direccion" placeholder="Para sugerir origen en traslados"></div>
+      <div class="field"><label>Cuenta bancaria</label><input type="text" id="fam-cuenta"></div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="addFamilia()">Agregar familia</button>
+    </div>`);
 }
 async function addFamilia(){
   const nombre = document.getElementById('fam-nombre').value.trim();
@@ -1881,7 +1889,7 @@ async function addFamilia(){
     cuenta_bancaria:document.getElementById('fam-cuenta').value, notas:document.getElementById('fam-notas').value };
   const { error } = await sb.from('familias').insert(fam);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
-  ['fam-nombre','fam-zona','fam-telefono','fam-cobro','fam-pago','fam-ninos','fam-direccion','fam-cuenta','fam-notas'].forEach(id=>document.getElementById(id).value='');
+  cerrarModal();
   toast('Familia agregada.');
   cargarFamilias();
 }
