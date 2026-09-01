@@ -77,7 +77,7 @@ textarea{resize:vertical;min-height:54px;}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
 .field{margin-bottom:12px;}
-.q{background:var(--accent-soft);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:13.5px;color:#2C4A38;line-height:1.45;}
+.q{background:var(--accent-soft);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:13.5px;color:var(--ink);line-height:1.45;}
 .scorebar{display:flex;gap:6px;margin-top:10px;}
 .scorebtn{flex:1;text-align:center;padding:9px 0;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);}
 .scorebtn.selected{background:var(--accent);border-color:var(--accent);color:#fff;}
@@ -87,7 +87,7 @@ textarea{resize:vertical;min-height:54px;}
 .flag-row input{margin-top:3px;}
 .flag-row span{font-size:13.5px;line-height:1.4;}
 .flag-row.critical span::after{content:" · crítico";color:var(--bad);font-size:11px;font-weight:600;}
-.refrow{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:center;}
+.refrow{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;margin-bottom:8px;align-items:center;}
 .refrow .chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);white-space:nowrap;}
 .smallbtn{background:none;border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:12.5px;cursor:pointer;color:var(--ink-soft);font-family:'Inter',sans-serif;}
 .smallbtn:hover{border-color:var(--accent);color:var(--accent);}
@@ -123,7 +123,10 @@ textarea{resize:vertical;min-height:54px;}
 .warnbox{background:var(--warn-soft);border:1px solid #E4C888;border-radius:9px;padding:10px 13px;font-size:13px;color:#7A5A16;margin-top:14px;line-height:1.5;}
 .okbox{background:var(--good-soft);border:1px solid #B9D9BE;border-radius:9px;padding:10px 13px;font-size:13px;color:var(--good);margin-top:14px;line-height:1.5;}
 .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;}
-.pcard{background:var(--paper);border:1px solid var(--line);border-radius:15px;padding:16px;box-shadow:var(--shadow-sm);transition:transform var(--ease), box-shadow var(--ease);}
+.pcard{background:var(--paper);border:1px solid var(--line);border-radius:15px;padding:16px;box-shadow:var(--shadow-sm);transition:transform var(--ease), box-shadow var(--ease);position:relative;}
+.pcard-delete{position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;border:none;background:#fff;color:var(--ink-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.5;transition:opacity var(--ease), background var(--ease), color var(--ease);box-shadow:var(--shadow-sm);}
+.pcard-delete:hover,.pcard-delete:focus-visible{opacity:1;background:var(--clay-soft);color:var(--clay-text);}
+.pcard-delete svg{width:13px;height:13px;}
 .pcard .ph{width:100%;aspect-ratio:1;border-radius:10px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent);font-family:'Baloo 2',sans-serif;font-size:26px;font-weight:600;margin-bottom:10px;overflow:hidden;}
 .pcard .ph img{width:100%;height:100%;object-fit:cover;}
 .pcard .name{font-family:'Baloo 2',sans-serif;font-size:16px;font-weight:600;}
@@ -151,7 +154,10 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .fichadl div{padding:4px 0;border-bottom:1px dashed var(--line);white-space:pre-line;}
 .fichadl b{color:var(--ink-soft);font-weight:600;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.02em;}
 .asigtable{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;}
-.asigtable th,.asigtable td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;}
+.asigtable th,.asigtable td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.tablewrap .asigtable{min-width:480px;}
+.tablecell-btns{display:inline-flex;gap:6px;}
 .margenpos{color:var(--good);font-weight:600;}
 .margenneg{color:var(--bad);font-weight:600;}
 .loginstage{position:fixed;inset:0;display:grid;grid-template-columns:1fr 1fr;background:var(--paper);}
@@ -432,6 +438,7 @@ const ICONS = {
   hoy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>`,
   moneyIn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l5-5 4 4 7-8"/><path d="M15 8h5v5"/></svg>`,
   moneyOut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7l5 5 4-4 7 8"/><path d="M15 16h5v-5"/></svg>`,
+  trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg>`,
 };
 const MODULOS = [
   {key:'rrhh', label:'RR.HH.', desc:'Candidatas y entrevistas — el pipeline completo, de punta a punta.'},
@@ -875,7 +882,7 @@ async function cargarContratos(){
   contratosItems = data || [];
   if(!contratosItems.length){ cont.innerHTML = '<div class="empty">Todavía no hay contratos en el registro.</div>'; return; }
   const estColor = {borrador:'var(--ink-soft)', enviado:'var(--accent)', firmado:'var(--good)'};
-  cont.innerHTML = `<table class="asigtable"><thead><tr><th>Tipo</th><th>Nombre</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody>
+  cont.innerHTML = `<div class="tablewrap"><table class="asigtable"><thead><tr><th>Tipo</th><th>Nombre</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody>
     ${contratosItems.map(c=>`<tr>
       <td>${c.tipo==='ninera'?'Niñera':'Traslados'}</td>
       <td>${c.parte_nombre}</td>
@@ -887,7 +894,7 @@ async function cargarContratos(){
       </select></td>
       <td><button class="smallbtn danger" onclick="eliminarContrato('${c.id}')">Eliminar</button></td>
     </tr>`).join('')}
-  </tbody></table>`;
+  </tbody></table></div>`;
 }
 async function cambiarEstadoContrato(id, estado){
   const { error } = await sb.from('contratos').update({estado}).eq('id', id);
@@ -1169,7 +1176,7 @@ function renderEntrevista(body){
 function renderCompetencias(){
   const cont = document.getElementById('competencias');
   cont.innerHTML = COMPETENCIAS.map(c => `
-    <div class="card"><h2>${c.titulo}</h2>${c.preguntas.length? c.preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper" style="margin-top:-4px;">${c.helper||''}</div>`}
+    <div class="card"><h2>${c.titulo}</h2>${c.preguntas.length? c.preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
       <textarea placeholder="Notas de la respuesta…" data-notes="${c.key}"></textarea>
       <div class="scorebar" data-scorebar="${c.key}">${[1,2,3,4,5].map(n=>`<div class="scorebtn" data-score="${c.key}:${n}">${n}</div>`).join('')}</div>
       <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div>
@@ -1193,6 +1200,7 @@ function renderRedflags(){
   cont.querySelectorAll('[data-flag]').forEach(el=>{ el.addEventListener('change', ()=>{ entrevistaState.redflags[el.dataset.flag]=el.checked; calcular(); }); });
 }
 function addRef(){ entrevistaState.refs.push({name:'',phone:'',relacion:'',confirmado:false}); renderRefs(); }
+function quitarRef(i){ entrevistaState.refs.splice(i,1); renderRefs(); }
 function renderRefs(){
   const cont = document.getElementById('reflist');
   cont.innerHTML = entrevistaState.refs.map((r,i)=>`
@@ -1201,6 +1209,7 @@ function renderRefs(){
       <input type="tel" placeholder="Teléfono" value="${r.phone}" oninput="entrevistaState.refs[${i}].phone=this.value">
       <input type="text" placeholder="Relación" value="${r.relacion}" oninput="entrevistaState.refs[${i}].relacion=this.value">
       <label class="chk"><input type="checkbox" ${r.confirmado?'checked':''} onchange="entrevistaState.refs[${i}].confirmado=this.checked"> Confirmada</label>
+      <button type="button" class="pcard-delete" style="position:static;box-shadow:none;" onclick="quitarRef(${i})" title="Quitar referencia" aria-label="Quitar referencia">${ICONS.trash}</button>
     </div>`).join('');
 }
 function calcular(){
@@ -1331,7 +1340,7 @@ function verDetalle(i){
       <div class="helper">El precio por hora se define por familia en la sección "Familias".</div>
       <button class="btn primary" onclick="contratar('${cd.id}')">Pasar a Niñeras</button>
     </div>`}
-    <div class="actions"><button class="btn ghost" onclick="eliminarCandidata('${cd.id}')">Eliminar candidata</button></div>
+    <div class="actions"><button class="btn danger" onclick="eliminarCandidata('${cd.id}')">Eliminar candidata</button></div>
   `;
 }
 async function contratar(candidataId){
@@ -1414,13 +1423,13 @@ function filtrarNinieras(){
   if(!filtradas.length){ grid.innerHTML = countMsg + '<div class="empty" style="grid-column:1/-1;">Ninguna niñera coincide con la búsqueda.</div>'; return; }
   grid.innerHTML = countMsg + filtradas.map(n=>`
     <div class="pcard">
+      <button class="pcard-delete" onclick="eliminarNinera('${n.id}')" title="Eliminar niñera" aria-label="Eliminar niñera">${ICONS.trash}</button>
       <div class="ph">${n.foto?`<img src="${n.foto}" onerror="this.parentElement.innerHTML='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="name">${n.nombre} <span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span></div>
       <div class="meta">${n.zona||'zona s/d'}${n.candidatas?.edad?' · '+n.candidatas.edad:''}<br>${n.candidatas?.universidad||''}${n.candidatas?.idiomas?' · '+n.candidatas.idiomas:''}</div>
       <div class="rowbtns">
         <button class="smallbtn" onclick="verNinera('${n.id}')">Ver ficha</button>
         <button class="smallbtn" onclick="editarNinera('${n.id}')">Editar</button>
-        <button class="smallbtn danger" onclick="eliminarNinera('${n.id}')">Eliminar</button>
         <button class="smallbtn" onclick="generarMensajeCV('${n.id}')">Generar CV</button>
       </div>
     </div>`).join('');
@@ -1437,7 +1446,7 @@ async function verNinera(id){
       <h2>${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
       <div class="fichadl" style="margin-top:10px;">${rows||'<div>Sin más datos.</div>'}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
       <div style="margin-top:18px;">
-        <h2 style="font-size:15px;">Sittings y traslados de ${n.nombre.split(' ')[0]}</h2>
+        <h2 class="card-section-title" style="margin-top:0;">Sittings y traslados de ${n.nombre.split(' ')[0]}</h2>
         <div class="grid2">
           <div class="field"><label>Familia</label><select id="vn-familia" onchange="renderNineraHistorial('${n.id}')"><option value="">Todas</option></select></div>
           <div class="field"><label>Período</label><select id="vn-periodo" onchange="renderNineraHistorial('${n.id}')">
@@ -1486,11 +1495,11 @@ function renderNineraHistorial(id){
   const totalPago = items.reduce((s,r)=>s+(Number(r.pago_ninera)||0),0);
   cont.innerHTML = `
     <div class="helper" style="margin:8px 0;">${items.length} registro(s) · total pagado a la niñera: $${totalPago.toLocaleString('es-UY')}</div>
-    <table class="asigtable"><thead><tr><th>Fecha</th><th>Familia</th><th>Cobro</th><th>Pago</th></tr></thead>
+    <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Familia</th><th>Cobro</th><th>Pago</th></tr></thead>
     <tbody>${items.map(r=>{
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
       return `<tr><td>${fechaFmt}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td></tr>`;
-    }).join('')}</tbody></table>`;
+    }).join('')}</tbody></table></div>`;
 }
 function editarNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
@@ -1725,8 +1734,8 @@ function renderFamiliasList(){
       ${f.notas?`<div class="helper">${f.notas}</div>`:''}
       ${historialHtml}
       <div id="fam-editbox-${f.id}"></div>
-      <table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
-        <tbody>${asigRows || '<tr><td colspan="3" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table>
+      <div class="tablewrap"><table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
+        <tbody>${asigRows || '<tr><td colspan="3" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table></div>
       <div class="grid3" style="margin-top:14px;">
         <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
         <div class="field"><label>Hora inicio</label><input type="time" id="asig-horaini-${f.id}"></div>
@@ -1738,7 +1747,7 @@ function renderFamiliasList(){
         </div>
       </div>
       <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Asignar niñera</button>
-      <div class="actions" style="margin-top:14px;"><button class="smallbtn danger" onclick="eliminarFamilia('${f.id}')">Eliminar familia</button></div>
+      <div class="actions" style="margin-top:16px;padding-top:12px;border-top:1px dashed var(--line);"><button class="smallbtn danger" onclick="eliminarFamilia('${f.id}')">Eliminar familia</button></div>
     </div>`;
   }).join('');
 }
@@ -1908,11 +1917,11 @@ function renderSitHistorial(){
   const totalPago = items.reduce((s,r)=>s+(Number(r.pago_ninera)||0),0);
   cont.innerHTML = `
     <div class="helper" style="margin:8px 0;">${items.length} registro(s) · cobrado $${totalCobro.toLocaleString('es-UY')} · pagado $${totalPago.toLocaleString('es-UY')}</div>
-    <table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
+    <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
     <tbody>${items.map(r=>{
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
       return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
-    }).join('')}</tbody></table>`;
+    }).join('')}</tbody></table></div>`;
 }
 async function cargarSitBase(){
   const [{data:fams}, {data:nins}] = await Promise.all([
@@ -2237,12 +2246,12 @@ async function cargarSitLista(){
   if(!sitItems.length){ wrap.innerHTML = `<div class="empty">No hay registros cargados en ${monthLabel(sitMes)} todavía.</div>`; return; }
   wrap.innerHTML = `
     <h2>Registros de ${monthLabel(sitMes)}</h2>
-    <table class="asigtable"><thead><tr><th>Fecha</th><th>Tipo</th><th>Familia</th><th>Niñera</th><th>Cobro</th><th>Pago</th><th>Margen</th><th></th></tr></thead>
+    <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Tipo</th><th>Familia</th><th>Niñera</th><th>Cobro</th><th>Pago</th><th>Margen</th><th></th></tr></thead>
     <tbody>${sitItems.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td>${r.tipo==='sitting'?'Sitting':'Traslado'}</td><td>${r.familia_nombre}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><button class="smallbtn" onclick="editarSitting('${r.id}')">Editar</button> <button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></td></tr>`;
-    }).join('')}</tbody></table>
+      return `<tr><td>${fechaFmt}</td><td>${r.tipo==='sitting'?'Sitting':'Traslado'}</td><td>${r.familia_nombre}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="editarSitting('${r.id}')">Editar</button><button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></div></td></tr>`;
+    }).join('')}</tbody></table></div>
   `;
 }
 function exportarSitCSV(){
