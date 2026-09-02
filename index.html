@@ -93,6 +93,19 @@ textarea{resize:vertical;min-height:54px;}
 .agenda-ninera-pick input{margin:0;}
 .agenda-ninerarow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);}
 .agenda-ninerarow:last-child{border-bottom:none;}
+.autocomplete-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;margin-top:4px;max-height:220px;overflow-y:auto;box-shadow:var(--shadow-md);z-index:30;}
+.autocomplete-item{padding:9px 12px;font-size:14px;cursor:pointer;color:var(--ink);}
+.autocomplete-item:hover,.autocomplete-item.hl{background:var(--accent-soft);}
+.autocomplete-empty{padding:9px 12px;font-size:13px;color:var(--ink-soft);}
+.timepick{display:flex;align-items:center;gap:5px;}
+.timepick select{width:auto;flex:1;min-width:0;text-align:center;font-family:'IBM Plex Mono',monospace;}
+.timepick span{color:var(--ink-soft);font-weight:600;}
+.moneyfield{position:relative;}
+.moneyfield input{padding-left:22px;padding-right:32px;}
+.moneyfield::before{content:'$';position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink-soft);font-size:14px;pointer-events:none;}
+.moneyfield::after{content:'/h';position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--ink-soft);font-size:12.5px;pointer-events:none;}
+.navitem{position:relative;}
+.navdot{position:absolute;top:6px;right:10px;width:9px;height:9px;border-radius:50%;background:var(--clay-text);border:2px solid #5B5FA0;}
 .q{background:var(--accent-soft);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:13.5px;color:var(--ink);line-height:1.45;}
 .scorebar{display:flex;gap:6px;margin-top:10px;}
 .scorebtn{flex:1;text-align:center;padding:9px 0;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);}
@@ -568,15 +581,18 @@ function renderSidebar(){
       ${MODULOS.map(m=>`
         <button class="navitem ${activeTop===m.key?'active':''}" onclick="setModulo('${m.key}')" title="${m.label}">
           <div class="navitem-ic">${ICONS[m.key]}</div><div class="navitem-label">${m.label}</div>
+          ${m.key==='agenda' ? `<span id="agenda-navdot"></span>` : ''}
         </button>`).join('')}
     </nav>
     <div class="sidebar-foot">
       ${session.user.email}<br><button onclick="logout()">Cerrar sesión</button>
     </div>
   `;
+  actualizarAgendaBadge();
 }
 
 const DIAS_LABEL = {L:'Lun',M:'Mar',X:'Mié',J:'Jue',V:'Vie',S:'Sáb',D:'Dom'};
+const DIAS_CORTO = {L:'Lu',M:'Ma',X:'Mi',J:'Ju',V:'Vi',S:'Sa',D:'Do'};
 function diaHoy(){ return ['D','L','M','X','J','V','S'][new Date().getDay()]; }
 function fechaHoyLarga(){
   const f = new Intl.DateTimeFormat('es-UY', {weekday:'long', day:'numeric', month:'long'}).format(new Date());
@@ -618,7 +634,7 @@ async function loadDashboardData(){
   // Una sola tanda en paralelo con TODAS las consultas independientes del dashboard.
   // Antes eran 4 tandas en serie (4 idas y vueltas a Supabase); ahora es 1.
   // allSettled: si una consulta falla, las demás secciones igual se renderizan.
-  const [pipelineR, ninierasR, familiasR, sitsR, gastosR, asigR, hoyR] = await Promise.allSettled([
+  const [pipelineR, ninierasR, familiasR, sitsR, gastosR, asigR, hoyR, solR] = await Promise.allSettled([
     sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
     sb.from('ninieras').select('nombre,tipo,activa'),
     sb.from('familias').select('cobro_hora'),
@@ -626,6 +642,7 @@ async function loadDashboardData(){
     sb.from('gastos_generales').select('fecha,monto'),
     sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false}),
     sb.from('sittings_traslados').select('familia_nombre,ninera_nombre').eq('fecha', todayISO()),
+    sb.from('solicitudes').select('*').eq('fecha', todayISO()).eq('estado','confirmada'),
   ]);
   const okData = r => (r.status==='fulfilled' && !r.value.error) ? (r.value.data||[]) : [];
 
@@ -712,6 +729,21 @@ async function loadDashboardData(){
       (ninTipos||[]).forEach(n=>{ tipoPorNinera[normaliza(n.nombre)] = n.tipo || 'Niñera'; });
       const hoy = diaHoy();
       agendaItems = (data||[]).filter(a => Array.isArray(a.dias) && a.dias.includes(hoy));
+
+      // Solicitudes puntuales (Agenda) confirmadas para hoy — se suman a los horarios fijos.
+      const solicitudesHoy = okData(solR);
+      if(solicitudesHoy.length){
+        const { data: snHoy } = await sb.from('solicitud_ninieras').select('*').in('solicitud_id', solicitudesHoy.map(s=>s.id)).eq('estado','confirmada');
+        const porSol = {};
+        (snHoy||[]).forEach(r=>{ (porSol[r.solicitud_id] ||= []).push(r); });
+        solicitudesHoy.forEach(s=>{
+          (porSol[s.id]||[]).forEach(n=>{
+            agendaItems.push({ ninera_nombre: n.ninera_nombre, hora_inicio: s.hora_inicio, hora_fin: s.hora_fin, familias: {nombre: s.familia_nombre}, _tipo: s.tipo });
+          });
+        });
+      }
+      agendaItems.sort((a,b)=> (a.hora_inicio||'').localeCompare(b.hora_inicio||''));
+
       if(!agendaItems.length){
         box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>';
       } else {
@@ -720,7 +752,7 @@ async function loadDashboardData(){
         const minDe = (hhmm) => { if(!hhmm) return null; const [h,m] = hhmm.split(':').map(Number); return h*60+m; };
         let nowInsertado = false;
         const filas = agendaItems.map(a=>{
-          const esTraslado = tipoPorNinera[normaliza(a.ninera_nombre)] === 'Traslados';
+          const esTraslado = a._tipo ? a._tipo==='traslado' : tipoPorNinera[normaliza(a.ninera_nombre)] === 'Traslados';
           const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : 'Sin horario';
           const finMin = minDe(a.hora_fin) ?? minDe(a.hora_inicio);
           const yaPaso = finMin !== null && finMin < minAhora;
@@ -1055,9 +1087,13 @@ function agendaTop(hhmm){
   if(min==null) return 0;
   return Math.max(0, Math.min(AGENDA_GRIDH, ((min-AGENDA_START_MIN)/60)*AGENDA_ROWH));
 }
-function agendaAlto(inicio, fin){
-  const mi = agendaMinutos(inicio), mf = agendaMinutos(fin);
+function agendaAlto(inicio, fin, cruza){
+  const mi = agendaMinutos(inicio);
   if(mi==null) return 40;
+  if(cruza){
+    return Math.max(28, AGENDA_GRIDH - agendaTop(inicio));
+  }
+  const mf = agendaMinutos(fin);
   const dur = (mf!=null && mf>mi) ? (mf-mi) : 60;
   return Math.max(28, (dur/60)*AGENDA_ROWH);
 }
@@ -1089,6 +1125,13 @@ function mensajeWA(s, nineraNombre){
 function agendaTelefonoNinera(nombre){
   const n = agendaNinierasBase.find(x=>normaliza(x.nombre)===normaliza(nombre));
   return n ? n.telefono : '';
+}
+async function actualizarAgendaBadge(){
+  const dot = document.getElementById('agenda-navdot');
+  if(!dot) return;
+  const { data, error } = await sb.from('solicitudes').select('id').in('estado', ['sin_asignar','pendiente_confirmar']).gte('fecha', todayISO());
+  if(error) return;
+  dot.innerHTML = (data && data.length) ? '<span class="navdot"></span>' : '';
 }
 
 async function renderAgenda(cont){
@@ -1122,10 +1165,17 @@ async function cargarAgendaBase(){
   agendaNinierasBase = nins || [];
 }
 
+function diaDeFecha(fechaISO){
+  const d = new Date(fechaISO+'T00:00:00');
+  return ['D','L','M','X','J','V','S'][d.getDay()];
+}
 async function cargarAgendaSolicitudes(){
   const wrap = document.getElementById('agenda-grid-wrap');
   if(wrap) wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
-  const { data: sols, error } = await sb.from('solicitudes').select('*').eq('fecha', agendaFecha).order('hora_inicio', {ascending:true});
+  const [{data:sols, error}, {data:asigs}] = await Promise.all([
+    sb.from('solicitudes').select('*').eq('fecha', agendaFecha).order('hora_inicio', {ascending:true}),
+    sb.from('asignaciones').select('*, familias(nombre)'),
+  ]);
   if(error){ if(wrap) wrap.innerHTML = errBox(error); return; }
   const ids = (sols||[]).map(s=>s.id);
   let ninerasPorSol = {};
@@ -1133,7 +1183,27 @@ async function cargarAgendaSolicitudes(){
     const { data: sn } = await sb.from('solicitud_ninieras').select('*').in('solicitud_id', ids);
     (sn||[]).forEach(r=>{ (ninerasPorSol[r.solicitud_id] ||= []).push(r); });
   }
-  agendaSolicitudes = (sols||[]).map(s=>({...s, ninieras: ninerasPorSol[s.id]||[]}));
+  const puntuales = (sols||[]).map(s=>({...s, ninieras: ninerasPorSol[s.id]||[], _fuente:'solicitud'}));
+
+  // Horarios fijos (tabla asignaciones) que correspondan al día de la semana de agendaFecha.
+  const diaSemana = diaDeFecha(agendaFecha);
+  const fijas = (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana)).map(a=>({
+    id: 'asig:'+a.id,
+    _fuente: 'asignacion',
+    _raw: a,
+    _asigId: a.id,
+    familia_nombre: a.familias?.nombre || '(familia)',
+    tipo: 'sitting',
+    hora_inicio: a.hora_inicio,
+    hora_fin: a.hora_fin,
+    termina_dia_siguiente: false,
+    zona: null,
+    cobro_familia: null,
+    estado: 'confirmada',
+    ninieras: [{ id:'asigninera:'+a.id, ninera_nombre:a.ninera_nombre, estado:'confirmada' }],
+  }));
+
+  agendaSolicitudes = [...puntuales, ...fijas].sort((a,b)=>(a.hora_inicio||'').localeCompare(b.hora_inicio||''));
   renderAgendaGrid();
 }
 
@@ -1166,41 +1236,181 @@ function renderAgendaGrid(){
 }
 function renderAgendaColumna(s){
   const top = agendaTop(s.hora_inicio);
-  const alto = agendaAlto(s.hora_inicio, s.hora_fin);
+  const alto = agendaAlto(s.hora_inicio, s.hora_fin, s.termina_dia_siguiente);
   let claseEstado = 'sinasignar';
   let resumen = s.tipo==='traslado' ? 'Traslado' : 'Sitting';
   if(s.estado==='pendiente_confirmar'){ claseEstado='pendiente'; resumen = s.ninieras.map(n=>(n.ninera_nombre||'').split(' ')[0]).join(', '); }
-  if(s.estado==='confirmada'){ claseEstado='confirmada'; resumen = s.ninieras.map(n=>(n.ninera_nombre||'').split(' ')[0]).join(' + '); }
+  if(s.estado==='confirmada'){ claseEstado='confirmada'; resumen = s.ninieras.map(n=>(n.ninera_nombre||'').split(' ')[0]).join(' + ') + (s._fuente==='asignacion' ? ' · fijo' : ''); }
   if(s.estado==='cancelada'){ claseEstado='cancelada'; resumen = 'Cancelada'; }
-  const horaTxt = s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5);
+  const horaTxt = s.termina_dia_siguiente
+    ? `${(s.hora_inicio||'--:--').slice(0,5)} → +1 día${s.hora_fin?' '+s.hora_fin.slice(0,5):''}`
+    : (s.hora_inicio ? (s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5)) : 'Sin horario');
   return `<div class="agenda-col"><div class="agenda-card ${claseEstado}" style="top:${top}px;height:${alto}px;" onclick="abrirModalSolicitud('${s.id}')">
     <div class="agenda-card-hora">${horaTxt}</div>
     <div class="agenda-card-sub">${resumen}</div>
   </div></div>`;
 }
 
+function selectHora(idPrefix, valHH='', valMM=''){
+  const horas = Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+  const mins = ['00','15','30','45'];
+  return `<div class="timepick">
+    <select id="${idPrefix}-hh" onchange="actualizarAgendaTotal()"><option value="">--</option>${horas.map(h=>`<option value="${h}" ${h===valHH?'selected':''}>${h}</option>`).join('')}</select>
+    <span>:</span>
+    <select id="${idPrefix}-mm" onchange="actualizarAgendaTotal()"><option value="">--</option>${mins.map(m=>`<option value="${m}" ${m===valMM?'selected':''}>${m}</option>`).join('')}</select>
+  </div>`;
+}
+function leerHora(idPrefix){
+  const hh = document.getElementById(idPrefix+'-hh')?.value;
+  const mm = document.getElementById(idPrefix+'-mm')?.value;
+  if(!hh || mm===''){ return ''; }
+  return `${hh}:${mm}`;
+}
+function setHoraSelect(idPrefix, hhmm){
+  if(!hhmm) return;
+  const [hh,mm] = hhmm.slice(0,5).split(':');
+  const selHH = document.getElementById(idPrefix+'-hh');
+  const selMM = document.getElementById(idPrefix+'-mm');
+  if(selHH) selHH.value = hh;
+  if(selMM){
+    // el selector solo ofrece :00/:15/:30/:45 — redondea al paso más cercano si el dato guardado tenía otro minuto
+    const mins = ['00','15','30','45'];
+    let mejor = mins[0], mejorDist = 60;
+    mins.forEach(m=>{ const dist = Math.abs(Number(m)-Number(mm)); if(dist<mejorDist){ mejorDist=dist; mejor=m; } });
+    selMM.value = mejor;
+  }
+}
+function mostrarAgendaFamiliaDropdown(){
+  const input = document.getElementById('agenda-familia');
+  const dd = document.getElementById('agenda-familia-dropdown');
+  if(!input || !dd) return;
+  const q = normaliza(input.value.trim());
+  const matches = agendaFamilias.filter(f=>!q || normaliza(f.nombre).includes(q)).slice(0,8);
+  if(!matches.length){
+    dd.innerHTML = q ? `<div class="autocomplete-empty">Ninguna familia coincide — se va a cargar como nueva.</div>` : '';
+    dd.style.display = q ? 'block' : 'none';
+    return;
+  }
+  dd.innerHTML = matches.map(f=>`<div class="autocomplete-item" onmousedown="elegirAgendaFamilia('${f.id}')">${f.nombre}</div>`).join('');
+  dd.style.display = 'block';
+}
+function ocultarAgendaFamiliaDropdown(){
+  setTimeout(()=>{ const dd = document.getElementById('agenda-familia-dropdown'); if(dd) dd.style.display='none'; }, 150);
+}
+function elegirAgendaFamilia(id){
+  const f = agendaFamilias.find(x=>x.id===id);
+  if(!f) return;
+  document.getElementById('agenda-familia').value = f.nombre;
+  const dd = document.getElementById('agenda-familia-dropdown');
+  if(dd) dd.style.display = 'none';
+  onAgendaFamiliaInput();
+}
 function onAgendaFamiliaInput(){
+  mostrarAgendaFamiliaDropdown();
   const val = document.getElementById('agenda-familia').value;
   const f = agendaFamilias.find(x=>normaliza(x.nombre)===normaliza(val));
   const zonaInput = document.getElementById('agenda-zona');
-  if(zonaInput && f && !zonaInput.value) zonaInput.value = f.zona||'';
+  const cobroInput = document.getElementById('agenda-cobro');
+  if(f){
+    if(zonaInput && !zonaInput.value) zonaInput.value = f.zona||'';
+    if(cobroInput && !cobroInput.value && f.cobro_hora) cobroInput.value = f.cobro_hora;
+  }
+  actualizarAgendaTotal();
+}
+function onAgendaCruzaChange(){
+  const cruza = document.getElementById('agenda-cruza-medianoche').checked;
+  const wrapFin = document.getElementById('agenda-hora-fin-wrap');
+  if(wrapFin) wrapFin.querySelector('.helper')?.remove();
+  if(cruza && wrapFin){
+    wrapFin.insertAdjacentHTML('beforeend', `<div class="helper" style="margin-top:4px;">Termina al día siguiente, a esta hora.</div>`);
+  }
+  actualizarAgendaTotal();
+}
+function actualizarAgendaTotal(){
+  const el = document.getElementById('agenda-total-preview');
+  if(!el) return;
+  const tarifa = Number(document.getElementById('agenda-cobro')?.value||0);
+  const hi = leerHora('agenda-hora-inicio');
+  const hf = leerHora('agenda-hora-fin');
+  const cruza = document.getElementById('agenda-cruza-medianoche')?.checked;
+  if(!tarifa || !hi || !hf){ el.textContent=''; return; }
+  const mi = agendaMinutos(hi), mf = agendaMinutos(hf);
+  const durMin = cruza ? ((24*60-mi)+mf) : (mf-mi);
+  if(durMin<=0){ el.textContent = !cruza && mf<=mi ? 'La hora de fin tiene que ser después de la de inicio (o marcá "Termina al día siguiente").' : ''; return; }
+  const horas = durMin/60;
+  const total = tarifa*horas;
+  el.textContent = `Total estimado: $${Math.round(total).toLocaleString('es-UY')} (${horas.toFixed(1).replace('.0','')} h)`;
+}
+let agendaModoNueva = 'puntual';
+function onAgendaModoChange(modo){
+  agendaModoNueva = modo;
+  document.getElementById('agenda-modo-puntual-btn').classList.toggle('selected', modo==='puntual');
+  document.getElementById('agenda-modo-repetir-btn').classList.toggle('selected', modo==='repetir');
+  document.getElementById('agenda-bloque-puntual').style.display = modo==='puntual' ? 'block' : 'none';
+  document.getElementById('agenda-bloque-repetir').style.display = modo==='repetir' ? 'block' : 'none';
+}
+function toggleAgendaDia(btn){
+  btn.classList.toggle('selected');
+  renderAgendaHorarioPorDia();
+}
+function onAgendaRepetirVariaChange(){
+  const varia = document.getElementById('agenda-repetir-varia').checked;
+  document.getElementById('agenda-repetir-horario-unico').style.display = varia ? 'none' : 'grid';
+  document.getElementById('agenda-repetir-horario-por-dia').style.display = varia ? 'block' : 'none';
+  if(varia) renderAgendaHorarioPorDia();
+}
+function renderAgendaHorarioPorDia(){
+  const cont = document.getElementById('agenda-repetir-horario-por-dia');
+  if(!cont || cont.style.display==='none') return;
+  const dias = [...document.querySelectorAll('#agenda-repetir-dias .daybtn.selected')].map(b=>b.dataset.dia);
+  if(!dias.length){ cont.innerHTML = '<div class="helper">Elegí los días primero.</div>'; return; }
+  cont.innerHTML = dias.map(d=>`
+    <div class="grid3" style="align-items:end;margin-bottom:8px;">
+      <div class="field" style="margin-bottom:0;"><label>${DIAS_CORTO[d]}</label></div>
+      <div class="field" style="margin-bottom:0;">${selectHora('agenda-rep-hi-'+d)}</div>
+      <div class="field" style="margin-bottom:0;">${selectHora('agenda-rep-hf-'+d)}</div>
+    </div>`).join('');
 }
 function abrirModalNuevaSolicitud(){
+  agendaModoNueva = 'puntual';
   const html = `
     <h2>Nueva solicitud</h2>
-    <div class="field"><label>Familia</label>
-      <input type="text" id="agenda-familia" list="agenda-familias-dl" autocomplete="off" oninput="onAgendaFamiliaInput()" placeholder="Escribí el nombre — si es nueva, se carga igual">
-      <datalist id="agenda-familias-dl">${agendaFamilias.map(f=>`<option value="${f.nombre}">`).join('')}</datalist>
+    <div class="field" style="position:relative;">
+      <label>Familia</label>
+      <input type="text" id="agenda-familia" autocomplete="off" oninput="onAgendaFamiliaInput()" onfocus="mostrarAgendaFamiliaDropdown()" onblur="ocultarAgendaFamiliaDropdown()" placeholder="Escribí el nombre — si es nueva, se carga igual">
+      <div id="agenda-familia-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
     </div>
-    <div class="grid3">
-      <div class="field"><label>Tipo</label><select id="agenda-tipo"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
-      <div class="field"><label>Zona</label><input type="text" id="agenda-zona" placeholder="Pocitos, Carrasco…"></div>
-      <div class="field"><label>Fecha</label><input type="date" id="agenda-nueva-fecha" value="${agendaFecha}"></div>
+    <div class="tiporow" style="margin-bottom:14px;">
+      <button type="button" class="tipobtn selected" id="agenda-modo-puntual-btn" onclick="onAgendaModoChange('puntual')">Puntual</button>
+      <button type="button" class="tipobtn" id="agenda-modo-repetir-btn" onclick="onAgendaModoChange('repetir')">Fijo (se repite)</button>
     </div>
-    <div class="grid3">
-      <div class="field"><label>Hora inicio</label><input type="time" id="agenda-hora-inicio"></div>
-      <div class="field"><label>Hora fin</label><input type="time" id="agenda-hora-fin"></div>
-      <div class="field"><label>Cobro a la familia</label><input type="number" id="agenda-cobro" placeholder="$"></div>
+    <div id="agenda-bloque-puntual">
+      <div class="grid3">
+        <div class="field"><label>Tipo</label><select id="agenda-tipo"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
+        <div class="field"><label>Zona</label><input type="text" id="agenda-zona" placeholder="Pocitos, Carrasco…"></div>
+        <div class="field"><label>Fecha</label><input type="date" id="agenda-nueva-fecha" value="${agendaFecha}"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Hora inicio</label>${selectHora('agenda-hora-inicio')}</div>
+        <div class="field" id="agenda-hora-fin-wrap"><label>Hora fin</label>${selectHora('agenda-hora-fin')}</div>
+        <div class="field"><label>Tarifa por hora</label><div class="moneyfield"><input type="number" id="agenda-cobro" oninput="actualizarAgendaTotal()"></div></div>
+      </div>
+      <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="agenda-cruza-medianoche" onchange="onAgendaCruzaChange()"> Termina al día siguiente</label>
+      <div class="helper" id="agenda-total-preview" style="min-height:16px;"></div>
+    </div>
+    <div id="agenda-bloque-repetir" style="display:none;">
+      <div class="field"><label>Niñera</label><select id="agenda-repetir-ninera"><option value="">Elegí una niñera</option>${agendaNinierasBase.map(n=>`<option value="${n.nombre}">${n.nombre}</option>`).join('')}</select></div>
+      <div class="field"><label>Días</label>
+        <div class="dayrow" id="agenda-repetir-dias">
+          ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" data-dia="${d}" onclick="toggleAgendaDia(this)">${DIAS_CORTO[d]}</button>`).join('')}
+        </div>
+      </div>
+      <label class="chk"><input type="checkbox" id="agenda-repetir-varia" onchange="onAgendaRepetirVariaChange()"> El horario cambia según el día</label>
+      <div id="agenda-repetir-horario-unico" class="grid2" style="margin-top:6px;">
+        <div class="field"><label>Hora inicio</label>${selectHora('agenda-rep-hi')}</div>
+        <div class="field"><label>Hora fin</label>${selectHora('agenda-rep-hf')}</div>
+      </div>
+      <div id="agenda-repetir-horario-por-dia" style="display:none;margin-top:6px;"></div>
     </div>
     <div id="agenda-nueva-warn"></div>
     <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarSolicitud()">Guardar solicitud</button>
@@ -1208,28 +1418,67 @@ function abrirModalNuevaSolicitud(){
   abrirModal(html);
 }
 async function guardarSolicitud(){
+  if(agendaModoNueva==='repetir') return guardarAsignacionFijaNueva();
   const familiaTxt = document.getElementById('agenda-familia').value.trim();
   const tipo = document.getElementById('agenda-tipo').value;
   const zona = document.getElementById('agenda-zona').value.trim();
   const fecha = document.getElementById('agenda-nueva-fecha').value;
-  const horaInicio = document.getElementById('agenda-hora-inicio').value;
-  const horaFin = document.getElementById('agenda-hora-fin').value;
-  const cobro = document.getElementById('agenda-cobro').value;
+  const horaInicio = leerHora('agenda-hora-inicio');
+  const horaFin = leerHora('agenda-hora-fin');
+  const cruza = document.getElementById('agenda-cruza-medianoche').checked;
+  const tarifa = document.getElementById('agenda-cobro').value;
   const warn = document.getElementById('agenda-nueva-warn');
   if(!familiaTxt || !fecha || !horaInicio){ warn.innerHTML = '<div class="warnbox">Completá al menos familia, fecha y hora de inicio.</div>'; return; }
+  if(!cruza && horaFin && horaFin <= horaInicio){
+    warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio. Si termina pasada la medianoche, marcá "Termina al día siguiente".</div>';
+    return;
+  }
+  let cobroFinal = null;
+  if(tarifa && horaFin){
+    const mi = agendaMinutos(horaInicio), mf = agendaMinutos(horaFin);
+    const durMin = cruza ? ((24*60-mi)+mf) : (mf-mi);
+    cobroFinal = durMin>0 ? Math.round(Number(tarifa)*(durMin/60)) : Number(tarifa);
+  } else if(tarifa){
+    cobroFinal = Number(tarifa);
+  }
   const fam = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(familiaTxt));
   const { error } = await sb.from('solicitudes').insert({
     familia_id: fam ? fam.id : null,
     familia_nombre: familiaTxt,
     tipo, zona: zona || (fam ? fam.zona : null),
     fecha, hora_inicio: horaInicio, hora_fin: horaFin || null,
-    cobro_familia: cobro ? Number(cobro) : null,
+    termina_dia_siguiente: cruza,
+    cobro_familia: cobroFinal,
     estado: 'sin_asignar',
   });
   if(error){ warn.innerHTML = errBox(error); return; }
   cerrarModal();
   agendaFecha = fecha;
   await cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
+}
+async function guardarAsignacionFijaNueva(){
+  const familiaTxt = document.getElementById('agenda-familia').value.trim();
+  const nineraNombre = document.getElementById('agenda-repetir-ninera').value;
+  const warn = document.getElementById('agenda-nueva-warn');
+  if(!familiaTxt || !nineraNombre){ warn.innerHTML = '<div class="warnbox">Elegí la familia y la niñera.</div>'; return; }
+  const dias = [...document.querySelectorAll('#agenda-repetir-dias .daybtn.selected')].map(b=>b.dataset.dia);
+  if(!dias.length){ warn.innerHTML = '<div class="warnbox">Elegí al menos un día.</div>'; return; }
+  const varia = document.getElementById('agenda-repetir-varia').checked;
+  const fam = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(familiaTxt));
+  let filas = [];
+  if(varia){
+    for(const d of dias){
+      filas.push({ familia_id: fam?fam.id:null, ninera_nombre:nineraNombre, dias:[d], hora_inicio: leerHora('agenda-rep-hi-'+d)||null, hora_fin: leerHora('agenda-rep-hf-'+d)||null });
+    }
+  } else {
+    filas.push({ familia_id: fam?fam.id:null, ninera_nombre:nineraNombre, dias, hora_inicio: leerHora('agenda-rep-hi')||null, hora_fin: leerHora('agenda-rep-hf')||null });
+  }
+  const { error } = await sb.from('asignaciones').insert(filas);
+  if(error){ warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
 }
 
 async function abrirModalAsignar(solicitudId){
@@ -1296,12 +1545,16 @@ async function guardarAsignacion(solicitudId){
   cerrarModal();
   await cargarAgendaSolicitudes();
   abrirModalSolicitud(solicitudId);
+  actualizarAgendaBadge();
 }
 
 function abrirModalSolicitud(id){
   const s = agendaSolicitudes.find(x=>x.id===id);
   if(!s) return;
-  const horario = s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5);
+  if(s._fuente==='asignacion'){ abrirModalAsignacionFija(s); return; }
+  const horario = s.termina_dia_siguiente
+    ? `${s.hora_inicio.slice(0,5)} → día siguiente${s.hora_fin?' '+s.hora_fin.slice(0,5):''}`
+    : (s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5));
   const fechaTxt = new Date(s.fecha+'T00:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'});
   let ninierasHtml = '';
   if(s.ninieras.length){
@@ -1329,6 +1582,39 @@ function abrirModalSolicitud(id){
   `;
   abrirModal(cuerpo);
 }
+function abrirModalAsignacionFija(s){
+  const asigId = s._asigId;
+  const a = s._raw;
+  const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : 'Sin horario cargado';
+  const diasTxt = (a.dias||[]).map(d=>DIAS_CORTO[d]||d).join(' ');
+  const cuerpo = `
+    <h2>${s.familia_nombre}</h2>
+    <div class="helper">Horario fijo · ${diasTxt || 'sin días'} · ${horario}</div>
+    <div class="field" style="margin-top:14px;"><label>Niñera asignada</label>
+      <select id="agenda-fija-ninera-${asigId}">${agendaNinierasBase.map(n=>`<option value="${n.nombre}" ${n.nombre===a.ninera_nombre?'selected':''}>${n.nombre}</option>`).join('')}</select>
+    </div>
+    <div id="agenda-fija-warn"></div>
+    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="cambiarNineraAsignacionFija('${asigId}')">Guardar niñera</button>
+    <button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda('${asigId}')">Quitar esta asignación fija</button>
+  `;
+  abrirModal(cuerpo);
+}
+async function cambiarNineraAsignacionFija(asigId){
+  const nueva = document.getElementById('agenda-fija-ninera-'+asigId).value;
+  const warn = document.getElementById('agenda-fija-warn');
+  if(!nueva) return;
+  const { error } = await sb.from('asignaciones').update({ninera_nombre: nueva}).eq('id', asigId);
+  if(error){ warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+}
+async function quitarAsignacionFijaDesdeAgenda(asigId){
+  const ok = await confirmarAccion('¿Quitar esta asignación fija? Ya no va a aparecer en la Agenda ni en Hoy.', 'Quitar');
+  if(!ok) return;
+  await quitarAsignacion(asigId);
+  cerrarModal();
+  cargarAgendaSolicitudes();
+}
 async function confirmarNinera(solNineraId){
   const { error } = await sb.from('solicitud_ninieras').update({estado:'confirmada'}).eq('id', solNineraId);
   if(error){ alert(error.message); return; }
@@ -1343,6 +1629,7 @@ async function confirmarNinera(solNineraId){
     }
     abrirModalSolicitud(solId);
   }
+  actualizarAgendaBadge();
 }
 async function cancelarSolicitud(id){
   const ok = await confirmarAccion('¿Cancelar esta solicitud? Las niñeras invitadas quedarán sin efecto.', 'Cancelar solicitud');
@@ -1350,6 +1637,7 @@ async function cancelarSolicitud(id){
   await sb.from('solicitudes').update({estado:'cancelada'}).eq('id', id);
   cerrarModal();
   cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
 }
 
 function renderModulo(){
@@ -2625,8 +2913,8 @@ function verFamilia(id){
     <datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${n.nombre}">`).join('')}</datalist>
     <div class="grid3" style="margin-top:14px;">
       <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
-      <div class="field"><label>Hora inicio</label><input type="time" id="asig-horaini-${f.id}"></div>
-      <div class="field"><label>Hora fin</label><input type="time" id="asig-horafin-${f.id}"></div>
+      <div class="field"><label>Hora inicio</label>${selectHora('asig-horaini-'+f.id)}</div>
+      <div class="field"><label>Hora fin</label>${selectHora('asig-horafin-'+f.id)}</div>
     </div>
     <div class="field"><label>Días</label>
       <div class="dayrow" id="asig-dias-${f.id}">
@@ -2682,7 +2970,7 @@ async function addAsignacion(famId){
   if(!nombre){ toast('Falta el nombre de la niñera.','bad'); return; }
   const dias = Array.from(document.querySelectorAll(`#asig-dias-${famId} .daybtn.selected`)).map(b=>b.textContent);
   const asig = { familia_id:famId, ninera_nombre:nombre, dias,
-    hora_inicio:document.getElementById('asig-horaini-'+famId).value||null, hora_fin:document.getElementById('asig-horafin-'+famId).value||null };
+    hora_inicio:leerHora('asig-horaini-'+famId)||null, hora_fin:leerHora('asig-horafin-'+famId)||null };
   const { error } = await sb.from('asignaciones').insert(asig);
   if(error){ toast('No se pudo agregar: '+error.message,'bad'); return; }
   toast('Niñera asignada.');
@@ -2871,8 +3159,8 @@ function sitCamposTipoHTML(){
   if(sitTipo==='sitting'){
     return `<div class="grid3">
       <div class="field"><label>Fecha</label><input type="date" id="sit-fecha" value="${todayISO()}"></div>
-      <div class="field"><label>Hora inicio</label><input type="time" id="sit-horaini"></div>
-      <div class="field"><label>Hora fin</label><input type="time" id="sit-horafin"></div>
+      <div class="field"><label>Hora inicio</label>${selectHora('sit-horaini')}</div>
+      <div class="field"><label>Hora fin</label>${selectHora('sit-horafin')}</div>
     </div>`;
   }
   return `<div class="grid3">
@@ -3058,8 +3346,8 @@ async function guardarSitting(){
     hora_inicio: null, hora_fin: null, km: null, origen: null, destino: null,
   };
   if(sitTipo==='sitting'){
-    registro.hora_inicio = document.getElementById('sit-horaini').value || null;
-    registro.hora_fin = document.getElementById('sit-horafin').value || null;
+    registro.hora_inicio = leerHora('sit-horaini') || null;
+    registro.hora_fin = leerHora('sit-horafin') || null;
   } else {
     const km = document.getElementById('sit-km').value;
     registro.km = km ? Number(km) : null;
@@ -3102,8 +3390,8 @@ function editarSitting(id){
     document.getElementById('sit-pago').value = r.pago_ninera || 0;
     document.getElementById('sit-notas').value = r.notas || '';
     if(r.tipo==='sitting'){
-      if(document.getElementById('sit-horaini')) document.getElementById('sit-horaini').value = r.hora_inicio ? r.hora_inicio.slice(0,5) : '';
-      if(document.getElementById('sit-horafin')) document.getElementById('sit-horafin').value = r.hora_fin ? r.hora_fin.slice(0,5) : '';
+      setHoraSelect('sit-horaini', r.hora_inicio);
+      setHoraSelect('sit-horafin', r.hora_fin);
     } else {
       if(document.getElementById('sit-km')) document.getElementById('sit-km').value = r.km || '';
       if(document.getElementById('sit-origen')) document.getElementById('sit-origen').value = r.origen || '';
