@@ -3366,7 +3366,7 @@ async function cargarTarifaTrasladoConfig(){
 }
 async function geocodeTomTom(direccion){
   if(!direccion) return null;
-  const url = `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(direccion+', Montevideo, Uruguay')}.json?key=${TOMTOM_KEY}&countrySet=UY&limit=1`;
+  const url = `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(direccion)}.json?key=${TOMTOM_KEY}&countrySet=UY&limit=1&geobias=point:-34.9011,-56.1645`;
   const res = await fetch(url);
   if(!res.ok) return null;
   const data = await res.json();
@@ -3426,7 +3426,7 @@ function attachAddressAutocomplete(inputId, dropdownId, onPick){
     dd.style.display = 'block';
     try{
       // idxSet limitado a calles/direcciones/geografías — sin comercios (POI), que era lo que traía resultados raros.
-      const url = `https://api.tomtom.com/search/2/search/${encodeURIComponent(q+', Montevideo, Uruguay')}.json?key=${TOMTOM_KEY}&countrySet=UY&limit=6&idxSet=Str,PAD,Addr,Geo`;
+      const url = `https://api.tomtom.com/search/2/search/${encodeURIComponent(q)}.json?key=${TOMTOM_KEY}&countrySet=UY&limit=6&idxSet=Str,PAD,Addr,Geo&geobias=point:-34.9011,-56.1645`;
       const res = await fetch(url);
       if(!res.ok){
         dd.innerHTML = res.status===403
