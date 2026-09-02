@@ -398,13 +398,13 @@ const FICHA_CAMPOS = [
 ];
 
 const COMPETENCIAS = [
-  {key:'presentacion', titulo:'Presentación', preguntas:[], helper:'Impresión general: puntualidad, prolijidad, primera impresión.'},
-  {key:'comunicacion', titulo:'Comunicación', preguntas:[], helper:'Claridad para expresarse, fluidez, cómo responde en la charla.'},
   {key:'responsabilidad', titulo:'Responsabilidad y puntualidad', preguntas:['Contame de una vez que tuviste que cambiar un plan personal porque te llamaron para cubrir un turno de urgencia. ¿Qué hiciste?','¿Cómo avisás si sabés que vas a llegar tarde o no vas a poder ir a un turno?']},
   {key:'seguridad', titulo:'Seguridad y manejo de imprevistos', preguntas:['Si un nene se cae y se lastima mientras estás sola con él, ¿qué es lo primero que hacés?','¿Qué harías si no podés comunicarte con los padres en una emergencia?']},
   {key:'limites', titulo:'Límites y disciplina positiva', preguntas:['Contame cómo manejás una rabieta fuerte de un nene de 3-4 años.','¿Qué opinás de poner límites firmes sin gritar ni castigar?']},
   {key:'experiencia', titulo:'Experiencia práctica y logística', preguntas:['Contame tu experiencia con nenes de la edad que buscamos. ¿Manejaste rutinas de sueño o comida?','Si el rol incluye traslados: ¿tenés carné vigente y experiencia manejando con niños en el auto?']},
   {key:'actitud', titulo:'Actitud y calidez', preguntas:['¿Qué te gusta de cuidar niños? Contame una anécdota linda.','¿Cómo te llevás con coordinar horarios por WhatsApp día a día?']},
+  {key:'presentacion', titulo:'Presentación', preguntas:[], helper:'Impresión general: puntualidad, prolijidad, primera impresión.'},
+  {key:'comunicacion', titulo:'Comunicación', preguntas:[], helper:'Claridad para expresarse, fluidez, cómo responde en la charla.'},
 ];
 const REDFLAGS = [
   {key:'tarde', texto:'Llegó tarde a la entrevista sin avisar', critico:false},
@@ -554,7 +554,6 @@ let dashChart = null;
 async function renderDashboard(cont){
   cont.innerHTML = `
     <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1>
-      <div class="helper" style="margin-top:6px;max-width:640px;">Este es el resumen del día: lo que está en curso ahora mismo (postulantes, niñeras, familias), la plata que entró y salió, y quién tiene un sitting o traslado agendado hoy. Los sittings y traslados se cargan desde <b>Sittings &amp; traslados</b> a medida que pasan — de ahí sale todo lo demás.</div>
     </div>
     <div class="statrow" id="statrow">
       <div class="statcard"><div class="statnum">—</div><div class="statlabel">En proceso</div><div class="statnum-trend" id="trend-proceso"></div></div>
@@ -1869,8 +1868,8 @@ async function verNinera(id){
   (async ()=>{
     let { data: cs } = await sb.from('carsitting_datos').select('*').eq('ninera_id', n.id).order('created_at', {ascending:false}).limit(1);
     if(!cs || !cs.length){
-      const alt = await sb.from('carsitting_datos').select('*').ilike('ninera_nombre', n.nombre).order('created_at', {ascending:false}).limit(1);
-      cs = alt.data;
+      const alt = await sb.from('carsitting_datos').select('*').order('created_at', {ascending:false});
+      cs = (alt.data||[]).filter(r=>normaliza(r.ninera_nombre)===normaliza(n.nombre)).slice(0,1);
     }
     const box = document.getElementById('vn-carsitting');
     if(!box || !cs || !cs.length) return;
