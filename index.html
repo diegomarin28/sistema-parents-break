@@ -67,6 +67,32 @@ textarea{resize:vertical;min-height:54px;}
 .mesnav button:hover{background:var(--bg);color:var(--accent);}
 .mesnav button svg{width:15px;height:15px;}
 .mesnav-label{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:14.5px;color:var(--ink);padding:0 10px;min-width:150px;text-align:center;}
+.agenda-legend{display:flex;gap:16px;font-size:12px;color:var(--ink-soft);margin:2px 0 12px;flex-wrap:wrap;}
+.agenda-dot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
+.dot-sinasignar{border:1.5px dashed var(--ink-soft);}
+.dot-pendiente{background:var(--warn);}
+.dot-confirmada{background:var(--accent);}
+.agenda-scroll{overflow-x:auto;padding-bottom:6px;}
+.agenda-grid{display:grid;position:relative;min-width:fit-content;}
+.agenda-colhead{text-align:center;font-size:12px;font-weight:600;padding:0 4px 8px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.agenda-eje{position:relative;}
+.agenda-hora{position:absolute;font-size:10px;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;transform:translateY(-50%);}
+.agenda-col{position:relative;border-left:1px solid var(--line);height:100%;}
+.agenda-card{position:absolute;left:3px;right:3px;border-radius:8px;padding:5px 7px;overflow:hidden;cursor:pointer;transition:box-shadow var(--ease);}
+.agenda-card:hover{box-shadow:var(--shadow-sm);}
+.agenda-card-hora{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;}
+.agenda-card-sub{font-size:11px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.agenda-card.sinasignar{background:#fff;border:2px dashed var(--line);color:var(--ink-soft);}
+.agenda-card.pendiente{background:var(--warn-soft);color:#7A5A16;}
+.agenda-card.confirmada{background:var(--accent-soft);border:1px solid var(--accent);color:#3A3768;}
+.agenda-card.cancelada{opacity:.5;text-decoration:line-through;background:var(--bg);border:1px solid var(--line);}
+.agenda-nowline{position:absolute;left:0;right:0;height:1px;background:var(--accent);z-index:3;}
+.agenda-nowline span{position:absolute;left:0;top:-8px;font-size:10px;color:var(--accent);background:var(--paper);padding:0 3px;font-family:'IBM Plex Mono',monospace;}
+.agenda-tier-label{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin:10px 0 6px;}
+.agenda-ninera-pick{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;cursor:pointer;}
+.agenda-ninera-pick input{margin:0;}
+.agenda-ninerarow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);}
+.agenda-ninerarow:last-child{border-bottom:none;}
 .q{background:var(--accent-soft);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:13.5px;color:var(--ink);line-height:1.45;}
 .scorebar{display:flex;gap:6px;margin-top:10px;}
 .scorebtn{flex:1;text-align:center;padding:9px 0;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);}
@@ -501,11 +527,13 @@ const ICONS = {
   legal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/></svg>`,
   ninieras: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="7.5" r="3.2"/><path d="M6 20c0-3.4 2.7-5.7 6-5.7s6 2.3 6 5.7"/><path d="M9 20v-3M15 20v-3"/></svg>`,
   hoy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>`,
+  agenda: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16"/><path d="M8 3v4M16 3v4"/></svg>`,
   moneyIn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l5-5 4 4 7-8"/><path d="M15 8h5v5"/></svg>`,
   moneyOut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7l5 5 4-4 7 8"/><path d="M15 16h5v-5"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg>`,
 };
 const MODULOS = [
+  {key:'agenda', label:'Agenda', desc:'Solicitudes de familias, asignación de niñeras y calendario del día.'},
   {key:'rrhh', label:'Postulantes', desc:'Candidatas y entrevistas — el pipeline completo, de punta a punta.'},
   {key:'ninieras', label:'Niñeras', desc:'Tu equipo activo, con filtro por nombre y zona.'},
   {key:'familias', label:'Familias', desc:'Familias, tarifas por niñera y márgenes.'},
@@ -587,40 +615,49 @@ async function renderDashboard(cont){
   loadDashboardData();
 }
 async function loadDashboardData(){
+  // Una sola tanda en paralelo con TODAS las consultas independientes del dashboard.
+  // Antes eran 4 tandas en serie (4 idas y vueltas a Supabase); ahora es 1.
+  // allSettled: si una consulta falla, las demás secciones igual se renderizan.
+  const [pipelineR, ninierasR, familiasR, sitsR, gastosR, asigR, hoyR] = await Promise.allSettled([
+    sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
+    sb.from('ninieras').select('nombre,tipo,activa'),
+    sb.from('familias').select('cobro_hora'),
+    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera'),
+    sb.from('gastos_generales').select('fecha,monto'),
+    sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false}),
+    sb.from('sittings_traslados').select('familia_nombre,ninera_nombre').eq('fecha', todayISO()),
+  ]);
+  const okData = r => (r.status==='fulfilled' && !r.value.error) ? (r.value.data||[]) : [];
+
+  // ---- Stat cards ----
   try{
-    const [{data:pipelineRows}, {data:ninierasRows}, {data:familiasRows}] = await Promise.all([
-      sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
-      sb.from('ninieras').select('tipo').eq('activa', true),
-      sb.from('familias').select('cobro_hora'),
-    ]);
     const nums = document.querySelectorAll('#statrow .statnum');
-    const pipeline = pipelineRows||[];
+    const pipeline = okData(pipelineR);
     const sinEntrevistar = pipeline.filter(r=>r.estado==='intake').length;
     const entrevistadas = pipeline.filter(r=>r.estado==='entrevistada').length;
     if(nums[0]) nums[0].textContent = pipeline.length;
     const tProceso = document.getElementById('trend-proceso');
     if(tProceso) tProceso.textContent = pipeline.length ? `${sinEntrevistar} sin entrevistar · ${entrevistadas} entrevistada${entrevistadas===1?'':'s'}` : 'Nadie en el pipeline ahora';
 
-    const ninieras = ninierasRows||[];
-    if(nums[1]) nums[1].textContent = ninieras.length;
-    const soloNinera = ninieras.filter(n=>(n.tipo||'Niñera')==='Niñera').length;
-    const traslados = ninieras.filter(n=>n.tipo==='Traslados').length;
-    const ambas = ninieras.filter(n=>n.tipo==='Ambas').length;
+    const ninierasActivas = okData(ninierasR).filter(n=>n.activa===true);
+    if(nums[1]) nums[1].textContent = ninierasActivas.length;
+    const soloNinera = ninierasActivas.filter(n=>(n.tipo||'Niñera')==='Niñera').length;
+    const traslados = ninierasActivas.filter(n=>n.tipo==='Traslados').length;
+    const ambas = ninierasActivas.filter(n=>n.tipo==='Ambas').length;
     const tNin = document.getElementById('trend-ninieras');
     if(tNin) tNin.textContent = `${soloNinera} niñera · ${traslados} traslados · ${ambas} ambas`;
 
-    const familias = familiasRows||[];
+    const familias = okData(familiasR);
     if(nums[2]) nums[2].textContent = familias.length;
     const conTarifa = familias.filter(f=>f.cobro_hora!==null && f.cobro_hora!=='').length;
     const tFam = document.getElementById('trend-familias');
     if(tFam) tFam.textContent = `${conTarifa} con tarifa fija cargada`;
   }catch(e){}
 
+  // ---- Gráfico ingresos/gastos por mes ----
   try{
-    const [{data:sits}, {data:gastos}] = await Promise.all([
-      sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera'),
-      sb.from('gastos_generales').select('fecha,monto'),
-    ]);
+    const sits = okData(sitsR);
+    const gastos = okData(gastosR);
     const porMes = {};
     (sits||[]).forEach(r=>{
       if(!r.fecha) return;
@@ -662,53 +699,56 @@ async function loadDashboardData(){
     }
   }catch(e){}
 
+  // ---- Agenda de hoy ----
   const box = document.getElementById('agenda');
   let agendaItems = [];
   try{
-    const [{ data, error }, { data: ninTipos }] = await Promise.all([
-      sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false}),
-      sb.from('ninieras').select('nombre,tipo'),
-    ]);
-    if(error){ box.innerHTML = errBox(error); return; }
-    const tipoPorNinera = {};
-    (ninTipos||[]).forEach(n=>{ tipoPorNinera[normaliza(n.nombre)] = n.tipo || 'Niñera'; });
-    const hoy = diaHoy();
-    agendaItems = (data||[]).filter(a => Array.isArray(a.dias) && a.dias.includes(hoy));
-    if(!agendaItems.length){
-      box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>';
-    } else {
-      const ahora = new Date();
-      const minAhora = ahora.getHours()*60 + ahora.getMinutes();
-      const minDe = (hhmm) => { if(!hhmm) return null; const [h,m] = hhmm.split(':').map(Number); return h*60+m; };
-      let nowInsertado = false;
-      const filas = agendaItems.map(a=>{
-        const esTraslado = tipoPorNinera[normaliza(a.ninera_nombre)] === 'Traslados';
-        const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : 'Sin horario';
-        const finMin = minDe(a.hora_fin) ?? minDe(a.hora_inicio);
-        const yaPaso = finMin !== null && finMin < minAhora;
-        let nowMarker = '';
-        const inicioMin = minDe(a.hora_inicio);
-        if(!nowInsertado && inicioMin !== null && inicioMin >= minAhora){
-          nowInsertado = true;
-          const ahoraFmt = ahora.toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit'});
-          nowMarker = `<div class="timeline-now"><div class="agendatime">${ahoraFmt}</div><div class="timeline-now-line"></div></div>`;
-        }
-        return `${nowMarker}
-        <div class="agendarow ${yaPaso?'pasado':''}">
-          <div class="agendatime">${horario}</div>
-          <div class="agendaicon ${esTraslado?'traslado':'sitting'}">${esTraslado?ICONS.sittings:ICONS.ninieras}</div>
-          <div class="agendabody">
-            <div><b>${a.ninera_nombre}</b> con <b>${a.familias?.nombre || 'familia sin nombre'}</b></div>
-            <div class="agendatype">${esTraslado?'Traslado':'Sitting'}</div>
-          </div>
-        </div>`;
-      });
-      box.innerHTML = `<div class="timeline">${filas.join('')}${nowInsertado ? '' : `<div class="timeline-now"><div class="agendatime">${ahora.toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit'})}</div><div class="timeline-now-line"></div></div>`}</div>`;
+    const asigError = asigR.status==='fulfilled' ? asigR.value.error : asigR.reason;
+    if(asigError){ box.innerHTML = errBox(asigError); }
+    else{
+      const ninTipos = okData(ninierasR);
+      const data = okData(asigR);
+      const tipoPorNinera = {};
+      (ninTipos||[]).forEach(n=>{ tipoPorNinera[normaliza(n.nombre)] = n.tipo || 'Niñera'; });
+      const hoy = diaHoy();
+      agendaItems = (data||[]).filter(a => Array.isArray(a.dias) && a.dias.includes(hoy));
+      if(!agendaItems.length){
+        box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>';
+      } else {
+        const ahora = new Date();
+        const minAhora = ahora.getHours()*60 + ahora.getMinutes();
+        const minDe = (hhmm) => { if(!hhmm) return null; const [h,m] = hhmm.split(':').map(Number); return h*60+m; };
+        let nowInsertado = false;
+        const filas = agendaItems.map(a=>{
+          const esTraslado = tipoPorNinera[normaliza(a.ninera_nombre)] === 'Traslados';
+          const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : 'Sin horario';
+          const finMin = minDe(a.hora_fin) ?? minDe(a.hora_inicio);
+          const yaPaso = finMin !== null && finMin < minAhora;
+          let nowMarker = '';
+          const inicioMin = minDe(a.hora_inicio);
+          if(!nowInsertado && inicioMin !== null && inicioMin >= minAhora){
+            nowInsertado = true;
+            const ahoraFmt = ahora.toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit'});
+            nowMarker = `<div class="timeline-now"><div class="agendatime">${ahoraFmt}</div><div class="timeline-now-line"></div></div>`;
+          }
+          return `${nowMarker}
+          <div class="agendarow ${yaPaso?'pasado':''}">
+            <div class="agendatime">${horario}</div>
+            <div class="agendaicon ${esTraslado?'traslado':'sitting'}">${esTraslado?ICONS.sittings:ICONS.ninieras}</div>
+            <div class="agendabody">
+              <div><b>${a.ninera_nombre}</b> con <b>${a.familias?.nombre || 'familia sin nombre'}</b></div>
+              <div class="agendatype">${esTraslado?'Traslado':'Sitting'}</div>
+            </div>
+          </div>`;
+        });
+        box.innerHTML = `<div class="timeline">${filas.join('')}${nowInsertado ? '' : `<div class="timeline-now"><div class="agendatime">${ahora.toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit'})}</div><div class="timeline-now-line"></div></div>`}</div>`;
+      }
     }
-  }catch(e){ box.innerHTML = errBox(e); return; }
+  }catch(e){ box.innerHTML = errBox(e); }
 
+  // ---- Pendiente de hoy (sittings de la agenda sin registrar) ----
   try{
-    const { data: registrosHoy } = await sb.from('sittings_traslados').select('familia_nombre,ninera_nombre').eq('fecha', todayISO());
+    const registrosHoy = okData(hoyR);
     dashPendientesHoy = agendaItems.filter(a=>{
       const famN = normaliza(a.familias?.nombre||'');
       const ninN = normaliza(a.ninera_nombre||'');
@@ -997,6 +1037,321 @@ async function cargarFinanzas(){
 function moduloHeader(titulo){
   return `<h1 class="modtitle">${titulo}</h1>`;
 }
+/* ================= AGENDA (solicitudes) ================= */
+let agendaFecha = null;
+let agendaFamilias = [];
+let agendaNinierasBase = [];
+let agendaSolicitudes = [];
+const AGENDA_START_MIN = 480, AGENDA_END_MIN = 1200, AGENDA_ROWH = 35;
+const AGENDA_GRIDH = Math.round(((AGENDA_END_MIN-AGENDA_START_MIN)/60)*AGENDA_ROWH);
+
+function agendaMinutos(hhmm){
+  if(!hhmm) return null;
+  const [h,m] = hhmm.split(':').map(Number);
+  return h*60+(m||0);
+}
+function agendaTop(hhmm){
+  const min = agendaMinutos(hhmm);
+  if(min==null) return 0;
+  return Math.max(0, Math.min(AGENDA_GRIDH, ((min-AGENDA_START_MIN)/60)*AGENDA_ROWH));
+}
+function agendaAlto(inicio, fin){
+  const mi = agendaMinutos(inicio), mf = agendaMinutos(fin);
+  if(mi==null) return 40;
+  const dur = (mf!=null && mf>mi) ? (mf-mi) : 60;
+  return Math.max(28, (dur/60)*AGENDA_ROWH);
+}
+function agendaFechaLarga(f){
+  const d = new Date(f+'T00:00:00');
+  const s = new Intl.DateTimeFormat('es-UY',{weekday:'long', day:'numeric', month:'long'}).format(d);
+  return s.charAt(0).toUpperCase()+s.slice(1);
+}
+function cambiarAgendaFechaRel(delta){
+  const d = new Date(agendaFecha+'T00:00:00');
+  d.setDate(d.getDate()+delta);
+  agendaFecha = d.toISOString().slice(0,10);
+  const lbl = document.getElementById('agenda-fecha-label');
+  if(lbl) lbl.textContent = agendaFechaLarga(agendaFecha);
+  cargarAgendaSolicitudes();
+}
+function waLink(telefono, mensaje){
+  let tel = (telefono||'').replace(/[^0-9]/g,'');
+  if(!tel) return '#';
+  if(!tel.startsWith('598')) tel = '598'+tel.replace(/^0+/,'');
+  return `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`;
+}
+function mensajeWA(s, nineraNombre){
+  const horario = s.hora_fin ? `${s.hora_inicio.slice(0,5)} a ${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5);
+  const tipoTxt = s.tipo==='traslado' ? 'un traslado' : 'un sitting';
+  const fechaTxt = new Date(s.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'});
+  return `Hola ${(nineraNombre||'').split(' ')[0]}! Te escribo de Parents Break — ¿podés cubrir ${tipoTxt} con la familia ${s.familia_nombre} el ${fechaTxt} de ${horario}${s.zona?` (zona ${s.zona})`:''}? Avisame si te queda bien.`;
+}
+function agendaTelefonoNinera(nombre){
+  const n = agendaNinierasBase.find(x=>normaliza(x.nombre)===normaliza(nombre));
+  return n ? n.telefono : '';
+}
+
+async function renderAgenda(cont){
+  agendaFecha = agendaFecha || todayISO();
+  cont.innerHTML = moduloHeader('Agenda') + `
+    <div class="mesbar">
+      <div class="mesnav">
+        <button onclick="cambiarAgendaFechaRel(-1)" aria-label="Día anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="mesnav-label" id="agenda-fecha-label">${agendaFechaLarga(agendaFecha)}</div>
+        <button onclick="cambiarAgendaFechaRel(1)" aria-label="Día siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+      <button class="smallbtn" onclick="abrirModalNuevaSolicitud()">+ Nueva solicitud</button>
+    </div>
+    <div class="agenda-legend">
+      <span><span class="agenda-dot dot-sinasignar"></span>Sin asignar</span>
+      <span><span class="agenda-dot dot-pendiente"></span>Pendiente de confirmar</span>
+      <span><span class="agenda-dot dot-confirmada"></span>Confirmada</span>
+    </div>
+    <div id="agenda-grid-wrap"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
+  `;
+  await cargarAgendaBase();
+  await cargarAgendaSolicitudes();
+}
+
+async function cargarAgendaBase(){
+  const [{data:fams}, {data:nins}] = await Promise.all([
+    sb.from('familias').select('id,nombre,zona,telefono,cobro_hora,pago_hora').order('nombre'),
+    sb.from('ninieras').select('id,nombre,zona,tipo,telefono').eq('activa', true).order('nombre'),
+  ]);
+  agendaFamilias = fams || [];
+  agendaNinierasBase = nins || [];
+}
+
+async function cargarAgendaSolicitudes(){
+  const wrap = document.getElementById('agenda-grid-wrap');
+  if(wrap) wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
+  const { data: sols, error } = await sb.from('solicitudes').select('*').eq('fecha', agendaFecha).order('hora_inicio', {ascending:true});
+  if(error){ if(wrap) wrap.innerHTML = errBox(error); return; }
+  const ids = (sols||[]).map(s=>s.id);
+  let ninerasPorSol = {};
+  if(ids.length){
+    const { data: sn } = await sb.from('solicitud_ninieras').select('*').in('solicitud_id', ids);
+    (sn||[]).forEach(r=>{ (ninerasPorSol[r.solicitud_id] ||= []).push(r); });
+  }
+  agendaSolicitudes = (sols||[]).map(s=>({...s, ninieras: ninerasPorSol[s.id]||[]}));
+  renderAgendaGrid();
+}
+
+function renderAgendaGrid(){
+  const wrap = document.getElementById('agenda-grid-wrap');
+  if(!wrap) return;
+  if(!agendaSolicitudes.length){
+    wrap.innerHTML = '<div class="empty">No hay solicitudes cargadas para este día — usá "+ Nueva solicitud" para cargar un pedido.</div>';
+    return;
+  }
+  const horasEje = [8,10,12,14,16,18,20];
+  const esHoy = agendaFecha === todayISO();
+  const ahora = new Date();
+  const nowMin = ahora.getHours()*60+ahora.getMinutes();
+  const nowHHMM = String(ahora.getHours()).padStart(2,'0')+':'+String(ahora.getMinutes()).padStart(2,'0');
+  const nowTop = agendaTop(nowHHMM);
+  const mostrarNow = esHoy && nowMin>=AGENDA_START_MIN && nowMin<=AGENDA_END_MIN;
+  const N = agendaSolicitudes.length;
+  wrap.innerHTML = `
+    <div class="agenda-scroll">
+      <div class="agenda-grid" style="grid-template-columns:44px repeat(${N}, minmax(150px,1fr)); grid-template-rows:auto ${AGENDA_GRIDH}px;">
+        <div></div>
+        ${agendaSolicitudes.map(s=>`<div class="agenda-colhead">${s.familia_nombre}</div>`).join('')}
+        <div class="agenda-eje">${horasEje.map(h=>`<div class="agenda-hora" style="top:${agendaTop(String(h).padStart(2,'0')+':00')}px;">${String(h).padStart(2,'0')}</div>`).join('')}</div>
+        ${agendaSolicitudes.map(s=>renderAgendaColumna(s)).join('')}
+        ${mostrarNow ? `<div class="agenda-nowline" style="grid-column:2 / -1; grid-row:2; top:${nowTop}px;"><span>${nowHHMM}</span></div>` : ''}
+      </div>
+    </div>
+  `;
+}
+function renderAgendaColumna(s){
+  const top = agendaTop(s.hora_inicio);
+  const alto = agendaAlto(s.hora_inicio, s.hora_fin);
+  let claseEstado = 'sinasignar';
+  let resumen = s.tipo==='traslado' ? 'Traslado' : 'Sitting';
+  if(s.estado==='pendiente_confirmar'){ claseEstado='pendiente'; resumen = s.ninieras.map(n=>(n.ninera_nombre||'').split(' ')[0]).join(', '); }
+  if(s.estado==='confirmada'){ claseEstado='confirmada'; resumen = s.ninieras.map(n=>(n.ninera_nombre||'').split(' ')[0]).join(' + '); }
+  if(s.estado==='cancelada'){ claseEstado='cancelada'; resumen = 'Cancelada'; }
+  const horaTxt = s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5);
+  return `<div class="agenda-col"><div class="agenda-card ${claseEstado}" style="top:${top}px;height:${alto}px;" onclick="abrirModalSolicitud('${s.id}')">
+    <div class="agenda-card-hora">${horaTxt}</div>
+    <div class="agenda-card-sub">${resumen}</div>
+  </div></div>`;
+}
+
+function onAgendaFamiliaInput(){
+  const val = document.getElementById('agenda-familia').value;
+  const f = agendaFamilias.find(x=>normaliza(x.nombre)===normaliza(val));
+  const zonaInput = document.getElementById('agenda-zona');
+  if(zonaInput && f && !zonaInput.value) zonaInput.value = f.zona||'';
+}
+function abrirModalNuevaSolicitud(){
+  const html = `
+    <h2>Nueva solicitud</h2>
+    <div class="field"><label>Familia</label>
+      <input type="text" id="agenda-familia" list="agenda-familias-dl" autocomplete="off" oninput="onAgendaFamiliaInput()" placeholder="Escribí el nombre — si es nueva, se carga igual">
+      <datalist id="agenda-familias-dl">${agendaFamilias.map(f=>`<option value="${f.nombre}">`).join('')}</datalist>
+    </div>
+    <div class="grid3">
+      <div class="field"><label>Tipo</label><select id="agenda-tipo"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
+      <div class="field"><label>Zona</label><input type="text" id="agenda-zona" placeholder="Pocitos, Carrasco…"></div>
+      <div class="field"><label>Fecha</label><input type="date" id="agenda-nueva-fecha" value="${agendaFecha}"></div>
+    </div>
+    <div class="grid3">
+      <div class="field"><label>Hora inicio</label><input type="time" id="agenda-hora-inicio"></div>
+      <div class="field"><label>Hora fin</label><input type="time" id="agenda-hora-fin"></div>
+      <div class="field"><label>Cobro a la familia</label><input type="number" id="agenda-cobro" placeholder="$"></div>
+    </div>
+    <div id="agenda-nueva-warn"></div>
+    <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarSolicitud()">Guardar solicitud</button>
+  `;
+  abrirModal(html);
+}
+async function guardarSolicitud(){
+  const familiaTxt = document.getElementById('agenda-familia').value.trim();
+  const tipo = document.getElementById('agenda-tipo').value;
+  const zona = document.getElementById('agenda-zona').value.trim();
+  const fecha = document.getElementById('agenda-nueva-fecha').value;
+  const horaInicio = document.getElementById('agenda-hora-inicio').value;
+  const horaFin = document.getElementById('agenda-hora-fin').value;
+  const cobro = document.getElementById('agenda-cobro').value;
+  const warn = document.getElementById('agenda-nueva-warn');
+  if(!familiaTxt || !fecha || !horaInicio){ warn.innerHTML = '<div class="warnbox">Completá al menos familia, fecha y hora de inicio.</div>'; return; }
+  const fam = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(familiaTxt));
+  const { error } = await sb.from('solicitudes').insert({
+    familia_id: fam ? fam.id : null,
+    familia_nombre: familiaTxt,
+    tipo, zona: zona || (fam ? fam.zona : null),
+    fecha, hora_inicio: horaInicio, hora_fin: horaFin || null,
+    cobro_familia: cobro ? Number(cobro) : null,
+    estado: 'sin_asignar',
+  });
+  if(error){ warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  agendaFecha = fecha;
+  await cargarAgendaSolicitudes();
+}
+
+async function abrirModalAsignar(solicitudId){
+  const s = agendaSolicitudes.find(x=>x.id===solicitudId);
+  if(!s) return;
+  abrirModal('<div class="empty"><span class="spinner dark"></span> Buscando niñeras recomendadas…</div>');
+  const [{data:histFam}, {data:histTotal}, {data:sitTotal}] = await Promise.all([
+    sb.from('solicitud_ninieras').select('ninera_nombre, solicitudes!inner(familia_nombre)').eq('estado','confirmada').eq('solicitudes.familia_nombre', s.familia_nombre),
+    sb.from('solicitud_ninieras').select('ninera_nombre').eq('estado','confirmada'),
+    sb.from('sittings_traslados').select('ninera_nombre'),
+  ]);
+  const conteoFamilia = {};
+  (histFam||[]).forEach(r=>{ const k=normaliza(r.ninera_nombre); conteoFamilia[k]=(conteoFamilia[k]||0)+1; });
+  const conteoTotal = {};
+  (histTotal||[]).forEach(r=>{ const k=normaliza(r.ninera_nombre); conteoTotal[k]=(conteoTotal[k]||0)+1; });
+  (sitTotal||[]).forEach(r=>{ const k=normaliza(r.ninera_nombre); conteoTotal[k]=(conteoTotal[k]||0)+1; });
+
+  const tipoOk = n => s.tipo==='traslado' ? (n.tipo==='Traslados'||n.tipo==='Ambas') : (n.tipo!=='Traslados');
+  const zonaNorm = normaliza(s.zona||'');
+  const yaInvitadas = new Set(s.ninieras.map(x=>normaliza(x.ninera_nombre)));
+  const candidatas = agendaNinierasBase.filter(n=>tipoOk(n) && !yaInvitadas.has(normaliza(n.nombre)));
+
+  const tier1 = [], tier2 = [], tier3 = [];
+  candidatas.forEach(n=>{
+    const key = normaliza(n.nombre);
+    if(conteoFamilia[key]>0){ tier1.push({...n, veces:conteoFamilia[key]}); return; }
+    const zonas = (n.zona||'').split('/').map(z=>normaliza(z));
+    if(zonaNorm && zonas.includes(zonaNorm)){ tier2.push(n); return; }
+    tier3.push({...n, total:conteoTotal[key]||0});
+  });
+  tier1.sort((a,b)=>b.veces-a.veces);
+  tier3.sort((a,b)=>(b.total-a.total) || a.nombre.localeCompare(b.nombre));
+
+  const fila = (n, sub) => `
+    <label class="agenda-ninera-pick">
+      <input type="checkbox" value="${n.id}" data-nombre="${n.nombre}">
+      <div><b>${n.nombre}</b><div class="helper" style="margin:0;">${sub}</div></div>
+    </label>`;
+
+  const html = `
+    <h2>Asignar niñera</h2>
+    <div class="helper">${s.familia_nombre} · ${s.tipo==='traslado'?'Traslado':'Sitting'} · ${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}${s.zona?' · '+s.zona:''}</div>
+    ${tier1.length ? `<div class="agenda-tier-label">Ya trabajaron con esta familia</div>${tier1.map(n=>fila(n, `${n.veces} vez${n.veces===1?'':'es'}`)).join('')}` : ''}
+    ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>fila(n, 'Cubre la zona')).join('')}` : ''}
+    ${!tier1.length && !tier2.length ? '<div class="helper">Nadie con historial o zona coincidente todavía — mostrando el resto del equipo.</div>' : ''}
+    <button type="button" class="smallbtn" style="margin:6px 0;" onclick="document.getElementById('agenda-tier3').style.display='block';this.style.display='none';">+ Niñeras</button>
+    <div id="agenda-tier3" style="display:${(!tier1.length && !tier2.length) ? 'block' : 'none'};">
+      <div class="agenda-tier-label">Resto del equipo</div>
+      ${tier3.map(n=>fila(n, `${n.total} sitting${n.total===1?'':'s'} en total`)).join('')}
+    </div>
+    <div id="agenda-asignar-warn"></div>
+    <button class="btn primary" style="width:100%;margin-top:10px;" onclick="guardarAsignacion('${s.id}')">Invitar por WhatsApp</button>
+  `;
+  abrirModal(html);
+}
+async function guardarAsignacion(solicitudId){
+  const checks = [...document.querySelectorAll('#editmodal input[type=checkbox]:checked')];
+  const warn = document.getElementById('agenda-asignar-warn');
+  if(!checks.length){ warn.innerHTML = '<div class="warnbox">Elegí al menos una niñera.</div>'; return; }
+  const filas = checks.map(c=>({ solicitud_id: solicitudId, ninera_id: c.value, ninera_nombre: c.dataset.nombre, estado:'invitada' }));
+  const { error } = await sb.from('solicitud_ninieras').insert(filas);
+  if(error){ warn.innerHTML = errBox(error); return; }
+  await sb.from('solicitudes').update({estado:'pendiente_confirmar'}).eq('id', solicitudId);
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+  abrirModalSolicitud(solicitudId);
+}
+
+function abrirModalSolicitud(id){
+  const s = agendaSolicitudes.find(x=>x.id===id);
+  if(!s) return;
+  const horario = s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5);
+  const fechaTxt = new Date(s.fecha+'T00:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'});
+  let ninierasHtml = '';
+  if(s.ninieras.length){
+    ninierasHtml = s.ninieras.map(n=>`
+      <div class="agenda-ninerarow">
+        <div>
+          <b>${n.ninera_nombre}</b>
+          <span class="badge ${n.estado==='confirmada'?'good':n.estado==='rechazada'?'bad':'warn'}">${n.estado==='confirmada'?'Confirmada':n.estado==='rechazada'?'Rechazada':'Pendiente'}</span>
+          ${n.pago_ninera ? `<div class="helper" style="margin:2px 0 0;">Pago $${Number(n.pago_ninera).toLocaleString('es-UY')}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          ${n.estado!=='confirmada' ? `<button class="smallbtn" onclick="confirmarNinera('${n.id}')">Confirmar</button>` : ''}
+          <a class="smallbtn" href="${waLink(agendaTelefonoNinera(n.ninera_nombre), mensajeWA(s, n.ninera_nombre))}" target="_blank" rel="noopener">WhatsApp</a>
+        </div>
+      </div>`).join('');
+  }
+  const cuerpo = `
+    <h2>${s.familia_nombre}</h2>
+    <div class="helper">${s.tipo==='traslado'?'Traslado':'Sitting'} · ${fechaTxt} · ${horario}${s.zona?' · '+s.zona:''}</div>
+    ${s.cobro_familia ? `<div class="helper">Cobro a la familia: $${Number(s.cobro_familia).toLocaleString('es-UY')}</div>`:''}
+    <div style="margin:14px 0;">${ninierasHtml || '<div class="empty">Todavía no hay niñeras asignadas.</div>'}</div>
+    ${s.estado==='sin_asignar' ? `<button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="cerrarModal();abrirModalAsignar('${s.id}')">Asignar niñera</button>` : ''}
+    ${s.estado==='pendiente_confirmar' ? `<button class="btn" style="width:100%;margin-bottom:8px;" onclick="cerrarModal();abrirModalAsignar('${s.id}')">+ Agregar otra niñera</button>` : ''}
+    ${s.estado!=='cancelada' ? `<button class="btn danger" style="width:100%;" onclick="cancelarSolicitud('${s.id}')">Cancelar solicitud</button>` : `<div class="warnbox">Esta solicitud fue cancelada.</div>`}
+  `;
+  abrirModal(cuerpo);
+}
+async function confirmarNinera(solNineraId){
+  const { error } = await sb.from('solicitud_ninieras').update({estado:'confirmada'}).eq('id', solNineraId);
+  if(error){ alert(error.message); return; }
+  let solId = null;
+  for(const s of agendaSolicitudes){ if(s.ninieras.some(n=>n.id===solNineraId)){ solId = s.id; break; } }
+  await cargarAgendaSolicitudes();
+  if(solId){
+    const s2 = agendaSolicitudes.find(x=>x.id===solId);
+    if(s2 && s2.ninieras.length && s2.ninieras.every(n=>n.estado==='confirmada')){
+      await sb.from('solicitudes').update({estado:'confirmada'}).eq('id', solId);
+      await cargarAgendaSolicitudes();
+    }
+    abrirModalSolicitud(solId);
+  }
+}
+async function cancelarSolicitud(id){
+  const ok = await confirmarAccion('¿Cancelar esta solicitud? Las niñeras invitadas quedarán sin efecto.', 'Cancelar solicitud');
+  if(!ok) return;
+  await sb.from('solicitudes').update({estado:'cancelada'}).eq('id', id);
+  cerrarModal();
+  cargarAgendaSolicitudes();
+}
+
 function renderModulo(){
   renderSidebar();
   document.getElementById('modfooter').innerHTML = '';
@@ -1004,6 +1359,7 @@ function renderModulo(){
   if(!moduloActivo){ renderDashboard(cont); return; }
   if(moduloActivo.startsWith('pend-')){ renderPendHoy(cont); return; }
   const m = MODULOS.find(x=>x.key===moduloActivo);
+  if(moduloActivo==='agenda'){ renderAgenda(cont); return; }
   if(moduloActivo==='rrhh'){ cont.innerHTML = moduloHeader(m.label) + rrhhShell(); afterRrhhRender(); return; }
   if(moduloActivo==='ninieras'){ cont.innerHTML = moduloHeader(m.label) + '<div id="ninieras-body"></div>'; renderNinieras(document.getElementById('ninieras-body')); return; }
   if(moduloActivo==='familias'){ cont.innerHTML = moduloHeader(m.label) + '<div id="fam-body"></div>'; renderFamilias(document.getElementById('fam-body')); return; }
