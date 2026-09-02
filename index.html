@@ -2144,13 +2144,16 @@ let famHistorialPorFamilia = {};
 async function cargarFamilias(){
   const cont = document.getElementById('familiaslist');
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
-  const { data: familias, error } = await sb.from('familias').select('*').order('nombre');
-  if(error){ cont.innerHTML = errBox(error); return; }
-  const [{data:asignaciones}, {data:sittings}, {data:resenas}] = await Promise.all([
+  const necesitaNinieras = !ninierasItems.length;
+  const [{data:familias, error}, {data:asignaciones}, {data:sittings}, {data:resenas}, ninierasRes] = await Promise.all([
+    sb.from('familias').select('*').order('nombre'),
     sb.from('asignaciones').select('*'),
     sb.from('sittings_traslados').select('familia_nombre,ninera_nombre'),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
+    necesitaNinieras ? sb.from('ninieras').select('nombre') : Promise.resolve({data:null}),
   ]);
+  if(error){ cont.innerHTML = errBox(error); return; }
+  if(necesitaNinieras && ninierasRes?.data) ninierasItems = ninierasRes.data;
   famResenaPorNinera = {};
   (resenas||[]).forEach(r=>{
     if(r.puntuacion==null) return;
@@ -2169,7 +2172,6 @@ async function cargarFamilias(){
     famHistorialPorFamilia[kf][kn] = (famHistorialPorFamilia[kf][kn]||0) + 1;
   });
   familiasItems = familias.map(f => ({...f, asignaciones: (asignaciones||[]).filter(a=>a.familia_id===f.id)}));
-  if(!ninierasItems.length){ try{ const r = await sb.from('ninieras').select('nombre'); ninierasItems = r.data||ninierasItems; }catch(e){} }
   // llenar el filtro de zonas agrupando variantes de mayúsculas/tildes/espacios como la misma zona
   const zonaSel = document.getElementById('fam-zonafiltro');
   if(zonaSel){
