@@ -277,6 +277,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 function normaliza(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+function zonasDe(zonaStr){ return (zonaStr||'').split('/').map(z=>z.trim()).filter(Boolean); }
 function scrollToDetalle(id){
   const el = document.getElementById(id);
   if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
@@ -1795,15 +1796,16 @@ async function cargarNinieras(){
   const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true).order('nombre');
   if(error){ document.getElementById('ninierasgrid').innerHTML = errBox(error); return; }
   ninierasItems = data;
-  // llenar desplegable de zonas agrupando variantes de mayúsculas/tildes/espacios como la misma zona
+  // llenar desplegable de zonas: una niñera puede cubrir varias zonas separadas por "/" —
+  // cada zona individual entra como su propia opción, agrupando variantes de mayúsculas/tildes
   const zonaSel = document.getElementById('filt-zona');
   if(zonaSel){
     const zonaMap = new Map();
     ninierasItems.forEach(n=>{
-      const raw = (n.zona||'').trim();
-      if(!raw) return;
-      const key = normaliza(raw);
-      if(!zonaMap.has(key)) zonaMap.set(key, raw);
+      zonasDe(n.zona).forEach(raw=>{
+        const key = normaliza(raw);
+        if(!zonaMap.has(key)) zonaMap.set(key, raw);
+      });
     });
     const zonas = [...zonaMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
     zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
@@ -1820,7 +1822,7 @@ function filtrarNinieras(){
     const cd = n.candidatas || {};
     const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia].filter(Boolean).join(' '));
     const matchTexto = !fn || blob.includes(fn);
-    const matchZona = !fz || normaliza(n.zona)===fz;
+    const matchZona = !fz || zonasDe(n.zona).some(z=>normaliza(z)===fz);
     const matchTipo = !ft || (n.tipo||'Niñera')===ft;
     return matchTexto && matchZona && matchTipo;
   });
@@ -2103,10 +2105,10 @@ async function cargarFamilias(){
   if(zonaSel){
     const zonaMap = new Map();
     familiasItems.forEach(f=>{
-      const raw = (f.zona||'').trim();
-      if(!raw) return;
-      const key = normaliza(raw);
-      if(!zonaMap.has(key)) zonaMap.set(key, raw);
+      zonasDe(f.zona).forEach(raw=>{
+        const key = normaliza(raw);
+        if(!zonaMap.has(key)) zonaMap.set(key, raw);
+      });
     });
     const zonas = [...zonaMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
     zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(([key,label])=>`<option value="${key}" ${famZonaFiltro===key?'selected':''}>${label}</option>`).join('');
@@ -2124,7 +2126,7 @@ function renderFamiliasList(){
   const q = normaliza(famBusqueda);
   const filtradas = familiasItems.filter(f=>{
     const matchNombre = !q || normaliza(f.nombre).includes(q);
-    const matchZona = !famZonaFiltro || normaliza(f.zona)===famZonaFiltro;
+    const matchZona = !famZonaFiltro || zonasDe(f.zona).some(z=>normaliza(z)===famZonaFiltro);
     return matchNombre && matchZona;
   });
   const countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${familiasItems.length} familias</div>`;
