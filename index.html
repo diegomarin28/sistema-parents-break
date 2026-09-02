@@ -106,7 +106,7 @@ textarea{resize:vertical;min-height:54px;}
 .moneyfield::after{content:'/h';position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--ink-soft);font-size:12.5px;pointer-events:none;}
 .navitem{position:relative;}
 .navdot{position:absolute;top:6px;right:10px;width:9px;height:9px;border-radius:50%;background:var(--clay-text);border:2px solid #5B5FA0;}
-.preciosugerido{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;}
+.preciosugerido{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-top:8px;}
 .q{background:var(--accent-soft);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:13.5px;color:var(--ink);line-height:1.45;}
 .scorebar{display:flex;gap:6px;margin-top:10px;}
 .scorebtn{flex:1;text-align:center;padding:9px 0;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);}
@@ -3060,16 +3060,16 @@ async function renderSittings(body){
   sitMes = sitMes || currentMonthStr();
   sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
   body.innerHTML = `
+    <div style="display:flex;justify-content:center;margin-bottom:16px;">
+      <button class="btn primary" style="font-size:16px;padding:14px 40px;" onclick="abrirModalSitForm()">+ Agregar sitting o traslado</button>
+    </div>
     <div class="mesbar">
       <div class="mesnav">
         <button onclick="cambiarSitMesRel(-1)" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
         <div class="mesnav-label" id="sit-mes-label">${monthLabel(sitMes)}</div>
         <button onclick="cambiarSitMesRel(1)" aria-label="Mes siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
       </div>
-      <div style="display:flex;gap:8px;">
-        <button class="smallbtn" onclick="abrirModalSitForm()">+ Agregar sitting/traslado</button>
-        <button class="smallbtn" onclick="exportarSitCSV()">Exportar CSV</button>
-      </div>
+      <button class="smallbtn" onclick="exportarSitCSV()">Exportar CSV</button>
     </div>
     <div class="summary3" id="sit-summary"></div>
     <div class="card" id="sit-list-wrap"></div>
@@ -3213,7 +3213,7 @@ function sitCamposTipoHTML(){
       <div class="field"><label>Hora</label>${selectHora('sit-hora')}</div>
       <div class="field"><label>Km recorridos</label><input type="number" step="0.1" id="sit-km" oninput="actualizarPrecioSugeridoTraslado()"></div>
     </div>
-    <div class="grid2">
+    <div class="grid2" style="margin-top:6px;">
       <div class="field" style="position:relative;">
         <label>Origen</label>
         <input type="text" id="sit-origen" autocomplete="off">
@@ -3226,8 +3226,8 @@ function sitCamposTipoHTML(){
       </div>
     </div>
     <div class="addrhint" id="sit-addr-hint" style="display:none;"></div>
-    <div class="helper" id="sit-km-estado" style="margin-top:2px;">Elegí origen y destino de la lista para que el km se calcule solo. <a href="#" onclick="calcularRutaAutomatica();return false;">Recalcular</a> · <a href="#" onclick="verRutaMaps();return false;">ver en Google Maps</a></div>
-    <div class="preciosugerido" id="sit-precio-sugerido-box"></div>`;
+    <div class="helper" id="sit-km-estado" style="margin:6px 0 14px;">Elegí origen y destino de la lista para que el km se calcule solo. <a href="#" onclick="calcularRutaAutomatica();return false;">Recalcular</a> · <a href="#" onclick="verRutaMaps();return false;">ver en Google Maps</a></div>
+    <div class="preciosugerido" id="sit-precio-sugerido-box" style="margin-bottom:16px;"></div>`;
 }
 function wireSitAutocompletes(){
   attachAutocomplete('sit-familia', 'sit-familia-dropdown', ()=>sitFamilias, ()=>onSitFamiliaInput());
@@ -3428,6 +3428,12 @@ function attachAddressAutocomplete(inputId, dropdownId, onPick){
       // idxSet limitado a calles/direcciones/geografías — sin comercios (POI), que era lo que traía resultados raros.
       const url = `https://api.tomtom.com/search/2/search/${encodeURIComponent(q+', Montevideo, Uruguay')}.json?key=${TOMTOM_KEY}&countrySet=UY&limit=6&idxSet=Str,PAD,Addr,Geo`;
       const res = await fetch(url);
+      if(!res.ok){
+        dd.innerHTML = res.status===403
+          ? '<div class="autocomplete-empty">La clave de TomTom no tiene habilitada la "Search API" — hay que activarla en el panel de TomTom (Keys → esta clave → Products).</div>'
+          : `<div class="autocomplete-empty">TomTom devolvió un error (${res.status}) — probá de nuevo en un rato.</div>`;
+        return;
+      }
       const data = await res.json();
       const results = data.results || [];
       if(!results.length){ dd.innerHTML = '<div class="autocomplete-empty">Sin resultados — probá con más detalle (calle y número).</div>'; return; }
