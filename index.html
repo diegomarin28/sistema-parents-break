@@ -3368,11 +3368,21 @@ async function geocodeTomTom(direccion){
   if(!direccion) return null;
   const url = `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(direccion)}.json?key=${TOMTOM_KEY}&countrySet=UY&limit=1&geobias=point:-34.9011,-56.1645`;
   const res = await fetch(url);
-  if(!res.ok) return null;
-  const data = await res.json();
-  const r = data.results && data.results[0];
-  if(!r) return null;
-  return { lat:r.position.lat, lon:r.position.lon };
+  if(res.ok){
+    const data = await res.json();
+    const r = data.results && data.results[0];
+    if(r) return { lat:r.position.lat, lon:r.position.lon };
+  }
+  // TomTom no la encontró — probamos OpenStreetMap antes de rendirnos.
+  try{
+    const urlOsm = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(direccion+', Uruguay')}&format=json&countrycodes=uy&limit=1`;
+    const resOsm = await fetch(urlOsm);
+    if(!resOsm.ok) return null;
+    const dataOsm = await resOsm.json();
+    const r0 = dataOsm[0];
+    if(!r0) return null;
+    return { lat:Number(r0.lat), lon:Number(r0.lon) };
+  }catch(e){ return null; }
 }
 async function rutaKmTomTom(o, d){
   const url = `https://api.tomtom.com/routing/1/calculateRoute/${o.lat},${o.lon}:${d.lat},${d.lon}/json?key=${TOMTOM_KEY}`;
@@ -3419,6 +3429,16 @@ function attachAddressAutocomplete(inputId, dropdownId, onPick){
   const input = document.getElementById(inputId);
   const dd = document.getElementById(dropdownId);
   if(!input || !dd) return;
+  async function geocodeNominatim(q){
+    // Red de contención: solo se usa cuando TomTom no encuentra nada, nunca en cada tecla (respeta la política de uso de Nominatim).
+    try{
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=uy&limit=5&addressdetails=1`;
+      const res = await fetch(url);
+      if(!res.ok) return [];
+      const data = await res.json();
+      return data.map(r=>({ lat:Number(r.lat), lon:Number(r.lon), label:r.display_name }));
+    }catch(e){ return []; }
+  }
   async function buscar(){
     const q = input.value.trim();
     if(q.length<3){ dd.style.display='none'; return; }
@@ -3436,7 +3456,28 @@ function attachAddressAutocomplete(inputId, dropdownId, onPick){
       }
       const data = await res.json();
       const results = data.results || [];
-      if(!results.length){ dd.innerHTML = '<div class="autocomplete-empty">Sin resultados — probá con más detalle (calle y número).</div>'; return; }
+      if(!results.length){
+        // TomTom no la tiene mapeada — probamos con OpenStreetMap antes de rendirnos.
+        dd.innerHTML = '<div class="autocomplete-empty">Buscando en OpenStreetMap…</div>';
+        const nomResults = await geocodeNominatim(q+', Uruguay');
+        if(nomResults.length){
+          dd.innerHTML = '';
+          nomResults.forEach(r=>{
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.textContent = r.label;
+            item.addEventListener('mousedown', ()=>{
+              input.value = r.label;
+              dd.style.display = 'none';
+              onPick({ lat:r.lat, lon:r.lon });
+            });
+            dd.appendChild(item);
+          });
+          return;
+        }
+        dd.innerHTML = '<div class="autocomplete-empty">Sin resultados en TomTom ni OpenStreetMap — probá con más detalle o cargá el km a mano.</div>';
+        return;
+      }
       dd.innerHTML = '';
       results.forEach(r=>{
         const label = (r.address && r.address.freeformAddress) || q;
