@@ -1854,6 +1854,7 @@ async function verNinera(id){
     ${fotoHtml}
     <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
     <div class="fichadl">${rows||'<div>Sin más datos.</div>'}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+    <div id="vn-carsitting"></div>
     <div style="margin-top:18px;">
       <h2 class="card-section-title" style="margin-top:0;">Sittings y traslados de ${n.nombre.split(' ')[0]}</h2>
       <div class="grid2">
@@ -1864,6 +1865,34 @@ async function verNinera(id){
       </div>
       <div id="vn-historial"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
     </div>`);
+  // datos de carsitting (auto, seguro, licencia) si completó ese form
+  (async ()=>{
+    let { data: cs } = await sb.from('carsitting_datos').select('*').eq('ninera_id', n.id).order('created_at', {ascending:false}).limit(1);
+    if(!cs || !cs.length){
+      const alt = await sb.from('carsitting_datos').select('*').ilike('ninera_nombre', n.nombre).order('created_at', {ascending:false}).limit(1);
+      cs = alt.data;
+    }
+    const box = document.getElementById('vn-carsitting');
+    if(!box || !cs || !cs.length) return;
+    const c = cs[0];
+    const campos = [
+      ['Auto', [c.modelo_auto, c.color_auto].filter(Boolean).join(' · ')],
+      ['Padrón / Matrícula', [c.padron, c.matricula].filter(Boolean).join(' · ')],
+      ['Año de fabricación', c.anio_fabricacion],
+      ['Asientos / Cinturones', [c.cantidad_asientos, c.cantidad_cinturones].filter(Boolean).join(' / ')],
+      ['Seguro', [c.compania_seguro, c.tipo_seguro].filter(Boolean).join(' · ')],
+      ['Licencia de conducir', [c.numero_licencia, c.anio_licencia?'obtenida '+c.anio_licencia:''].filter(Boolean).join(' · ')],
+      ['Libreta de propiedad', c.libreta_propiedad],
+      ['Cédula', c.cedula],
+    ].filter(([,v])=>v);
+    const fotos = [['Foto licencia', c.foto_licencia_url], ['Foto libreta', c.foto_libreta_url], ['Foto asientos', c.foto_asientos_url]].filter(([,v])=>v);
+    box.innerHTML = `
+      <div style="margin-top:14px;">
+        <h2 class="card-section-title" style="margin-top:0;">Datos de carsitting</h2>
+        <div class="fichadl">${campos.map(([l,v])=>`<div><b>${l}</b>${v}</div>`).join('')}</div>
+        ${fotos.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${fotos.map(([l,v])=>`<a href="${v}" target="_blank" class="smallbtn">${l}</a>`).join('')}</div>`:''}
+      </div>`;
+  })();
   // cargar los sittings de esta niñera
   const { data } = await sb.from('sittings_traslados').select('*').eq('ninera_nombre', n.nombre).order('fecha', {ascending:false});
   nineraHistItems = data || [];
