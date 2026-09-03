@@ -639,8 +639,8 @@ async function loadDashboardData(){
     sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
     sb.from('ninieras').select('nombre,tipo,activa'),
     sb.from('familias').select('cobro_hora'),
-    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera'),
-    sb.from('gastos_generales').select('fecha,monto'),
+    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', primerDiaMesesAtras(6)),
+    sb.from('gastos_generales').select('fecha,monto').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false}),
     sb.from('sittings_traslados').select('familia_nombre,ninera_nombre').eq('fecha', todayISO()),
     sb.from('solicitudes').select('*').eq('fecha', todayISO()).eq('estado','confirmada'),
@@ -3048,6 +3048,12 @@ let sitMes = null;
 function currentMonthStr(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function shiftMes(mesStr, delta){ const [y,m] = mesStr.split('-').map(Number); const d = new Date(y, m-1+delta, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+function primerDiaMesesAtras(n){
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth()-n);
+  return d.toISOString().slice(0,10);
+}
 function monthLabel(mesStr){
   const [y,m] = mesStr.split('-').map(Number);
   const f = new Intl.DateTimeFormat('es-UY', {month:'long', year:'numeric'}).format(new Date(y, m-1, 1));
@@ -3091,12 +3097,19 @@ async function renderSittings(body){
   cargarSitHistorial();
 }
 let sitHistItems = [];
+let sitHistOffset = 0;
+let sitHistTotal = 0;
+let sitHistLoadingMore = false;
+const SIT_HIST_PAGE = 200;
 async function cargarSitHistorial(){
-  const [{data:todos}, {data:resenas}] = await Promise.all([
-    sb.from('sittings_traslados').select('*').order('fecha', {ascending:false}),
+  const [{data:pagina, count}, {data:resenas}, {data:soloFamilias}] = await Promise.all([
+    sb.from('sittings_traslados').select('*', {count:'exact'}).order('fecha', {ascending:false}).range(0, SIT_HIST_PAGE-1),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
+    sb.from('sittings_traslados').select('familia_nombre'), // solo esta columna: liviano aunque la tabla crezca, así el filtro de familia siempre tiene todas las opciones
   ]);
-  sitHistItems = todos || [];
+  sitHistItems = pagina || [];
+  sitHistOffset = sitHistItems.length;
+  sitHistTotal = count!=null ? count : sitHistItems.length;
   sitHistResenas = {};
   (resenas||[]).forEach(r=>{
     if(r.puntuacion==null) return;
@@ -3106,19 +3119,33 @@ async function cargarSitHistorial(){
     sitHistResenas[k].suma += Number(r.puntuacion);
     sitHistResenas[k].cant += 1;
   });
+  llenarSelectFamiliasHistorial(soloFamilias||[]);
+  renderSitHistorial();
+}
+function llenarSelectFamiliasHistorial(filas){
   // llenar desplegable de familias agrupando variantes de mayúsculas/tildes/espacios como la misma familia
   const sel = document.getElementById('sithist-familia');
-  if(sel){
-    const famMap = new Map();
-    sitHistItems.forEach(s=>{
-      const raw = (s.familia_nombre||'').trim();
-      if(!raw) return;
-      const key = normaliza(raw);
-      if(!famMap.has(key)) famMap.set(key, raw);
-    });
-    const fams = [...famMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
-    sel.innerHTML = `<option value="">Todas</option>` + fams.map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
-  }
+  if(!sel) return;
+  const valorPrevio = sel.value;
+  const famMap = new Map();
+  filas.forEach(s=>{
+    const raw = (s.familia_nombre||'').trim();
+    if(!raw) return;
+    const key = normaliza(raw);
+    if(!famMap.has(key)) famMap.set(key, raw);
+  });
+  const fams = [...famMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+  sel.innerHTML = `<option value="">Todas</option>` + fams.map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
+  if(valorPrevio) sel.value = valorPrevio;
+}
+async function cargarSitHistorialMas(){
+  if(sitHistLoadingMore || sitHistItems.length>=sitHistTotal) return;
+  sitHistLoadingMore = true;
+  renderSitHistorial();
+  const { data } = await sb.from('sittings_traslados').select('*').order('fecha', {ascending:false}).range(sitHistOffset, sitHistOffset+SIT_HIST_PAGE-1);
+  sitHistItems = sitHistItems.concat(data||[]);
+  sitHistOffset = sitHistItems.length;
+  sitHistLoadingMore = false;
   renderSitHistorial();
 }
 function resenaBadge(nineraNombre){
@@ -3142,16 +3169,23 @@ function renderSitHistorial(){
     const limiteISO = limite.toISOString().slice(0,10);
     items = items.filter(s=>s.fecha && s.fecha >= limiteISO);
   }
-  if(!items.length){ cont.innerHTML = '<div class="empty">No hay registros que coincidan con estos filtros.</div>'; return; }
+  const hayMasSinCargar = periodo===0 && sitHistItems.length < sitHistTotal;
+  const cargadosLabel = hayMasSinCargar ? ` (${sitHistItems.length} de ${sitHistTotal} cargados)` : '';
+  const botonMas = hayMasSinCargar ? `<button class="smallbtn" id="sithist-mas-btn" onclick="cargarSitHistorialMas()" ${sitHistLoadingMore?'disabled':''} style="margin-top:10px;">${sitHistLoadingMore?'Cargando…':'Cargar registros más antiguos'}</button>` : '';
+  if(!items.length){
+    cont.innerHTML = `<div class="empty">No hay registros que coincidan con estos filtros${hayMasSinCargar?' entre los ya cargados — probá "Cargar registros más antiguos"':''}.</div>${botonMas}`;
+    return;
+  }
   const totalCobro = items.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
   const totalPago = items.reduce((s,r)=>s+(Number(r.pago_ninera)||0),0);
   cont.innerHTML = `
-    <div class="helper" style="margin:8px 0;">${items.length} registro(s) · cobrado $${totalCobro.toLocaleString('es-UY')} · pagado $${totalPago.toLocaleString('es-UY')}</div>
+    <div class="helper" style="margin:8px 0;">${items.length} registro(s)${cargadosLabel} · cobrado $${totalCobro.toLocaleString('es-UY')} · pagado $${totalPago.toLocaleString('es-UY')}</div>
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
     <tbody>${items.map(r=>{
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
       return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
-    }).join('')}</tbody></table></div>`;
+    }).join('')}</tbody></table></div>
+    ${botonMas}`;
 }
 async function cargarSitBase(){
   const [{data:fams}, {data:nins}] = await Promise.all([
