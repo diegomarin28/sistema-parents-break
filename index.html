@@ -823,6 +823,8 @@ async function renderFinanzas(cont){
       <button class="btn primary" onclick="abrirModalNuevoGasto()">+ Registrar gasto</button>
     </div>
     <div class="summary3" id="fin-summary"></div>
+    <div class="card" id="fin-porcobrar-wrap"><h2>Por cobrar</h2><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
+    <div class="card" id="fin-porpagar-wrap"><h2>Por pagar</h2><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
     <div class="chartcard" id="fin-breakdown-card" style="display:none;">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
         <div style="display:flex;align-items:center;gap:16px;">
@@ -844,6 +846,7 @@ async function renderFinanzas(cont){
     <div class="card" id="fin-movs"></div>
   `;
   cargarFinanzas();
+  cargarPorCobrarPorPagar();
 }
 function cambiarFinMesRel(delta){
   finMes = shiftMes(finMes, delta);
@@ -1067,6 +1070,136 @@ async function cargarFinanzas(){
   }).join('');
 }
 
+/* ---- Por cobrar / Por pagar (agrupado por frecuencia de familia/niñera) ---- */
+function lunesDeSemana(fechaISO){
+  const d = new Date(fechaISO+'T00:00:00');
+  const dow = d.getDay();
+  const diff = (dow===0 ? -6 : 1-dow);
+  d.setDate(d.getDate()+diff);
+  return d.toISOString().slice(0,10);
+}
+function finDeSemanaDesde(lunesISO){
+  const d = new Date(lunesISO+'T00:00:00');
+  d.setDate(d.getDate()+6);
+  return d.toISOString().slice(0,10);
+}
+function fmtFechaCortaFin(fechaISO){
+  return new Date(fechaISO+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
+}
+function bucketKeyFecha(fechaISO, frecuencia){
+  if(frecuencia==='mensual') return fechaISO.slice(0,7);
+  if(frecuencia==='semanal') return lunesDeSemana(fechaISO);
+  return fechaISO;
+}
+function bucketLabelFecha(bucketKey, frecuencia){
+  if(frecuencia==='mensual') return monthLabel(bucketKey);
+  if(frecuencia==='semanal') return `Semana del ${fmtFechaCortaFin(bucketKey)} al ${fmtFechaCortaFin(finDeSemanaDesde(bucketKey))}`;
+  return fmtFechaCortaFin(bucketKey);
+}
+async function cargarPorCobrarPorPagar(){
+  const [{data:pendCobrar}, {data:pendPagar}, {data:fams}, {data:nins}, {data:asigs}] = await Promise.all([
+    sb.from('sittings_traslados').select('id,familia_id,familia_nombre,fecha,cobro_familia').eq('cobrado', false).gt('cobro_familia', 0),
+    sb.from('sittings_traslados').select('id,familia_id,familia_nombre,ninera_id,ninera_nombre,fecha,pago_ninera').eq('pagado', false).gt('pago_ninera', 0),
+    sb.from('familias').select('id,nombre,frecuencia_cobro'),
+    sb.from('ninieras').select('id,nombre,cuenta_bancaria'),
+    sb.from('asignaciones').select('familia_id,ninera_id,ninera_nombre,familias(nombre)'),
+  ]);
+  const famFrecPorId = {}; const famFrecPorNombre = {};
+  (fams||[]).forEach(f=>{ famFrecPorId[f.id] = f.frecuencia_cobro || 'mensual'; famFrecPorNombre[normaliza(f.nombre)] = f.frecuencia_cobro || 'mensual'; });
+  const ninInfoPorId = {}; const ninInfoPorNombre = {};
+  (nins||[]).forEach(n=>{ ninInfoPorId[n.id] = n; ninInfoPorNombre[normaliza(n.nombre)] = n; });
+  // Relaciones fijas (esa niñera trabaja fijo para esa familia): niñera+familia por id y por nombre, para no perder casos viejos sin id cargado.
+  const fijoSet = new Set();
+  (asigs||[]).forEach(a=>{
+    if(a.ninera_id && a.familia_id) fijoSet.add(a.ninera_id+'|'+a.familia_id);
+    fijoSet.add(normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||''));
+  });
+  function esTrabajoFijo(r){
+    if(r.ninera_id && r.familia_id && fijoSet.has(r.ninera_id+'|'+r.familia_id)) return true;
+    return fijoSet.has(normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||''));
+  }
+
+  const gruposCobrar = {};
+  (pendCobrar||[]).forEach(r=>{
+    const frec = r.familia_id ? (famFrecPorId[r.familia_id]||'mensual') : (famFrecPorNombre[normaliza(r.familia_nombre)]||'mensual');
+    const bucket = bucketKeyFecha(r.fecha, frec);
+    const key = (r.familia_id||normaliza(r.familia_nombre))+'|'+bucket;
+    if(!gruposCobrar[key]) gruposCobrar[key] = {nombre:r.familia_nombre, frec, bucket, total:0, ids:[]};
+    gruposCobrar[key].total += Number(r.cobro_familia)||0;
+    gruposCobrar[key].ids.push(r.id);
+  });
+  const listaCobrar = Object.values(gruposCobrar).sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
+
+  const gruposPagar = {};
+  (pendPagar||[]).forEach(r=>{
+    // La frecuencia depende del trabajo, no de la niñera: si es una relación fija con esa familia, se junta semanal; si es puntual, se paga aparte por día.
+    const frec = esTrabajoFijo(r) ? 'semanal' : 'diario';
+    const bucket = bucketKeyFecha(r.fecha, frec);
+    const info = r.ninera_id ? ninInfoPorId[r.ninera_id] : ninInfoPorNombre[normaliza(r.ninera_nombre)];
+    const key = (r.ninera_id||normaliza(r.ninera_nombre))+'|'+bucket;
+    if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, frec, bucket, total:0, ids:[], cuenta:info?.cuenta_bancaria||''};
+    gruposPagar[key].total += Number(r.pago_ninera)||0;
+    gruposPagar[key].ids.push(r.id);
+  });
+  const listaPagar = Object.values(gruposPagar).sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
+
+  renderPorCobrar(listaCobrar);
+  renderPorPagar(listaPagar);
+}
+function renderPorCobrar(lista){
+  const box = document.getElementById('fin-porcobrar-wrap');
+  if(!box) return;
+  if(!lista.length){ box.innerHTML = `<h2>Por cobrar</h2><div class="empty">No hay cobros pendientes.</div>`; return; }
+  const total = lista.reduce((s,g)=>s+g.total,0);
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;">Por cobrar</h2>
+      <div class="helper" style="margin:0;">${lista.length} pendiente${lista.length===1?'':'s'} · $${total.toLocaleString('es-UY')}</div>
+    </div>
+    ${lista.map(g=>`
+      <div class="agendarow" style="border-bottom:1px solid var(--line);">
+        <div>
+          <div style="font-weight:600;">${g.nombre}</div>
+          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec)} · ${g.frec}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${g.total.toLocaleString('es-UY')}</span>
+          <button class="smallbtn" onclick='marcarGrupoResuelto(${JSON.stringify(g.ids)}, "cobrado")'>Marcar cobrado</button>
+        </div>
+      </div>`).join('')}
+  `;
+}
+function renderPorPagar(lista){
+  const box = document.getElementById('fin-porpagar-wrap');
+  if(!box) return;
+  if(!lista.length){ box.innerHTML = `<h2>Por pagar</h2><div class="empty">No hay pagos pendientes.</div>`; return; }
+  const total = lista.reduce((s,g)=>s+g.total,0);
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;">Por pagar</h2>
+      <div class="helper" style="margin:0;">${lista.length} pendiente${lista.length===1?'':'s'} · $${total.toLocaleString('es-UY')}</div>
+    </div>
+    ${lista.map(g=>`
+      <div class="agendarow" style="border-bottom:1px solid var(--line);">
+        <div>
+          <div style="font-weight:600;">${g.nombre}</div>
+          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec)} · ${g.frec}</div>
+          ${g.cuenta ? `<div class="helper" style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;">${g.cuenta}</div>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${g.total.toLocaleString('es-UY')}</span>
+          <button class="smallbtn" onclick='marcarGrupoResuelto(${JSON.stringify(g.ids)}, "pagado")'>Marcar pagado</button>
+        </div>
+      </div>`).join('')}
+  `;
+}
+async function marcarGrupoResuelto(ids, campo){
+  const { error } = await sb.from('sittings_traslados').update({[campo]:true}).in('id', ids);
+  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+  toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
+  cargarPorCobrarPorPagar();
+}
+
 function moduloHeader(titulo){
   return `<h1 class="modtitle">${titulo}</h1>`;
 }
@@ -1189,11 +1322,13 @@ async function cargarAgendaSolicitudes(){
 
   // Horarios fijos (tabla asignaciones) que correspondan al día de la semana de agendaFecha.
   const diaSemana = diaDeFecha(agendaFecha);
+  const registradosSet = new Set((registros||[]).map(r=>normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
   const fijas = (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana)).map(a=>({
     id: 'asig:'+a.id,
     _fuente: 'asignacion',
     _raw: a,
     _asigId: a.id,
+    _yaRegistrado: registradosSet.has(normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||'')),
     familia_nombre: a.familias?.nombre || '(familia)',
     tipo: 'sitting',
     hora_inicio: a.hora_inicio,
@@ -1618,9 +1753,56 @@ function abrirModalAsignacionFija(s){
     </div>
     <div id="agenda-fija-warn"></div>
     <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="cambiarNineraAsignacionFija('${asigId}')">Guardar niñera</button>
+    ${s._yaRegistrado
+      ? `<div class="helper" style="margin-bottom:8px;">Ya hay un registro cargado para ${a.ninera_nombre} este día en Sittings.</div>`
+      : `<button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionAsignacionFija('${asigId}')">Este día no fue</button>`}
     <button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda('${asigId}')">Quitar esta asignación fija</button>
   `;
   abrirModal(cuerpo);
+}
+function mostrarExcepcionAsignacionFija(asigId){
+  const s = agendaSolicitudes.find(x=>x.id==='asig:'+asigId);
+  if(!s) return;
+  const a = s._raw;
+  const fechaTxt = new Date(agendaFecha+'T00:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
+  const cuerpo = `
+    <h2 style="margin:0 0 6px;">¿${a.ninera_nombre} no fue el ${fechaTxt} a lo de ${s.familia_nombre}?</h2>
+    <div class="helper" style="margin-bottom:16px;">No se le cobra nada a la familia ni se le paga nada a ${a.ninera_nombre} por este día.</div>
+    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="registrarExcepcionFija('${asigId}', false)">No fue nadie ese día</button>
+    <button class="btn primary" style="width:100%;text-align:left;" onclick="registrarExcepcionFija('${asigId}', true)">Hubo reemplazo → cargar su sitting</button>
+  `;
+  abrirModal(cuerpo);
+}
+async function registrarExcepcionFija(asigId, esReemplazo){
+  const s = agendaSolicitudes.find(x=>x.id==='asig:'+asigId);
+  if(!s) return;
+  const a = s._raw;
+  const { error } = await sb.from('sittings_traslados').insert({
+    tipo: 'sitting',
+    familia_id: a.familia_id || null,
+    familia_nombre: s.familia_nombre,
+    ninera_id: a.ninera_id || null,
+    ninera_nombre: a.ninera_nombre,
+    fecha: agendaFecha,
+    hora_inicio: a.hora_inicio || null,
+    hora_fin: a.hora_fin || null,
+    cobro_familia: 0,
+    pago_ninera: 0,
+    cobrado: true,
+    pagado: true,
+    notas: esReemplazo ? `${a.ninera_nombre} no fue — reemplazo cargado aparte` : `${a.ninera_nombre} no fue — sin reemplazo`,
+  });
+  if(error){ toast('No se pudo registrar: '+error.message, 'bad'); return; }
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
+  if(esReemplazo){
+    sitPrefill = { familiaNombre: s.familia_nombre, fecha: agendaFecha, notas: `Reemplazo de ${a.ninera_nombre}` };
+    setModulo('sittings');
+    setTimeout(()=>abrirModalSitForm(), 500);
+  } else {
+    toast('Registrado: no fue nadie ese día.');
+  }
 }
 async function cambiarNineraAsignacionFija(asigId){
   const nueva = document.getElementById('agenda-fija-ninera-'+asigId).value;
@@ -2983,6 +3165,11 @@ function editarFamilia(id){
       <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="ed-fam-pago" value="${f.pago_hora??''}"></div>
       <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion" value="${f.direccion||''}"></div>
       <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-fam-cuenta" value="${f.cuenta_bancaria||''}"></div>
+      <div class="field"><label>Frecuencia de cobro</label><select id="ed-fam-frecuencia">
+        <option value="diario" ${f.frecuencia_cobro==='diario'?'selected':''}>Diario (puntual)</option>
+        <option value="semanal" ${f.frecuencia_cobro==='semanal'?'selected':''}>Semanal</option>
+        <option value="mensual" ${(f.frecuencia_cobro||'mensual')==='mensual'?'selected':''}>Mensual</option>
+      </select></div>
     </div>
     <div class="field"><label>Notas</label><textarea id="ed-fam-notas">${f.notas||''}</textarea></div>
     <div class="confirmbtns">
@@ -3000,6 +3187,7 @@ async function guardarEdicionFamilia(id){
     ninos: document.getElementById('ed-fam-ninos').value,
     direccion: document.getElementById('ed-fam-direccion').value,
     cuenta_bancaria: document.getElementById('ed-fam-cuenta').value,
+    frecuencia_cobro: document.getElementById('ed-fam-frecuencia').value,
     notas: document.getElementById('ed-fam-notas').value,
   };
   const { error } = await sb.from('familias').update(cambios).eq('id', id);
@@ -3037,6 +3225,7 @@ let sitFamilias = [];
 let sitNinieras = [];
 let sitItems = [];
 let sitTipo = 'sitting';
+let sitPrefill = null; // {familiaNombre, fecha, notas} — usado para precargar el form de sitting desde Agenda (ej. reemplazo)
 let sitEditId = null;
 let sitFamiliaSel = null;
 let sitNineraSel = null;
@@ -3305,6 +3494,13 @@ function abrirModalSitForm(id=null){
         document.getElementById('sit-destino').value = r.destino || '';
         actualizarPrecioSugeridoTraslado();
       }
+    } else if(sitPrefill){
+      document.getElementById('sit-familia').value = sitPrefill.familiaNombre || '';
+      sitFamiliaSel = findFamilia(sitPrefill.familiaNombre||'');
+      document.getElementById('sit-fecha').value = sitPrefill.fecha || todayISO();
+      if(sitPrefill.notas) document.getElementById('sit-notas').value = sitPrefill.notas;
+      onSitFamiliaInput();
+      sitPrefill = null;
     }
     calcSitMargen();
   }, 20);
