@@ -2253,14 +2253,61 @@ async function eliminarFechaMarketing(id){
 /* ================= RR.HH. ================= */
 function rrhhShell(){
   const tabs = [['intake','Candidatas a entrevistar'],['entrevista','Entrevista'],['guardadas','Candidatas guardadas']];
-  return `<div class="subnav">${tabs.map(([k,l])=>`<button class="subtab ${rrhhTab===k?'active':''}" data-rrhhtab="${k}">${l}</button>`).join('')}</div><div id="rrhh-body"></div>`;
+  return `<div class="card" id="rrhh-carsitting-pend"></div><div class="subnav">${tabs.map(([k,l])=>`<button class="subtab ${rrhhTab===k?'active':''}" data-rrhhtab="${k}">${l}</button>`).join('')}</div><div id="rrhh-body"></div>`;
 }
 function afterRrhhRender(){
   document.querySelectorAll('[data-rrhhtab]').forEach(b=>b.addEventListener('click', ()=>{ rrhhTab=b.dataset.rrhhtab; renderModulo(); }));
+  cargarCarsittingPendientes();
   const body = document.getElementById('rrhh-body');
   if(rrhhTab==='intake') renderIntake(body);
   if(rrhhTab==='entrevista') renderEntrevista(body);
   if(rrhhTab==='guardadas') renderGuardadas(body);
+}
+async function cargarCarsittingPendientes(){
+  const box = document.getElementById('rrhh-carsitting-pend');
+  if(!box) return;
+  box.innerHTML = `<h2 style="margin:0 0 4px;">Pendientes de carsitting</h2><div class="empty"><span class="spinner dark"></span> Cargando…</div>`;
+  const [{data:nins}, {data:cands}, {data:cd}] = await Promise.all([
+    sb.from('ninieras').select('id,nombre,tipo,carsitting_mail_enviado_at').in('tipo', ['Traslados','Ambas']),
+    sb.from('candidatas').select('id,nombre,apellido,tipo,mail,carsitting_mail_enviado_at').in('tipo', ['Traslados','Ambas']),
+    sb.from('carsitting_datos').select('ninera_nombre'),
+  ]);
+  const yaTiene = new Set((cd||[]).map(r=>normaliza(r.ninera_nombre||'')));
+  const pendientes = [
+    ...(nins||[]).filter(n=>!yaTiene.has(normaliza(n.nombre))).map(n=>({origen:'ninera', id:n.id, nombre:n.nombre, mail:null, enviado:n.carsitting_mail_enviado_at})),
+    ...(cands||[]).filter(c=>!yaTiene.has(normaliza(`${c.nombre} ${c.apellido||''}`.trim()))).map(c=>({origen:'candidata', id:c.id, nombre:`${c.nombre} ${c.apellido||''}`.trim(), mail:c.mail, enviado:c.carsitting_mail_enviado_at})),
+  ];
+  if(!pendientes.length){
+    box.innerHTML = `<h2 style="margin:0 0 4px;">Pendientes de carsitting</h2><div class="empty">Todas las personas de traslados ya completaron el form.</div>`;
+    return;
+  }
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;">Pendientes de carsitting</h2>
+      <div class="helper" style="margin:0;">${pendientes.length} persona${pendientes.length===1?'':'s'} de traslados sin completar el form</div>
+    </div>
+    ${pendientes.map(p=>{
+      const asunto = encodeURIComponent('¡Bienvenida al equipo de traslados de Parents Break!');
+      const primerNombre = (p.nombre||'').split(' ')[0];
+      const cuerpo = encodeURIComponent(`Hola ${primerNombre},\n\n¡Qué alegría contar con vos para hacer traslados con Parents Break! Ya vimos en tu entrevista que tenés licencia de conducir y ganas de sumarte a esta parte del equipo.\n\nPara terminar de darte de alta como carsitter, necesitamos que completes este formulario con los datos de tu auto y algunos datos más:\n\nhttps://forms.gle/J4QXgNJQ8kXMsA4C6\n\nCon esto ya vas a quedar lista para que te empecemos a asignar traslados.\n\nCualquier duda, escribinos.\n\nUn abrazo,\nParents Break`);
+      const mailId = `carp-mail-${p.origen}-${p.id}`;
+      const enviadoTxt = p.enviado ? `Último mail enviado: ${new Date(p.enviado).toLocaleDateString('es-UY',{day:'2-digit',month:'short'})}` : 'Todavía no se le mandó nada';
+      return `<div class="agendarow" style="border-bottom:1px solid var(--line);flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:600;">${p.nombre} <span class="badge" style="font-size:10px;">${p.origen==='ninera'?'niñera':'candidata'}</span></div>
+          <div class="helper" style="margin:2px 0 0;">${enviadoTxt}</div>
+          ${p.mail?'':`<input type="email" id="${mailId}" placeholder="mail de contacto" style="margin-top:6px;max-width:220px;">`}
+        </div>
+        <a class="smallbtn" style="text-decoration:none;" onclick="marcarCarsittingMailEnviado('${p.origen}','${p.id}')"
+           href="mailto:${p.mail||''}?subject=${asunto}&body=${cuerpo}" target="_blank" rel="noopener"
+           ${p.mail?'':`onmousedown="this.href='mailto:'+(document.getElementById('${mailId}').value||'')+'?subject=${asunto}&body=${cuerpo}'"`}>Enviar mail</a>
+      </div>`;
+    }).join('')}
+  `;
+}
+async function marcarCarsittingMailEnviado(origen, id){
+  const tabla = origen==='ninera' ? 'ninieras' : 'candidatas';
+  await sb.from(tabla).update({carsitting_mail_enviado_at: new Date().toISOString()}).eq('id', id);
 }
 function errBox(e){ return `<div class="warnbox">Error de conexión con la base: ${e.message||e}</div>`; }
 
