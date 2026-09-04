@@ -2067,9 +2067,45 @@ async function cancelarSolicitud(id){
   actualizarAgendaBadge();
 }
 
+/* ---- Actualización en vivo (Supabase Realtime) ----
+   Cada módulo se suscribe a cambios en sus tablas relevantes. Cuando alguien
+   (en otra sesión/celular) inserta, edita o borra algo en esas tablas, se
+   vuelve a cargar la vista actual sola, sin que haga falta recargar la página. */
+const RT_TABLAS_POR_MODULO = {
+  hoy: ['sittings_traslados','gastos_generales','solicitudes','asignaciones'],
+  agenda: ['solicitudes','solicitud_ninieras','asignaciones','sittings_traslados'],
+  rrhh: ['candidatas','entrevistas','carsitting_datos'],
+  ninieras: ['ninieras','candidatas','resenas_ninieras'],
+  familias: ['familias'],
+  sittings: ['sittings_traslados'],
+  finanzas: ['sittings_traslados','gastos_generales','familias','ninieras'],
+  marketing: ['fechas_marketing'],
+  legal: ['contratos'],
+  juguetes: ['juguetes','juguetes_movimientos'],
+};
+let rtChannel = null;
+let rtRefrescarTimer = null;
+function suscribirRealtimeModuloActivo(){
+  if(rtChannel){ sb.removeChannel(rtChannel); rtChannel = null; }
+  const clave = moduloActivo && !moduloActivo.startsWith('pend-') ? moduloActivo : 'hoy';
+  const tablas = RT_TABLAS_POR_MODULO[clave] || [];
+  if(!tablas.length) return;
+  rtChannel = sb.channel('rt-'+clave+'-'+Date.now());
+  tablas.forEach(t=>{
+    rtChannel.on('postgres_changes', {event:'*', schema:'public', table:t}, ()=>{
+      clearTimeout(rtRefrescarTimer);
+      rtRefrescarTimer = setTimeout(()=>{
+        if(document.querySelector('.confirmoverlay.show')) return; // no interrumpir un modal abierto
+        renderModulo();
+      }, 600);
+    });
+  });
+  rtChannel.subscribe();
+}
 function renderModulo(){
   renderSidebar();
   document.getElementById('modfooter').innerHTML = '';
+  suscribirRealtimeModuloActivo();
   const cont = document.getElementById('modcontent');
   if(!moduloActivo){ renderDashboard(cont); return; }
   if(moduloActivo.startsWith('pend-')){ renderPendHoy(cont); return; }
