@@ -576,7 +576,7 @@ function setModulo(k){ moduloActivo=k; renderModulo(); }
 function renderSidebar(){
   const activeTop = (moduloActivo===null || moduloActivo==='hoy') ? 'hoy' : (MODULOS.some(m=>m.key===moduloActivo) ? moduloActivo : null);
   document.getElementById('sidebar').innerHTML = `
-    <div class="sidebar-logo-wrap"><img src="logo.png" alt="Parents Break" class="sidebar-logo"></div>
+    <div class="sidebar-logo-wrap"><img src="logo.png" alt="Parents Break — ir a Hoy" class="sidebar-logo" role="button" tabindex="0" style="cursor:pointer;" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}"></div>
     <nav class="sidebar-nav">
       <button class="navitem ${activeTop==='hoy'?'active':''}" onclick="setModulo(null)" title="Hoy">
         <div class="navitem-ic">${ICONS.hoy}</div><div class="navitem-label">Hoy</div>
