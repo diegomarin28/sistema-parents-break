@@ -1292,7 +1292,6 @@ let jugNinierasCache = [];
 function abrirModalJuguete(id=null){
   const j = id ? juguetesItems.find(x=>x.id===id) : null;
   jugFotoUrlPendiente = j?.foto_url || null;
-  const opcionesNinera = `<option value="">Sin asignar / en depósito</option>` + jugNinierasCache.map(n=>`<option value="${n.nombre}" ${j?.ninera_nombre===n.nombre?'selected':''}>${n.nombre}</option>`).join('');
   const cuerpo = `
     <h2 style="margin:0 0 12px;">${j?'Editar juguete':'Agregar juguete'}</h2>
     <div style="margin-bottom:14px;">
@@ -1313,7 +1312,10 @@ function abrirModalJuguete(id=null){
       </select></div>
       <div class="field"><label>Edad desde</label><input type="number" id="jug-edad-desde" min="0" value="${j?.edad_desde??''}"></div>
       <div class="field"><label>Edad hasta</label><input type="number" id="jug-edad-hasta" min="0" value="${j?.edad_hasta??''}"></div>
-      <div class="field"><label>Niñera que lo tiene</label><select id="jug-ninera">${opcionesNinera}</select></div>
+      <div class="field" style="position:relative;"><label>Niñera que lo tiene</label>
+        <input type="text" id="jug-ninera" autocomplete="off" value="${j?.ninera_nombre||''}" placeholder="Vacío = sin asignar / en depósito">
+        <div id="jug-ninera-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
+      </div>
       <div class="field"><label>Estado</label><select id="jug-estado">
         <option value="disponible" ${(!j||j.estado==='disponible')?'selected':''}>Disponible</option>
         <option value="perdido" ${j?.estado==='perdido'?'selected':''}>Perdido</option>
@@ -1325,6 +1327,7 @@ function abrirModalJuguete(id=null){
     <button class="btn primary" style="width:100%;margin-top:8px;" onclick="guardarJuguete(${j?`'${j.id}'`:'null'})">Guardar</button>
   `;
   abrirModal(cuerpo);
+  setTimeout(()=>attachAutocomplete('jug-ninera', 'jug-ninera-dropdown', ()=>jugNinierasCache, ()=>{}), 20);
 }
 function quitarFotoJuguete(){
   jugFotoUrlPendiente = null;
@@ -1348,7 +1351,7 @@ async function subirFotoJuguete(input){
 async function guardarJuguete(id){
   const nombre = document.getElementById('jug-nombre').value.trim();
   if(!nombre){ toast('Falta el nombre del juguete.', 'bad'); return; }
-  const ninera_nombre = document.getElementById('jug-ninera').value || null;
+  const ninera_nombre = document.getElementById('jug-ninera').value.trim() || null;
   const ninera = jugNinierasCache.find(n=>n.nombre===ninera_nombre);
   const payload = {
     nombre,
@@ -1749,7 +1752,10 @@ function abrirModalNuevaSolicitud(){
       <div class="helper" id="agenda-total-preview" style="min-height:16px;"></div>
     </div>
     <div id="agenda-bloque-repetir" style="display:none;">
-      <div class="field"><label>Niñera</label><select id="agenda-repetir-ninera"><option value="">Elegí una niñera</option>${agendaNinierasBase.map(n=>`<option value="${n.nombre}">${n.nombre}</option>`).join('')}</select></div>
+      <div class="field" style="position:relative;"><label>Niñera</label>
+        <input type="text" id="agenda-repetir-ninera" autocomplete="off" placeholder="Escribí el nombre de la niñera">
+        <div id="agenda-repetir-ninera-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
+      </div>
       <div class="field"><label>Días</label>
         <div class="dayrow" id="agenda-repetir-dias">
           ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" data-dia="${d}" onclick="toggleAgendaDia(this)">${DIAS_CORTO[d]}</button>`).join('')}
@@ -1766,6 +1772,7 @@ function abrirModalNuevaSolicitud(){
     <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarSolicitud()">Guardar solicitud</button>
   `;
   abrirModal(html);
+  setTimeout(()=>attachAutocomplete('agenda-repetir-ninera', 'agenda-repetir-ninera-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
 }
 async function guardarSolicitud(){
   if(agendaModoNueva==='repetir') return guardarAsignacionFijaNueva();
@@ -1809,7 +1816,7 @@ async function guardarSolicitud(){
 }
 async function guardarAsignacionFijaNueva(){
   const familiaTxt = document.getElementById('agenda-familia').value.trim();
-  const nineraNombre = document.getElementById('agenda-repetir-ninera').value;
+  const nineraNombre = document.getElementById('agenda-repetir-ninera').value.trim();
   const warn = document.getElementById('agenda-nueva-warn');
   if(!familiaTxt || !nineraNombre){ warn.innerHTML = '<div class="warnbox">Elegí la familia y la niñera.</div>'; return; }
   const dias = [...document.querySelectorAll('#agenda-repetir-dias .daybtn.selected')].map(b=>b.dataset.dia);
@@ -1941,8 +1948,9 @@ function abrirModalAsignacionFija(s){
   const cuerpo = `
     <h2>${s.familia_nombre}</h2>
     <div class="helper">Horario fijo · ${diasTxt || 'sin días'} · ${horario}</div>
-    <div class="field" style="margin-top:14px;"><label>Niñera asignada</label>
-      <select id="agenda-fija-ninera-${asigId}">${agendaNinierasBase.map(n=>`<option value="${n.nombre}" ${n.nombre===a.ninera_nombre?'selected':''}>${n.nombre}</option>`).join('')}</select>
+    <div class="field" style="margin-top:14px;position:relative;"><label>Niñera asignada</label>
+      <input type="text" id="agenda-fija-ninera-${asigId}" autocomplete="off" value="${a.ninera_nombre||''}">
+      <div id="agenda-fija-ninera-${asigId}-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
     </div>
     <div id="agenda-fija-warn"></div>
     <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="cambiarNineraAsignacionFija('${asigId}')">Guardar niñera</button>
@@ -1952,6 +1960,7 @@ function abrirModalAsignacionFija(s){
     <button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda('${asigId}')">Quitar esta asignación fija</button>
   `;
   abrirModal(cuerpo);
+  setTimeout(()=>attachAutocomplete('agenda-fija-ninera-'+asigId, 'agenda-fija-ninera-'+asigId+'-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
 }
 function mostrarExcepcionAsignacionFija(asigId){
   const s = agendaSolicitudes.find(x=>x.id==='asig:'+asigId);
@@ -1998,7 +2007,7 @@ async function registrarExcepcionFija(asigId, esReemplazo){
   }
 }
 async function cambiarNineraAsignacionFija(asigId){
-  const nueva = document.getElementById('agenda-fija-ninera-'+asigId).value;
+  const nueva = document.getElementById('agenda-fija-ninera-'+asigId).value.trim();
   const warn = document.getElementById('agenda-fija-warn');
   if(!nueva) return;
   const { error } = await sb.from('asignaciones').update({ninera_nombre: nueva}).eq('id', asigId);
