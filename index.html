@@ -3133,7 +3133,18 @@ function editarNinera(id){
       <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${n.telefono||''}"></div>
       <div class="field"><label>Zona</label><input type="text" id="ed-zona" value="${n.zona||''}"></div>
       <div class="field"><label>Tipo</label><select id="ed-tipo">${tipos.map(t=>`<option ${n.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
-      <div class="field"><label>Foto (URL)</label><input type="text" id="ed-foto" value="${n.foto||''}"></div>
+      <div class="field">
+        <label>Foto</label>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <div id="ed-foto-preview" style="width:56px;height:56px;border-radius:50%;background:var(--bg);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:9px;color:var(--ink-soft);text-align:center;flex-shrink:0;">
+            ${n.foto?`<img src="${n.foto}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
+          </div>
+          <div>
+            <input type="file" accept="image/*" id="ed-foto-input" style="font-size:11px;" onchange="subirFotoNinera(this)">
+            <div id="ed-foto-status" class="helper" style="margin:2px 0 0;"></div>
+          </div>
+        </div>
+      </div>
       <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-cuenta" value="${n.cuenta_bancaria||''}"></div>
     </div>
     <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
@@ -3141,14 +3152,29 @@ function editarNinera(id){
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="guardarEdicionNinera('${id}')">Guardar</button>
     </div>`);
+  ninFotoUrlPendiente = n.foto || null;
 }
+async function subirFotoNinera(input){
+  const file = input.files[0];
+  if(!file) return;
+  const status = document.getElementById('ed-foto-status');
+  status.textContent = 'Subiendo...';
+  const path = `ninera-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g,'_')}`;
+  const { error } = await sb.storage.from('ninieras-fotos').upload(path, file, { upsert:true });
+  if(error){ status.textContent = 'Error al subir: '+error.message; return; }
+  const { data:pub } = sb.storage.from('ninieras-fotos').getPublicUrl(path);
+  ninFotoUrlPendiente = pub.publicUrl;
+  document.getElementById('ed-foto-preview').innerHTML = `<img src="${ninFotoUrlPendiente}" style="width:100%;height:100%;object-fit:cover;">`;
+  status.textContent = 'Foto lista.';
+}
+let ninFotoUrlPendiente = null;
 async function guardarEdicionNinera(id){
   const cambios = {
     nombre: document.getElementById('ed-nombre').value,
     telefono: document.getElementById('ed-telefono').value,
     zona: document.getElementById('ed-zona').value,
     tipo: document.getElementById('ed-tipo').value,
-    foto: document.getElementById('ed-foto').value,
+    foto: ninFotoUrlPendiente,
     cuenta_bancaria: document.getElementById('ed-cuenta').value,
     notas: document.getElementById('ed-notas').value,
   };
