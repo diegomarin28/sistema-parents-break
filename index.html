@@ -1300,6 +1300,7 @@ function abrirModalJuguete(id=null){
         ${jugFotoUrlPendiente?`<img src="${jugFotoUrlPendiente}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
       </div>
       <input type="file" accept="image/*" id="jug-foto-input" style="font-size:12px;margin-top:8px;width:100%;" onchange="subirFotoJuguete(this)">
+      <div style="margin-top:6px;"><button class="smallbtn" type="button" onclick="quitarFotoJuguete()">Quitar foto</button></div>
       <div id="jug-foto-status" class="helper" style="margin:2px 0 0;"></div>
     </div>
     <div class="field"><label>Nombre</label><input type="text" id="jug-nombre" value="${j?.nombre||''}"></div>
@@ -1324,6 +1325,12 @@ function abrirModalJuguete(id=null){
     <button class="btn primary" style="width:100%;margin-top:8px;" onclick="guardarJuguete(${j?`'${j.id}'`:'null'})">Guardar</button>
   `;
   abrirModal(cuerpo);
+}
+function quitarFotoJuguete(){
+  jugFotoUrlPendiente = null;
+  document.getElementById('jug-foto-preview').innerHTML = 'sin foto';
+  const input = document.getElementById('jug-foto-input');
+  if(input) input.value = '';
 }
 async function subirFotoJuguete(input){
   const file = input.files[0];
@@ -3123,14 +3130,16 @@ function editarNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
   const tipos = ['Niñera','Traslados','Ambas'];
   ninEditCandidataCache = n.candidatas || {};
-  const camposDisponibles = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona'].includes(f.key));
   abrirModal(`
     <h2 style="margin:0 0 12px;">Editar a ${n.nombre}</h2>
     <div style="margin-bottom:14px;">
       <div id="ed-foto-preview" style="width:100%;height:160px;border-radius:12px;background:var(--bg);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:12px;color:var(--ink-soft);">
         ${n.foto?`<img src="${n.foto}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
       </div>
-      <input type="file" accept="image/*" id="ed-foto-input" style="font-size:12px;margin-top:8px;width:100%;" onchange="subirFotoNinera(this)">
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+        <input type="file" accept="image/*" id="ed-foto-input" style="font-size:12px;" onchange="subirFotoNinera(this)">
+        <button class="smallbtn" type="button" onclick="quitarFotoNinera()">Quitar foto</button>
+      </div>
       <div id="ed-foto-status" class="helper" style="margin:2px 0 0;"></div>
     </div>
     <div class="grid2">
@@ -3142,31 +3151,76 @@ function editarNinera(id){
     </div>
     <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
     <div id="ed-extra-fields"></div>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
-      <select id="ed-cat-select" style="flex:1;">${camposDisponibles.map(f=>`<option value="${f.key}">${f.label}${ninEditCandidataCache[f.key]?' (con dato)':''}</option>`).join('')}</select>
-      <button class="btn" type="button" onclick="agregarCampoExtraNinera()">+ Agregar categoría</button>
-    </div>
+    <button class="btn" type="button" style="width:100%;margin-top:10px;" onclick="abrirSelectorCategoriaNinera()">+ Agregar categorías</button>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="guardarEdicionNinera('${id}')">Guardar</button>
     </div>`);
   ninFotoUrlPendiente = n.foto || null;
 }
+function quitarFotoNinera(){
+  ninFotoUrlPendiente = null;
+  document.getElementById('ed-foto-preview').innerHTML = 'sin foto';
+  const input = document.getElementById('ed-foto-input');
+  if(input) input.value = '';
+}
 let ninEditCandidataCache = {};
-function agregarCampoExtraNinera(){
-  const sel = document.getElementById('ed-cat-select');
-  const key = sel.value;
-  if(!key) return;
+function abrirSelectorCategoriaNinera(){
+  const yaAgregadas = new Set([...document.querySelectorAll('#ed-extra-fields [data-campo]')].map(el=>el.dataset.campo));
+  const disponibles = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona'].includes(f.key) && !yaAgregadas.has(f.key));
+  const seleccionadas = new Set();
+  const overlay = document.createElement('div');
+  overlay.className = 'confirmoverlay';
+  overlay.innerHTML = `
+    <div class="confirmbox" style="max-width:480px;max-height:78vh;overflow-y:auto;text-align:left;">
+      <h2 style="margin:0 0 4px;">Agregar categorías</h2>
+      <div class="helper" style="margin:0 0 14px;">Elegí las que quieras agregar a la ficha.</div>
+      <div id="cat-picker-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div class="confirmbtns" style="margin-top:16px;">
+        <button class="btn ghost" id="cat-picker-cancelar">Cancelar</button>
+        <button class="btn primary" id="cat-picker-confirmar">Confirmar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=>overlay.classList.add('show'));
+  const lista = overlay.querySelector('#cat-picker-list');
+  if(!disponibles.length){
+    lista.innerHTML = '<div class="helper" style="margin:0;">Ya agregaste todas las categorías disponibles.</div>';
+  }
+  disponibles.forEach(f=>{
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border:1px solid var(--line);border-radius:8px;cursor:pointer;';
+    row.innerHTML = `<span style="font-size:13px;">${f.label}${ninEditCandidataCache[f.key]?' <span class="helper" style="margin:0;">(con dato)</span>':''}</span><span data-marca style="font-size:12px;font-weight:600;color:var(--accent);">+</span>`;
+    row.addEventListener('click', ()=>{
+      if(seleccionadas.has(f.key)){
+        seleccionadas.delete(f.key);
+        row.style.background = '';
+        row.querySelector('[data-marca]').textContent = '+';
+      } else {
+        seleccionadas.add(f.key);
+        row.style.background = 'var(--accent-soft)';
+        row.querySelector('[data-marca]').textContent = 'agregada';
+      }
+    });
+    lista.appendChild(row);
+  });
+  function cerrar(){ overlay.classList.remove('show'); setTimeout(()=>overlay.remove(), 180); }
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) cerrar(); });
+  overlay.querySelector('#cat-picker-cancelar').addEventListener('click', cerrar);
+  overlay.querySelector('#cat-picker-confirmar').addEventListener('click', ()=>{
+    seleccionadas.forEach(key=>agregarCampoExtraNinera(key));
+    cerrar();
+  });
+}
+function agregarCampoExtraNinera(key){
   const campo = FICHA_CAMPOS.find(f=>f.key===key);
+  if(!campo) return;
   const cont = document.getElementById('ed-extra-fields');
   if(cont.querySelector(`[data-campo="${key}"]`)) return; // ya está agregado
   const row = document.createElement('div');
   row.className = 'field';
   row.innerHTML = `<label>${campo.label}</label><textarea data-campo="${key}" rows="2">${ninEditCandidataCache[key]||''}</textarea>`;
   cont.appendChild(row);
-  sel.querySelector(`option[value="${key}"]`).disabled = true;
-  const siguiente = [...sel.options].find(o=>!o.disabled);
-  if(siguiente) sel.value = siguiente.value;
 }
 async function subirFotoNinera(input){
   const file = input.files[0];
