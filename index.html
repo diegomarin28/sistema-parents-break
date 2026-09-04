@@ -545,6 +545,7 @@ const ICONS = {
   moneyIn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l5-5 4 4 7-8"/><path d="M15 8h5v5"/></svg>`,
   moneyOut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7l5 5 4-4 7 8"/><path d="M15 16h5v-5"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg>`,
+  juguetes: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="10" width="7" height="7" rx="1.2"/><circle cx="16.5" cy="13.5" r="3.5"/><path d="M9 10V7a2 2 0 1 1 2 2H9z"/></svg>`,
 };
 const MODULOS = [
   {key:'agenda', label:'Agenda', desc:'Solicitudes de familias, asignación de niñeras y calendario del día.'},
@@ -1294,16 +1295,14 @@ function abrirModalJuguete(id=null){
   const opcionesNinera = `<option value="">Sin asignar / en depósito</option>` + jugNinierasCache.map(n=>`<option value="${n.nombre}" ${j?.ninera_nombre===n.nombre?'selected':''}>${n.nombre}</option>`).join('');
   const cuerpo = `
     <h2 style="margin:0 0 12px;">${j?'Editar juguete':'Agregar juguete'}</h2>
-    <div style="display:flex;gap:12px;margin-bottom:12px;align-items:flex-start;">
-      <div style="flex-shrink:0;">
-        <div id="jug-foto-preview" style="width:72px;height:72px;border-radius:10px;background:var(--bg);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:10px;color:var(--ink-soft);text-align:center;">
-          ${jugFotoUrlPendiente?`<img src="${jugFotoUrlPendiente}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
-        </div>
-        <input type="file" accept="image/*" id="jug-foto-input" style="font-size:11px;margin-top:6px;max-width:90px;" onchange="subirFotoJuguete(this)">
-        <div id="jug-foto-status" class="helper" style="margin:2px 0 0;max-width:90px;"></div>
+    <div style="margin-bottom:14px;">
+      <div id="jug-foto-preview" style="width:100%;height:160px;border-radius:12px;background:var(--bg);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:12px;color:var(--ink-soft);">
+        ${jugFotoUrlPendiente?`<img src="${jugFotoUrlPendiente}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
       </div>
-      <div class="field" style="margin:0;flex:1;"><label>Nombre</label><input type="text" id="jug-nombre" value="${j?.nombre||''}"></div>
+      <input type="file" accept="image/*" id="jug-foto-input" style="font-size:12px;margin-top:8px;width:100%;" onchange="subirFotoJuguete(this)">
+      <div id="jug-foto-status" class="helper" style="margin:2px 0 0;"></div>
     </div>
+    <div class="field"><label>Nombre</label><input type="text" id="jug-nombre" value="${j?.nombre||''}"></div>
     <div class="grid2">
       <div class="field"><label>Tipo</label><input type="text" id="jug-tipo" list="jug-tipos-dl" value="${j?.tipo||''}" placeholder="cartas, memoria, construcción..."></div>
       <div class="field"><label>Género</label><select id="jug-genero">
@@ -3123,36 +3122,51 @@ function renderNineraHistorial(id){
 function editarNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
   const tipos = ['Niñera','Traslados','Ambas'];
+  ninEditCandidataCache = n.candidatas || {};
+  const camposDisponibles = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona'].includes(f.key));
   abrirModal(`
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
-      <div style="width:46px;height:46px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-family:'Baloo 2',sans-serif;font-weight:600;font-size:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">${n.foto?`<img src="${n.foto}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
-      <h2 style="margin:0;">Editar a ${n.nombre}</h2>
+    <h2 style="margin:0 0 12px;">Editar a ${n.nombre}</h2>
+    <div style="margin-bottom:14px;">
+      <div id="ed-foto-preview" style="width:100%;height:160px;border-radius:12px;background:var(--bg);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:12px;color:var(--ink-soft);">
+        ${n.foto?`<img src="${n.foto}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
+      </div>
+      <input type="file" accept="image/*" id="ed-foto-input" style="font-size:12px;margin-top:8px;width:100%;" onchange="subirFotoNinera(this)">
+      <div id="ed-foto-status" class="helper" style="margin:2px 0 0;"></div>
     </div>
     <div class="grid2">
       <div class="field"><label>Nombre</label><input type="text" id="ed-nombre" value="${n.nombre||''}"></div>
       <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${n.telefono||''}"></div>
       <div class="field"><label>Zona</label><input type="text" id="ed-zona" value="${n.zona||''}"></div>
       <div class="field"><label>Tipo</label><select id="ed-tipo">${tipos.map(t=>`<option ${n.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
-      <div class="field">
-        <label>Foto</label>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <div id="ed-foto-preview" style="width:56px;height:56px;border-radius:50%;background:var(--bg);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:9px;color:var(--ink-soft);text-align:center;flex-shrink:0;">
-            ${n.foto?`<img src="${n.foto}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
-          </div>
-          <div>
-            <input type="file" accept="image/*" id="ed-foto-input" style="font-size:11px;" onchange="subirFotoNinera(this)">
-            <div id="ed-foto-status" class="helper" style="margin:2px 0 0;"></div>
-          </div>
-        </div>
-      </div>
       <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-cuenta" value="${n.cuenta_bancaria||''}"></div>
     </div>
     <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
+    <div id="ed-extra-fields"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+      <select id="ed-cat-select" style="flex:1;">${camposDisponibles.map(f=>`<option value="${f.key}">${f.label}${ninEditCandidataCache[f.key]?' (con dato)':''}</option>`).join('')}</select>
+      <button class="btn" type="button" onclick="agregarCampoExtraNinera()">+ Agregar categoría</button>
+    </div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="guardarEdicionNinera('${id}')">Guardar</button>
     </div>`);
   ninFotoUrlPendiente = n.foto || null;
+}
+let ninEditCandidataCache = {};
+function agregarCampoExtraNinera(){
+  const sel = document.getElementById('ed-cat-select');
+  const key = sel.value;
+  if(!key) return;
+  const campo = FICHA_CAMPOS.find(f=>f.key===key);
+  const cont = document.getElementById('ed-extra-fields');
+  if(cont.querySelector(`[data-campo="${key}"]`)) return; // ya está agregado
+  const row = document.createElement('div');
+  row.className = 'field';
+  row.innerHTML = `<label>${campo.label}</label><textarea data-campo="${key}" rows="2">${ninEditCandidataCache[key]||''}</textarea>`;
+  cont.appendChild(row);
+  sel.querySelector(`option[value="${key}"]`).disabled = true;
+  const siguiente = [...sel.options].find(o=>!o.disabled);
+  if(siguiente) sel.value = siguiente.value;
 }
 async function subirFotoNinera(input){
   const file = input.files[0];
@@ -3180,6 +3194,24 @@ async function guardarEdicionNinera(id){
   };
   const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  const extraInputs = [...document.querySelectorAll('#ed-extra-fields [data-campo]')];
+  if(extraInputs.length){
+    const extra = {};
+    extraInputs.forEach(el=>{ extra[el.dataset.campo] = el.value; });
+    const n = ninierasItems.find(x=>x.id===id);
+    let candidataId = n?.candidata_id;
+    if(!candidataId){
+      const partes = (cambios.nombre||'').trim().split(' ');
+      const { data:nuevaCand, error:e2 } = await sb.from('candidatas')
+        .insert({ nombre: partes[0]||cambios.nombre, apellido: partes.slice(1).join(' ')||null, estado:'contratada', tipo: cambios.tipo, ...extra })
+        .select().single();
+      if(e2){ toast('Se guardó lo básico, pero no las categorías extra: '+e2.message, 'bad'); }
+      else { await sb.from('ninieras').update({candidata_id: nuevaCand.id}).eq('id', id); }
+    } else {
+      const { error:e3 } = await sb.from('candidatas').update(extra).eq('id', candidataId);
+      if(e3){ toast('Se guardó lo básico, pero no las categorías extra: '+e3.message, 'bad'); }
+    }
+  }
   cerrarModal();
   toast('Cambios guardados.');
   cargarNinieras();
