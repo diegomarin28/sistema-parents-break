@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="Parents Break">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
 :root{
@@ -359,6 +360,28 @@ function confirmarAccion(mensaje, textoBoton='Eliminar'){
   });
 }
 
+function abrirLightboxFoto(url, alt=''){
+  if(!url) return;
+  let ov = document.getElementById('fotolightbox');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'fotolightbox';
+    ov.className = 'confirmoverlay';
+    ov.style.zIndex = '400';
+    ov.style.cursor = 'zoom-out';
+    ov.innerHTML = `<img id="fotolightbox-img" style="max-width:92vw;max-height:92vh;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.4);" alt="">
+      <button class="modal-close" onclick="cerrarLightboxFoto()" aria-label="Cerrar" style="position:fixed;top:18px;right:22px;">×</button>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (e)=>{ if(e.target===ov) cerrarLightboxFoto(); });
+  }
+  document.getElementById('fotolightbox-img').src = url;
+  document.getElementById('fotolightbox-img').alt = alt;
+  requestAnimationFrame(()=>ov.classList.add('show'));
+}
+function cerrarLightboxFoto(){
+  const ov = document.getElementById('fotolightbox');
+  if(ov) ov.classList.remove('show');
+}
 let modalToken = 0;
 function abrirModal(html){
   modalToken++;
@@ -815,7 +838,7 @@ let finMes = null;
 async function renderFinanzas(cont){
   finMes = finMes || currentMonthStr();
   cont.innerHTML = moduloHeader('Finanzas') + `
-    <div class="helper">Ingresos y pagos a niñeras vienen automáticos desde Sittings &amp; traslados. Los demás gastos del negocio (alquiler, insumos, etc.) se cargan acá a mano. La conciliación con el estado de cuenta de Itaú sigue siendo un paso aparte por ahora.</div>
+    <div class="helper">Ingresos y pagos a niñeras vienen automáticos desde Sittings &amp; traslados. Los demás gastos del negocio (alquiler, insumos, etc.) se cargan acá a mano. Los cobros se pueden conciliar automáticamente subiendo el extracto de Itaú, más abajo.</div>
     <div class="mesbar">
       <div class="mesnav">
         <button onclick="cambiarFinMesRel(-1)" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
@@ -825,6 +848,28 @@ async function renderFinanzas(cont){
       <button class="btn primary" onclick="abrirModalNuevoGasto()">+ Registrar gasto</button>
     </div>
     <div class="summary3" id="fin-summary"></div>
+    <div class="card" id="fin-balance-wrap">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <div><h2 style="margin:0;">Balance de varios meses</h2><div class="helper" style="margin:2px 0 0;">Ingresos y gastos mes a mes, para ver la tendencia y no solo la foto de un mes.</div></div>
+        <select id="fin-balance-rango" onchange="cargarBalanceMultiMes(Number(this.value))" style="width:auto;">
+          <option value="3">Últimos 3 meses</option>
+          <option value="6" selected>Últimos 6 meses</option>
+          <option value="12">Últimos 12 meses</option>
+        </select>
+      </div>
+      <div style="height:220px;margin-top:14px;"><canvas id="finBalanceChart" role="img" aria-label="Ingresos y gastos por mes"></canvas></div>
+      <div class="summary3" id="fin-balance-totales" style="margin-top:14px;"></div>
+    </div>
+    <div class="card" id="fin-conciliar-wrap">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <div><h2 style="margin:0;">Conciliar cobros con extracto Itaú</h2><div class="helper" style="margin:2px 0 0;">Subí el estado de cuenta (.xls, .xlsx o .csv) y el sistema matchea los créditos contra la cuenta bancaria de cada familia, para no tener que marcar "cobrado" sitting por sitting.</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
+        <input type="file" accept=".csv,.xls,.xlsx" id="fin-conciliar-file" style="font-size:13px;">
+        <button class="btn primary" onclick="procesarExtractoConciliacion()">Procesar extracto</button>
+      </div>
+      <div id="fin-conciliar-resultado" style="margin-top:14px;"></div>
+    </div>
     <div class="card" id="fin-porcobrar-wrap"><h2>Por cobrar</h2><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
     <div class="card" id="fin-porpagar-wrap"><h2>Por pagar</h2><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
     <div class="chartcard" id="fin-breakdown-card" style="display:none;">
@@ -848,6 +893,7 @@ async function renderFinanzas(cont){
     <div class="card" id="fin-movs"></div>
   `;
   cargarFinanzas();
+  cargarBalanceMultiMes(6);
   cargarPorCobrarPorPagar();
 }
 function cambiarFinMesRel(delta){
@@ -1072,6 +1118,75 @@ async function cargarFinanzas(){
   }).join('');
 }
 
+/* ---- Balance de varios meses ---- */
+let finBalanceChart = null;
+async function cargarBalanceMultiMes(nMeses){
+  const wrap = document.getElementById('fin-balance-totales');
+  const sel = document.getElementById('fin-balance-rango');
+  if(sel && Number(sel.value)!==nMeses) sel.value = String(nMeses);
+  const hoy = currentMonthStr();
+  const meses = [];
+  for(let i=nMeses-1;i>=0;i--) meses.push(shiftMes(hoy, -i));
+  const desde = `${meses[0]}-01`;
+  const [y,m] = meses[meses.length-1].split('-').map(Number);
+  const hasta = new Date(y, m, 1).toISOString().slice(0,10);
+  const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}] = await Promise.all([
+    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', desde).lt('fecha', hasta),
+    sb.from('gastos_generales').select('fecha,monto').gte('fecha', desde).lt('fecha', hasta),
+    sb.from('gastos_fijos').select('monto,desde,activo'),
+  ]);
+  if(e1 || e2 || e3){ if(wrap) wrap.innerHTML = errBox(e1||e2||e3); return; }
+  const porMes = {};
+  meses.forEach(mes=> porMes[mes] = {ingresos:0, gastos:0});
+  (sits||[]).forEach(r=>{
+    const mes = r.fecha.slice(0,7);
+    if(!porMes[mes]) return;
+    porMes[mes].ingresos += Number(r.cobro_familia)||0;
+    porMes[mes].gastos += Number(r.pago_ninera)||0;
+  });
+  (gastos||[]).forEach(g=>{
+    const mes = g.fecha.slice(0,7);
+    if(!porMes[mes]) return;
+    porMes[mes].gastos += Number(g.monto)||0;
+  });
+  meses.forEach(mes=>{
+    const [ya,ma] = mes.split('-').map(Number);
+    const finMesStr = new Date(ya, ma, 1).toISOString().slice(0,10);
+    const totalFijos = (fijos||[]).filter(g=>g.activo && g.desde && g.desde < finMesStr).reduce((s,g)=>s+(Number(g.monto)||0), 0);
+    porMes[mes].gastos += totalFijos;
+  });
+
+  const labels = meses.map(mes=>{
+    const [ya,ma] = mes.split('-').map(Number);
+    const f = new Intl.DateTimeFormat('es-UY', {month:'short', year:'2-digit'}).format(new Date(ya, ma-1, 1));
+    return f.replace('.', '');
+  });
+  const dataIngresos = meses.map(mes=>Math.round(porMes[mes].ingresos));
+  const dataGastos = meses.map(mes=>Math.round(porMes[mes].gastos));
+
+  const canvas = document.getElementById('finBalanceChart');
+  if(canvas && window.Chart){
+    if(finBalanceChart){ finBalanceChart.destroy(); finBalanceChart = null; }
+    finBalanceChart = new Chart(canvas, {
+      type:'bar',
+      data:{ labels, datasets:[
+        { label:'Ingresos', data:dataIngresos, backgroundColor:'#6FAE8C', borderRadius:4 },
+        { label:'Gastos', data:dataGastos, backgroundColor:'#DF8386', borderRadius:4 },
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom'}}, scales:{ y:{ ticks:{ callback:v=>'$'+Number(v).toLocaleString('es-UY') } } } }
+    });
+  }
+  const totalIngresos = dataIngresos.reduce((s,v)=>s+v,0);
+  const totalGastos = dataGastos.reduce((s,v)=>s+v,0);
+  if(wrap){
+    wrap.innerHTML = `
+      <div class="summarycard"><div class="statlabel">Ingresos (${nMeses} meses)</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${totalIngresos.toLocaleString('es-UY')}</div></div>
+      <div class="summarycard"><div class="statlabel">Gastos (${nMeses} meses)</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--clay-text);">$${totalGastos.toLocaleString('es-UY')}</div></div>
+      <div class="summarycard" style="border-left:3px solid var(--accent);"><div class="statlabel">Balance del período</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${(totalIngresos-totalGastos).toLocaleString('es-UY')}</div></div>
+    `;
+  }
+}
+
 /* ---- Por cobrar / Por pagar (agrupado por frecuencia de familia/niñera) ---- */
 function lunesDeSemana(fechaISO){
   const d = new Date(fechaISO+'T00:00:00');
@@ -1202,6 +1317,159 @@ async function marcarGrupoResuelto(ids, campo){
   cargarPorCobrarPorPagar();
 }
 
+/* ---- Conciliación de cobros contra extracto Itaú ---- */
+function soloDigitos(s){ return String(s||'').replace(/\D/g,''); }
+function extraerCuentaDeTexto(texto){
+  const matches = String(texto||'').match(/\d{5,12}/g) || [];
+  return matches.sort((a,b)=>b.length-a.length)[0] || '';
+}
+function parseMontoExtracto(v){
+  if(v===null || v===undefined || v==='') return 0;
+  if(typeof v === 'number') return v;
+  let s = String(v).trim().replace(/[^\d,.\-]/g,'');
+  // Formato uruguayo: punto de miles, coma decimal. Si hay ambos, la coma es la decimal.
+  if(s.includes(',') && s.includes('.')) s = s.replace(/\./g,'').replace(',', '.');
+  else if(s.includes(',')) s = s.replace(',', '.');
+  return Number(s) || 0;
+}
+function parseFechaExtracto(v){
+  if(!v) return '';
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/); // dd/mm/yyyy
+  if(m){ let [,d,mo,y] = m; if(y.length===2) y = '20'+y; return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`; }
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); // ya viene ISO
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  return '';
+}
+async function leerFilasExtracto(file){
+  const buf = await file.arrayBuffer();
+  let wb;
+  if(/\.csv$/i.test(file.name)){
+    wb = XLSX.read(new TextDecoder('utf-8').decode(buf), {type:'string'});
+  } else {
+    wb = XLSX.read(buf, {type:'array'});
+  }
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
+}
+function detectarColumnasExtracto(filas){
+  const norm = s => normaliza(String(s||''));
+  for(let i=0;i<Math.min(filas.length,10);i++){
+    const fila = filas[i].map(norm);
+    const iFecha = fila.findIndex(c=>c.includes('fecha'));
+    const iCredito = fila.findIndex(c=>c.includes('credito') || c.includes('haber'));
+    const iConcepto = fila.findIndex(c=>c.includes('concepto') || c.includes('descripcion') || c.includes('referencia') || c.includes('detalle'));
+    if(iFecha>-1 && iCredito>-1) return { header:i, iFecha, iCredito, iConcepto: iConcepto>-1?iConcepto:iFecha+1 };
+  }
+  return null;
+}
+async function procesarExtractoConciliacion(){
+  const input = document.getElementById('fin-conciliar-file');
+  const box = document.getElementById('fin-conciliar-resultado');
+  const file = input.files[0];
+  if(!file){ toast('Elegí un archivo primero.', 'bad'); return; }
+  box.innerHTML = '<div class="empty"><span class="spinner dark"></span> Leyendo el extracto…</div>';
+  let filas;
+  try{ filas = await leerFilasExtracto(file); }
+  catch(e){ box.innerHTML = `<div class="empty">No se pudo leer el archivo: ${e.message}</div>`; return; }
+  const cols = detectarColumnasExtracto(filas);
+  if(!cols){ box.innerHTML = '<div class="empty">No encontré columnas de Fecha y Crédito en el archivo. Revisá que sea el extracto tal cual lo exporta Itaú.</div>'; return; }
+
+  const creditos = [];
+  for(let i=cols.header+1;i<filas.length;i++){
+    const f = filas[i];
+    if(!f || !f.length) continue;
+    const monto = parseMontoExtracto(f[cols.iCredito]);
+    if(!monto) continue;
+    const fecha = parseFechaExtracto(f[cols.iFecha]);
+    if(!fecha) continue;
+    const concepto = String(f[cols.iConcepto]||'');
+    creditos.push({ fecha, monto, concepto, cuenta: extraerCuentaDeTexto(concepto) });
+  }
+  if(!creditos.length){ box.innerHTML = '<div class="empty">No encontré movimientos de crédito en el archivo.</div>'; return; }
+
+  const [{data:fams}, {data:pend}] = await Promise.all([
+    sb.from('familias').select('id,nombre,frecuencia_cobro,cuenta_bancaria'),
+    sb.from('sittings_traslados').select('id,familia_id,familia_nombre,fecha,cobro_familia').eq('cobrado', false).gt('cobro_familia', 0),
+  ]);
+  const famPorCuenta = {};
+  (fams||[]).forEach(f=>{
+    const d = soloDigitos(f.cuenta_bancaria);
+    if(!d) return;
+    famPorCuenta[d] = f;
+    famPorCuenta[d.replace(/^0+/,'')] = f;
+  });
+  const famFrecPorId = {}; (fams||[]).forEach(f=>{ famFrecPorId[f.id] = f.frecuencia_cobro || 'mensual'; });
+
+  // Agrupar créditos identificados por familia+bucket (según la frecuencia de cobro de esa familia)
+  const grupCred = {};
+  const sinIdentificar = [];
+  creditos.forEach(c=>{
+    const fam = c.cuenta ? (famPorCuenta[c.cuenta] || famPorCuenta[c.cuenta.replace(/^0+/,'')]) : null;
+    if(!fam){ sinIdentificar.push(c); return; }
+    const frec = famFrecPorId[fam.id] || 'mensual';
+    const bucket = bucketKeyFecha(c.fecha, frec);
+    const key = fam.id+'|'+bucket;
+    if(!grupCred[key]) grupCred[key] = { familia:fam, frec, bucket, total:0 };
+    grupCred[key].total += c.monto;
+  });
+
+  // Agrupar pendientes de cobro por familia+bucket, con la misma lógica de bucket que "Por cobrar"
+  const grupPend = {};
+  (pend||[]).forEach(r=>{
+    if(!r.familia_id) return;
+    const frec = famFrecPorId[r.familia_id] || 'mensual';
+    const bucket = bucketKeyFecha(r.fecha, frec);
+    const key = r.familia_id+'|'+bucket;
+    if(!grupPend[key]) grupPend[key] = { total:0, ids:[] };
+    grupPend[key].total += Number(r.cobro_familia)||0;
+    grupPend[key].ids.push(r.id);
+  });
+
+  const matches = [];
+  Object.keys(grupCred).forEach(key=>{
+    const cred = grupCred[key];
+    const pendG = grupPend[key];
+    if(!pendG) return; // la familia cobró algo pero no tiene sittings pendientes de marcar acá — nada que hacer
+    matches.push({ familia:cred.familia.nombre, bucket:cred.bucket, frec:cred.frec, totalExtracto:cred.total, totalPendiente:pendG.total, ids:pendG.ids, exacto: Math.abs(cred.total-pendG.total)<1 });
+  });
+  matches.sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.familia.localeCompare(b.familia));
+
+  const exactos = matches.filter(m=>m.exacto);
+  const conDiferencia = matches.filter(m=>!m.exacto);
+
+  const filaMatch = m => `
+    <div class="agendarow" style="border-bottom:1px solid var(--line);">
+      <div>
+        <div style="font-weight:600;">${m.familia}</div>
+        <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(m.bucket, m.frec)}${m.exacto?'':` · extracto $${m.totalExtracto.toLocaleString('es-UY')} vs pendiente $${m.totalPendiente.toLocaleString('es-UY')}`}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${m.totalPendiente.toLocaleString('es-UY')}</span>
+        <button class="smallbtn" onclick='marcarGrupoResuelto(${JSON.stringify(m.ids)}, "cobrado")'>Marcar cobrado</button>
+      </div>
+    </div>`;
+
+  box.innerHTML = `
+    <div class="helper" style="margin-bottom:10px;">${creditos.length} créditos leídos del extracto · ${exactos.length} coinciden exacto con cobros pendientes · ${conDiferencia.length} con diferencia · ${sinIdentificar.length} sin cuenta identificable.</div>
+    ${exactos.length ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:10px 0 4px;">Coinciden exacto</h3>
+        <button class="btn primary" onclick='marcarGrupoResuelto(${JSON.stringify(exactos.flatMap(m=>m.ids))}, "cobrado")'>Marcar todo como cobrado (${exactos.length})</button>
+      </div>
+      ${exactos.map(filaMatch).join('')}` : ''}
+    ${conDiferencia.length ? `<h3 style="margin:14px 0 4px;">Con diferencia — revisar antes de marcar</h3>${conDiferencia.map(filaMatch).join('')}` : ''}
+    ${sinIdentificar.length ? `
+      <h3 style="margin:14px 0 4px;">Sin cuenta identificable — revisar a mano</h3>
+      <div class="helper" style="margin-bottom:6px;">Movimientos tipo "CAMBIOS"/"VARIOS" u otros sin número de cuenta reconocible en el concepto.</div>
+      ${sinIdentificar.map(c=>`<div class="agendarow" style="border-bottom:1px solid var(--line);">
+        <div>${fmtFechaCortaFin(c.fecha)} · ${c.concepto||'(sin concepto)'}</div>
+        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${c.monto.toLocaleString('es-UY')}</span>
+      </div>`).join('')}` : ''}
+    ${(!exactos.length && !conDiferencia.length && !sinIdentificar.length) ? '<div class="empty">No hay nada para conciliar en este extracto.</div>' : ''}
+  `;
+}
+
 async function cargarJuguetesDeNinera(nombre){
   const box = document.getElementById('vn-juguetes');
   if(!box) return;
@@ -1273,7 +1541,7 @@ function filtrarJuguetes(){
     const meta = [j.tipo, edadTxt, GENERO_LABEL[j.genero]||'Unisex'].filter(Boolean).join(' · ');
     const estadoBadge = j.estado && j.estado!=='disponible' ? `<span class="badge" style="font-size:10px;background:var(--clay-soft);color:var(--clay-text);">${j.estado}</span>` : '';
     return `<div class="card" style="padding:0;overflow:hidden;">
-      <div style="height:100px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+      <div style="height:100px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;overflow:hidden;${j.foto_url?'cursor:zoom-in;':''}" ${j.foto_url?`onclick="abrirLightboxFoto('${j.foto_url}', 'Foto de ${j.nombre}')"`:''}>
         ${j.foto_url?`<img src="${j.foto_url}" alt="Foto de ${j.nombre}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">`:`<span style="color:var(--accent);font-size:12px;">sin foto</span>`}
       </div>
       <div style="padding:10px 12px;">
@@ -1304,7 +1572,10 @@ function abrirModalJuguete(id=null){
     </div>
     <div class="field"><label>Nombre</label><input type="text" id="jug-nombre" value="${j?.nombre||''}"></div>
     <div class="grid2">
-      <div class="field"><label>Tipo</label><input type="text" id="jug-tipo" list="jug-tipos-dl" value="${j?.tipo||''}" placeholder="cartas, memoria, construcción..."></div>
+      <div class="field" style="position:relative;"><label>Tipo</label>
+        <input type="text" id="jug-tipo" autocomplete="off" value="${j?.tipo||''}" placeholder="cartas, memoria, construcción...">
+        <div id="jug-tipo-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
+      </div>
       <div class="field"><label>Género</label><select id="jug-genero">
         <option value="unisex" ${(!j||j.genero==='unisex')?'selected':''}>Unisex</option>
         <option value="ninas" ${j?.genero==='ninas'?'selected':''}>Niñas</option>
@@ -1323,11 +1594,35 @@ function abrirModalJuguete(id=null){
       </select></div>
     </div>
     <div class="field"><label>Notas</label><textarea id="jug-notas" rows="2">${j?.notas||''}</textarea></div>
-    <datalist id="jug-tipos-dl">${TIPOS_JUGUETE_SUGERIDOS.map(t=>`<option value="${t}">`).join('')}</datalist>
     <button class="btn primary" style="width:100%;margin-top:8px;" onclick="guardarJuguete(${j?`'${j.id}'`:'null'})">Guardar</button>
   `;
   abrirModal(cuerpo);
-  setTimeout(()=>attachAutocomplete('jug-ninera', 'jug-ninera-dropdown', ()=>jugNinierasCache, ()=>{}), 20);
+  setTimeout(()=>{
+    attachAutocomplete('jug-ninera', 'jug-ninera-dropdown', ()=>jugNinierasCache, ()=>{});
+    attachTipoJugueteAutocomplete();
+  }, 20);
+}
+function attachTipoJugueteAutocomplete(){
+  const input = document.getElementById('jug-tipo');
+  const dd = document.getElementById('jug-tipo-dropdown');
+  if(!input || !dd) return;
+  function render(){
+    const q = normaliza(input.value.trim());
+    const matches = TIPOS_JUGUETE_SUGERIDOS.filter(t=>!q || normaliza(t).includes(q));
+    dd.innerHTML = '';
+    if(!matches.length){ dd.style.display = 'none'; return; }
+    matches.forEach(t=>{
+      const item = document.createElement('div');
+      item.className = 'autocomplete-item';
+      item.textContent = t;
+      item.addEventListener('mousedown', ()=>{ input.value = t; dd.style.display = 'none'; });
+      dd.appendChild(item);
+    });
+    dd.style.display = 'block';
+  }
+  input.addEventListener('input', render);
+  input.addEventListener('focus', render);
+  input.addEventListener('blur', ()=> setTimeout(()=>{ dd.style.display = 'none'; }, 150));
 }
 function quitarFotoJuguete(){
   jugFotoUrlPendiente = null;
@@ -2072,16 +2367,16 @@ async function cancelarSolicitud(id){
    (en otra sesión/celular) inserta, edita o borra algo en esas tablas, se
    vuelve a cargar la vista actual sola, sin que haga falta recargar la página. */
 const RT_TABLAS_POR_MODULO = {
-  hoy: ['sittings_traslados','gastos_generales','solicitudes','asignaciones'],
-  agenda: ['solicitudes','solicitud_ninieras','asignaciones','sittings_traslados'],
-  rrhh: ['candidatas','entrevistas','carsitting_datos'],
-  ninieras: ['ninieras','candidatas','resenas_ninieras'],
-  familias: ['familias'],
-  sittings: ['sittings_traslados'],
-  finanzas: ['sittings_traslados','gastos_generales','familias','ninieras'],
+  hoy: ['sittings_traslados','gastos_generales','solicitudes','asignaciones','candidatas','ninieras','familias','solicitud_ninieras'],
+  agenda: ['solicitudes','solicitud_ninieras','asignaciones','sittings_traslados','familias','ninieras'],
+  rrhh: ['candidatas','entrevistas','carsitting_datos','ninieras'],
+  ninieras: ['ninieras','candidatas','resenas_ninieras','sittings_traslados','juguetes'],
+  familias: ['familias','asignaciones','sittings_traslados','resenas_ninieras','ninieras'],
+  sittings: ['sittings_traslados','familias','ninieras','resenas_ninieras','tarifas_traslado_config'],
+  finanzas: ['sittings_traslados','gastos_generales','gastos_fijos','familias','ninieras','asignaciones'],
   marketing: ['fechas_marketing'],
-  legal: ['contratos'],
-  juguetes: ['juguetes','juguetes_movimientos'],
+  legal: ['contratos','ninieras','familias'],
+  juguetes: ['juguetes','juguetes_movimientos','ninieras'],
 };
 let rtChannel = null;
 let rtRefrescarTimer = null;
@@ -2642,7 +2937,7 @@ async function loadIntake(){
   if(!intakeItems.length){ grid.innerHTML = '<div class="empty">No hay candidatas esperando entrevista.</div>'; return; }
   grid.innerHTML = '<div class="person-list">' + intakeItems.map((c,i)=>`
     <div class="person-row">
-      <div class="av">${c.foto_url?`<img src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.textContent='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="av" ${c.foto_url && c.autoriza_foto!==false?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${c.foto_url}', 'Foto de ${c.nombre}')"`:''}>${c.foto_url?`<img src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.textContent='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${c.nombre} ${c.apellido||''}</div>
         <div class="meta">${c.zona||'zona s/d'} · ${c.edad?c.edad+(String(c.edad).length<=2?' años':''):'edad s/d'}${c.origen?' · '+c.origen:''}</div>
@@ -2661,7 +2956,7 @@ async function loadIntake(){
 function verFichaIntake(i){
   const c = intakeItems[i];
   const rows = FICHA_CAMPOS.filter(f=>c[f.key]).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
-  const fotoHtml = c.foto_url ? `<img src="${c.foto_url}" alt="Foto de ${c.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;" onerror="this.outerHTML='<div class=&quot;helper&quot; style=&quot;margin-bottom:12px;&quot;>No se pudo mostrar la foto — <a href=&quot;${c.foto_url}&quot; target=&quot;_blank&quot;>abrirla en Drive</a>.</div>'">` : '';
+  const fotoHtml = c.foto_url ? `<img src="${c.foto_url}" alt="Foto de ${c.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;${c.autoriza_foto!==false?'cursor:zoom-in;':''}" ${c.autoriza_foto!==false?`onclick="abrirLightboxFoto('${c.foto_url}', 'Foto de ${c.nombre}')"`:''} onerror="this.outerHTML='<div class=&quot;helper&quot; style=&quot;margin-bottom:12px;&quot;>No se pudo mostrar la foto — <a href=&quot;${c.foto_url}&quot; target=&quot;_blank&quot;>abrirla en Drive</a>.</div>'">` : '';
   const avisoHtml = c.autoriza_foto === false ? `<div style="background:var(--clay-soft);color:var(--clay-text);font-weight:600;font-size:13px;padding:10px 14px;border-radius:10px;margin-bottom:14px;border:1px solid var(--clay);">⚠️ No autorizó el uso de su foto ni sus datos para el proceso de selección — no usar su imagen ni compartir su información fuera de la evaluación.</div>` : '';
   abrirModal(`${avisoHtml}${fotoHtml}<h2 style="margin:0 0 10px;">${c.nombre} ${c.apellido||''}</h2><div class="fichadl">${rows||'<div>Sin más datos cargados.</div>'}</div>`);
 }
@@ -3034,7 +3329,7 @@ function filtrarNinieras(){
   if(!filtradas.length){ grid.innerHTML = countMsg + '<div class="empty">Ninguna niñera coincide con la búsqueda.</div>'; return; }
   grid.innerHTML = countMsg + '<div class="person-list">' + filtradas.map(n=>`
     <div class="person-row">
-      <div class="av">${n.foto?`<img src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')"`:''}>${n.foto?`<img src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${n.nombre}</div>
         <div class="meta">${n.zona||'zona s/d'}${n.candidatas?.edad?' · '+n.candidatas.edad:''}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
@@ -3100,7 +3395,7 @@ async function verNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
   const cd = n.candidatas || {};
   const rows = FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
-  const fotoHtml = n.foto ? `<img src="${n.foto}" alt="Foto de ${n.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;" onerror="this.style.display='none'">` : '';
+  const fotoHtml = n.foto ? `<img src="${n.foto}" alt="Foto de ${n.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')" onerror="this.style.display='none'">` : '';
   abrirModal(`
     ${fotoHtml}
     <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
