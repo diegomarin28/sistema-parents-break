@@ -387,6 +387,51 @@ function toast(msg, type='good'){
   setTimeout(()=>{ el.classList.add('leaving'); setTimeout(()=>el.remove(), 220); }, 3200);
 }
 
+/* ============================================================
+   F1 · Red de seguridad de errores y conexión
+   Muestra un aviso claro cuando algo falla, en vez de dejar
+   la pantalla a medias. No hay que tocar cada consulta:
+   los fallos de red y los errores sueltos caen acá solos.
+   ============================================================ */
+let _sinConexion = false;
+function avisarSinConexion(){
+  if(_sinConexion) return;
+  _sinConexion = true;
+  toast('Te quedaste sin conexión. Lo que cargues no se guarda hasta que vuelva internet.', 'bad');
+}
+window.addEventListener('offline', avisarSinConexion);
+window.addEventListener('online', ()=>{
+  if(_sinConexion){ toast('Conexión restablecida.', 'good'); _sinConexion = false; }
+});
+window.addEventListener('unhandledrejection', (ev)=>{
+  const msg = (ev.reason && (ev.reason.message || ev.reason)) || '';
+  console.error('[error no manejado]', ev.reason);
+  if(!navigator.onLine || /fetch|network|failed to fetch|conexi|timeout/i.test(String(msg))){
+    toast('Problema de conexión. Revisá internet y reintentá.', 'bad');
+  } else {
+    toast('Ocurrió un error inesperado. Si sigue pasando, recargá la página.', 'bad');
+  }
+});
+
+/* Envoltorio para lecturas de Supabase: si la consulta falla, avisa
+   y devuelve un valor seguro en vez de romper la vista.
+   Uso: const datos = await sbLeer(sb.from('ninieras').select('*'), 'las niñeras', []); */
+async function sbLeer(consulta, queCosa='los datos', fallback=null){
+  try {
+    const { data, error } = await consulta;
+    if(error){
+      console.error('[Supabase] al cargar', queCosa, error);
+      toast(`No se pudieron cargar ${queCosa}. Reintentá en un momento.`, 'bad');
+      return fallback;
+    }
+    return data;
+  } catch(e){
+    console.error('[Supabase] al cargar', queCosa, e);
+    toast(`No se pudieron cargar ${queCosa}. Revisá tu conexión.`, 'bad');
+    return fallback;
+  }
+}
+
 function confirmarAccion(mensaje, textoBoton='Eliminar'){
   return new Promise((resolve)=>{
     const overlay = document.createElement('div');
