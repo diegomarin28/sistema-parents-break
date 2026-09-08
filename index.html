@@ -87,8 +87,8 @@ textarea{resize:vertical;min-height:54px;}
 .agenda-card.pendiente{background:var(--warn-soft);color:#7A5A16;}
 .agenda-card.confirmada{background:var(--accent-soft);border:1px solid var(--accent);color:#3A3768;}
 .agenda-card.cancelada{opacity:.5;text-decoration:line-through;background:var(--bg);border:1px solid var(--line);}
-.agenda-nowline{position:absolute;left:0;right:0;height:1px;background:var(--accent);z-index:3;}
-.agenda-nowline span{position:absolute;left:0;top:-8px;font-size:10px;color:var(--accent);background:var(--paper);padding:0 3px;font-family:'IBM Plex Mono',monospace;}
+.agenda-nowline{position:absolute;left:0;right:0;height:2px;background:var(--accent);}
+.agenda-nowlabel{position:absolute;left:0;right:2px;transform:translateY(-50%);font-size:10px;font-weight:700;text-align:right;color:var(--accent);background:var(--paper);z-index:4;font-family:'IBM Plex Mono',monospace;}
 .agenda-tier-label{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin:10px 0 6px;}
 .agenda-ninera-pick{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;cursor:pointer;}
 .agenda-ninera-pick input{margin:0;}
@@ -607,6 +607,7 @@ function renderSidebar(){
         <button class="navitem ${activeTop===m.key?'active':''}" onclick="setModulo('${m.key}')" title="${m.label}">
           <div class="navitem-ic">${ICONS[m.key]}</div><div class="navitem-label">${m.label}</div>
           ${m.key==='agenda' ? `<span id="agenda-navdot"></span>` : ''}
+          ${m.key==='finanzas' ? `<span id="finanzas-navdot"></span>` : ''}
         </button>`).join('')}
     </nav>
     <div class="sidebar-foot">
@@ -614,6 +615,18 @@ function renderSidebar(){
     </div>
   `;
   actualizarAgendaBadge();
+  actualizarFinanzasBadge();
+}
+async function actualizarFinanzasBadge(){
+  const dot = document.getElementById('finanzas-navdot');
+  if(!dot) return;
+  const [{data:cfg}, {data:pend}] = await Promise.all([
+    sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle(),
+    sb.from('sittings_traslados').select('id').eq('pagado', false).gt('pago_ninera', 0).limit(1),
+  ]);
+  const diasSinExtracto = cfg?.actualizado_at ? (Date.now() - new Date(cfg.actualizado_at).getTime()) / 86400000 : Infinity;
+  const hayAviso = diasSinExtracto > 7 || (pend && pend.length > 0);
+  dot.innerHTML = hayAviso ? '<span class="navdot"></span>' : '';
 }
 
 const DIAS_LABEL = {L:'Lun',M:'Mar',X:'Mié',J:'Jue',V:'Vie',S:'Sáb',D:'Dom'};
@@ -863,6 +876,7 @@ async function renderFinanzas(cont){
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
         <div><h2 style="margin:0;">Conciliar cobros con extracto Itaú</h2><div class="helper" style="margin:2px 0 0;">Subí el estado de cuenta (.xls, .xlsx o .csv) y el sistema matchea los créditos contra la cuenta bancaria de cada familia, para no tener que marcar "cobrado" sitting por sitting.</div></div>
       </div>
+      <div id="fin-extracto-aviso"></div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
         <input type="file" accept=".csv,.xls,.xlsx" id="fin-conciliar-file" style="font-size:13px;">
         <button class="btn primary" onclick="procesarExtractoConciliacion()">Procesar extracto</button>
@@ -894,6 +908,20 @@ async function renderFinanzas(cont){
   cargarFinanzas();
   cargarBalanceMultiMes(6);
   cargarPorCobrarPorPagar();
+  cargarAvisoExtracto();
+}
+async function cargarAvisoExtracto(){
+  const box = document.getElementById('fin-extracto-aviso');
+  if(!box) return;
+  const { data:cfg } = await sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle();
+  if(!cfg?.actualizado_at){
+    box.innerHTML = `<div style="background:var(--clay-soft);color:var(--clay-text);font-size:13px;padding:10px 14px;border-radius:10px;margin-top:10px;border:1px solid var(--clay);">Todavía no se subió ningún extracto de Itaú acá — subilo cuando lo tengas para conciliar los cobros del mes.</div>`;
+    return;
+  }
+  const dias = Math.floor((Date.now() - new Date(cfg.actualizado_at).getTime()) / 86400000);
+  box.innerHTML = dias > 7
+    ? `<div style="background:var(--clay-soft);color:var(--clay-text);font-size:13px;padding:10px 14px;border-radius:10px;margin-top:10px;border:1px solid var(--clay);">Hace ${dias} días que no se sube un extracto — subilo para mantener los cobros al día.</div>`
+    : `<div class="helper" style="margin-top:6px;">Último extracto subido hace ${dias===0?'menos de un día':dias+' día'+(dias===1?'':'s')}.</div>`;
 }
 function cambiarFinMesRel(delta){
   finMes = shiftMes(finMes, delta);
@@ -1314,6 +1342,7 @@ async function marcarGrupoResuelto(ids, campo){
   if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
   toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
   cargarPorCobrarPorPagar();
+  actualizarFinanzasBadge();
 }
 
 /* ---- Conciliación de cobros contra extracto Itaú ---- */
@@ -1436,6 +1465,10 @@ async function procesarExtractoConciliacion(){
 
   const exactos = matches.filter(m=>m.exacto);
   const conDiferencia = matches.filter(m=>!m.exacto);
+
+  await sb.from('app_config').upsert({ id:'ultima_conciliacion_cobros', valor:{archivo:file.name}, actualizado_at:new Date().toISOString() });
+  actualizarFinanzasBadge();
+  cargarAvisoExtracto();
 
   const filaMatch = m => `
     <div class="agendarow" style="border-bottom:1px solid var(--line);">
@@ -1776,8 +1809,7 @@ async function renderAgenda(cont){
     </div>
     <div id="agenda-grid-wrap"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
   `;
-  await cargarAgendaBase();
-  await cargarAgendaSolicitudes();
+  await Promise.all([cargarAgendaBase(), cargarAgendaSolicitudes()]);
 }
 
 async function cargarAgendaBase(){
@@ -1797,18 +1829,12 @@ async function cargarAgendaSolicitudes(){
   const wrap = document.getElementById('agenda-grid-wrap');
   if(wrap) wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const [{data:sols, error}, {data:asigs}, {data:registros}] = await Promise.all([
-    sb.from('solicitudes').select('*').eq('fecha', agendaFecha).order('hora_inicio', {ascending:true}),
+    sb.from('solicitudes').select('*, solicitud_ninieras(*)').eq('fecha', agendaFecha).order('hora_inicio', {ascending:true}),
     sb.from('asignaciones').select('*, familias(nombre)'),
     sb.from('sittings_traslados').select('*').eq('fecha', agendaFecha),
   ]);
   if(error){ if(wrap) wrap.innerHTML = errBox(error); return; }
-  const ids = (sols||[]).map(s=>s.id);
-  let ninerasPorSol = {};
-  if(ids.length){
-    const { data: sn } = await sb.from('solicitud_ninieras').select('*').in('solicitud_id', ids);
-    (sn||[]).forEach(r=>{ (ninerasPorSol[r.solicitud_id] ||= []).push(r); });
-  }
-  const puntuales = (sols||[]).map(s=>({...s, ninieras: ninerasPorSol[s.id]||[], _fuente:'solicitud'}));
+  const puntuales = (sols||[]).map(s=>({...s, ninieras: s.solicitud_ninieras||[], _fuente:'solicitud'}));
 
   // Horarios fijos (tabla asignaciones) que correspondan al día de la semana de agendaFecha.
   const diaSemana = diaDeFecha(agendaFecha);
@@ -1870,9 +1896,9 @@ function renderAgendaGrid(){
       <div class="agenda-grid" style="grid-template-columns:44px repeat(${N}, minmax(150px,1fr)); grid-template-rows:auto ${AGENDA_GRIDH}px;">
         <div></div>
         ${agendaSolicitudes.map(s=>`<div class="agenda-colhead">${s.familia_nombre}</div>`).join('')}
-        <div class="agenda-eje">${horasEje.map(h=>`<div class="agenda-hora" style="top:${agendaTop(String(h).padStart(2,'0')+':00')}px;">${String(h).padStart(2,'0')}</div>`).join('')}</div>
+        ${mostrarNow ? `<div class="agenda-nowline" style="grid-column:1 / -1; grid-row:2; top:${nowTop}px;"></div>` : ''}
+        <div class="agenda-eje">${horasEje.map(h=>`<div class="agenda-hora" style="top:${agendaTop(String(h).padStart(2,'0')+':00')}px;">${String(h).padStart(2,'0')}</div>`).join('')}${mostrarNow ? `<div class="agenda-nowlabel" style="top:${nowTop}px;">${nowHHMM}</div>` : ''}</div>
         ${agendaSolicitudes.map(s=>renderAgendaColumna(s)).join('')}
-        ${mostrarNow ? `<div class="agenda-nowline" style="grid-column:2 / -1; grid-row:2; top:${nowTop}px;"><span>${nowHHMM}</span></div>` : ''}
       </div>
     </div>
   `;
@@ -2372,7 +2398,7 @@ const RT_TABLAS_POR_MODULO = {
   ninieras: ['ninieras','candidatas','resenas_ninieras','sittings_traslados','juguetes'],
   familias: ['familias','asignaciones','sittings_traslados','resenas_ninieras','ninieras'],
   sittings: ['sittings_traslados','familias','ninieras','resenas_ninieras','tarifas_traslado_config'],
-  finanzas: ['sittings_traslados','gastos_generales','gastos_fijos','familias','ninieras','asignaciones'],
+  finanzas: ['sittings_traslados','gastos_generales','gastos_fijos','familias','ninieras','asignaciones','app_config'],
   marketing: ['fechas_marketing'],
   legal: ['contratos','ninieras','familias'],
   juguetes: ['juguetes','juguetes_movimientos','ninieras'],
