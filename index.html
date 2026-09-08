@@ -259,6 +259,10 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .person-row .info .meta{font-size:11.5px;color:var(--ink-soft);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .person-row .badge-slot{width:88px;flex-shrink:0;}
 .person-row .rowbtns{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;}
+@media (max-width:540px){
+  .person-row{flex-wrap:wrap;row-gap:8px;}
+  .person-row .rowbtns{flex-basis:100%;justify-content:flex-start;}
+}
 .confirmbox.wide{max-width:640px;max-height:88vh;overflow-y:auto;}
 .pendbanner{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;text-align:left;width:100%;font-family:'Inter',sans-serif;transition:transform var(--ease), border-color var(--ease);box-shadow:var(--shadow-sm);}
 .pendbanner:hover{transform:translateY(-2px);border-color:#C8C6DC;}
@@ -4832,7 +4836,24 @@ function exportarSitCSV(){
 boot();
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(()=>{}); }
 
-/* ---- Forzar versión nueva al volver del background (sin tocar localStorage/sesión) ---- */
+/* ---- Deslizar desde el borde izquierdo para abrir el menú (solo mobile) ---- */
+let swipeStartX = null, swipeStartY = null;
+document.addEventListener('touchstart', (e) => {
+  if (window.innerWidth > 760) { swipeStartX = null; return; }
+  const t = e.touches[0];
+  if (t.clientX < 24 && !document.getElementById('sidebar')?.classList.contains('open')) {
+    swipeStartX = t.clientX; swipeStartY = t.clientY;
+  } else { swipeStartX = null; }
+}, {passive:true});
+document.addEventListener('touchend', (e) => {
+  if (swipeStartX === null) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - swipeStartX;
+  const dy = Math.abs(t.clientY - swipeStartY);
+  if (dx > 60 && dy < 60) toggleSidebarMobile(true);
+  swipeStartX = null;
+}, {passive:true});
+
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
     sessionStorage.setItem('pb_hidden_at', String(Date.now()));
