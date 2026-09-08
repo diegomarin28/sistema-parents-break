@@ -4251,6 +4251,18 @@ function sitFormHTML(){
       </div>
     </div>
     <div id="sit-camposTipo"></div>
+    <div class="field" style="margin-top:4px;">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;">
+        <input type="checkbox" id="sit-esfijo" onchange="toggleSitEsFijo()" style="width:auto;">
+        ¿Es un trabajo fijo? (se repite todas las semanas)
+      </label>
+    </div>
+    <div id="sit-fijo-box" style="display:none;margin-bottom:12px;">
+      <div class="helper" style="margin:0 0 6px;">Además de guardar este registro de hoy, se crea la asignación fija para que Agenda la genere sola los próximos días.</div>
+      <div class="dayrow" id="sit-fijo-dias">
+        ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" data-dia="${d}" onclick="this.classList.toggle('selected')">${DIAS_CORTO[d]}</button>`).join('')}
+      </div>
+    </div>
     <div class="grid2">
       <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen()"></div>
       <div class="field"><label>Pago a niñera</label><input type="number" id="sit-pago" value="0" oninput="calcSitMargen()"></div>
@@ -4794,6 +4806,10 @@ function calcSitMargen(){
 }
 
 /* ---- guardar / editar / eliminar ---- */
+function toggleSitEsFijo(){
+  const box = document.getElementById('sit-fijo-box');
+  box.style.display = document.getElementById('sit-esfijo').checked ? 'block' : 'none';
+}
 async function guardarSitting(){
   const familiaNombre = document.getElementById('sit-familia').value.trim();
   const nineraNombre = document.getElementById('sit-ninera').value.trim();
@@ -4838,7 +4854,22 @@ async function guardarSitting(){
     ({ error } = await sb.from('sittings_traslados').insert(registro));
   }
   if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
-  toast(sitEditId ? 'Registro actualizado.' : 'Registro guardado.');
+  const esFijo = document.getElementById('sit-esfijo')?.checked;
+  if(esFijo){
+    const dias = [...document.querySelectorAll('#sit-fijo-dias .daybtn.selected')].map(b=>b.dataset.dia);
+    if(!dias.length){
+      toast('Registro guardado, pero elegí al menos un día para la asignación fija.', 'bad');
+    } else {
+      const { error: errAsig } = await sb.from('asignaciones').insert({
+        familia_id: registro.familia_id, ninera_nombre: nineraNombre,
+        dias, hora_inicio: registro.hora_inicio, hora_fin: registro.hora_fin,
+      });
+      if(errAsig) toast('El registro se guardó, pero la asignación fija falló: '+errAsig.message, 'bad');
+      else toast('Registro guardado y asignación fija creada.');
+    }
+  } else {
+    toast(sitEditId ? 'Registro actualizado.' : 'Registro guardado.');
+  }
   sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
   cerrarModal();
   cargarSitLista();
