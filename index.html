@@ -217,12 +217,12 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
 @keyframes toastOut{to{opacity:0;transform:translateX(20px);}}
 .appshell{position:fixed;inset:0;display:flex;}
-.mobile-topbar{display:none;align-items:center;gap:12px;position:fixed;top:0;left:0;right:0;height:52px;background:#5B5FA0;padding:0 14px;z-index:45;box-shadow:0 1px 6px rgba(0,0,0,.15);}
-.mobile-menubtn{background:none;border:none;color:#fff;padding:4px;cursor:pointer;display:flex;}
+.mobile-topbar{display:none;align-items:center;gap:10px;position:fixed;top:0;left:0;right:0;height:52px;background:#5B5FA0;padding:0 14px;z-index:45;box-shadow:0 1px 6px rgba(0,0,0,.15);}
+.mobile-menubtn{background:none;border:none;color:#fff;padding:4px;cursor:pointer;display:flex;flex-shrink:0;}
 .mobile-menubtn svg{width:24px;height:24px;}
-.mobile-topbar-logo{height:28px;cursor:pointer;}
-.mobile-topbar-user{margin-left:10px;display:flex;align-items:center;}
-.mobile-topbar-name{font-family:'Dancing Script',cursive;font-weight:700;font-size:28px;line-height:1;color:#fff;}
+.mobile-topbar-logo{height:28px;cursor:pointer;flex-shrink:0;}
+.mobile-topbar-user{flex:1;display:flex;align-items:center;justify-content:center;min-width:0;}
+.mobile-topbar-name{font-family:'Dancing Script',cursive;font-weight:700;font-size:26px;line-height:1;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(30,28,50,.4);z-index:49;}
 .sidebar{width:196px;flex-shrink:0;height:100%;background:#5B5FA0;padding:22px 14px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
 .sidebar-logo-wrap{background:#fff;border-radius:12px;padding:8px 12px;margin:0 6px 30px;align-self:flex-start;box-shadow:0 1px 3px rgba(0,0,0,.12);}
@@ -631,7 +631,7 @@ let dashPendientesHoy = [];
 
 function nombreUsuario(){
   const email = session?.user?.email || '';
-  const mapa = { 'pauugericke@gmail.com':'Pau', 'delfifrommel@gmail.com':'Delfi' };
+  const mapa = { 'pauugericke@gmail.com':'Pau Gericke', 'delfifrommel@gmail.com':'Delfi Frommel' };
   if(mapa[email]) return mapa[email];
   const local = (email.split('@')[0] || '').replace(/[^a-zA-Z]/g,'');
   return local ? local.charAt(0).toUpperCase()+local.slice(1) : '?';
@@ -3100,7 +3100,7 @@ function renderEntrevista(body){
       <div class="grid3">
         <div class="field"><label>Nombre de la candidata</label><input type="text" id="f-nombre"></div>
         <div class="field"><label>Fecha</label><input type="date" id="f-fecha"></div>
-        <div class="field"><label>Entrevistó</label><select id="f-entrevisto"><option value="">Elegir…</option><option>Paulina G</option><option>Delfina F</option><option>Otra</option></select></div>
+        <div class="field"><label>Entrevistó</label><select id="f-entrevisto"><option value="">Elegir…</option><option ${registradoPorUsuario()==='Paulina G'?'selected':''}>Paulina G</option><option ${registradoPorUsuario()==='Delfina F'?'selected':''}>Delfina F</option><option>Otra</option></select></div>
       </div>
       <div class="grid3">
         <div class="field"><label>Teléfono</label><input type="tel" id="f-telefono"></div>
@@ -4207,6 +4207,12 @@ async function cargarSitBase(){
   await cargarTarifaTrasladoConfig();
 }
 
+function registradoPorUsuario(){
+  const email = session?.user?.email || '';
+  if(email==='pauugericke@gmail.com') return 'Paulina G';
+  if(email==='delfifrommel@gmail.com') return 'Delfina F';
+  return 'Paulina G';
+}
 function sitFormHTML(){
   return `
     <h2>${sitEditId ? 'Editar registro' : 'Nuevo registro'}</h2>
@@ -4215,7 +4221,10 @@ function sitFormHTML(){
       <button type="button" class="tipobtn ${sitTipo==='traslado'?'selected':''}" id="sit-tipo-traslado" onclick="setSitTipo('traslado')">Traslado</button>
     </div>
     <div class="grid3">
-      <div class="field"><label>Registró</label><select id="sit-registro"><option>Paulina G</option><option>Delfina F</option></select></div>
+      <div class="field"><label>Registró</label><select id="sit-registro">
+        <option ${!sitEditId && registradoPorUsuario()==='Paulina G'?'selected':''}>Paulina G</option>
+        <option ${!sitEditId && registradoPorUsuario()==='Delfina F'?'selected':''}>Delfina F</option>
+      </select></div>
       <div class="field" style="position:relative;">
         <label>Familia</label>
         <input type="text" id="sit-familia" autocomplete="off">
