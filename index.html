@@ -11,8 +11,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Parents Break">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&family=Dancing+Script:wght@700&display=swap');
 :root{
@@ -339,6 +337,30 @@ const SUPABASE_KEY = 'sb_publishable_NX4E4FfAkwFQSFo4Rgl0Jg_IcebuaaI';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage }
 });
+
+/* ---- Carga de librerías pesadas SOLO cuando hacen falta (Chart.js y xlsx no bloquean el arranque de la app) ---- */
+function cargarScript(src){
+  return new Promise((resolve, reject) => {
+    if(document.querySelector(`script[src="${src}"]`)){ resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('No se pudo cargar '+src));
+    document.head.appendChild(s);
+  });
+}
+let _chartPromise = null;
+function asegurarChart(){
+  if(window.Chart) return Promise.resolve();
+  if(!_chartPromise) _chartPromise = cargarScript('https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js');
+  return _chartPromise;
+}
+let _xlsxPromise = null;
+function asegurarXLSX(){
+  if(window.XLSX) return Promise.resolve();
+  if(!_xlsxPromise) _xlsxPromise = cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  return _xlsxPromise;
+}
 
 function normaliza(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
 function zonasDe(zonaStr){ return (zonaStr||'').split('/').map(z=>z.trim()).filter(Boolean); }
@@ -716,6 +738,7 @@ async function renderDashboard(cont){
   loadDashboardData();
 }
 async function loadDashboardData(){
+  const chartReady = asegurarChart(); // se descarga en paralelo con las consultas, no bloquea nada
   // Una sola tanda en paralelo con TODAS las consultas independientes del dashboard.
   // Antes eran 4 tandas en serie (4 idas y vueltas a Supabase); ahora es 1.
   // allSettled: si una consulta falla, las demás secciones igual se renderizan.
@@ -777,6 +800,7 @@ async function loadDashboardData(){
     const meses = Object.keys(porMes).sort().slice(-6);
     const wrap = document.getElementById('finmesChartWrap');
     const canvas = document.getElementById('finmesChart');
+    await chartReady;
     if(canvas && meses.length && window.Chart){
       const labels = meses.map(m=>{
         const [y,mm] = m.split('-').map(Number);
@@ -1105,6 +1129,7 @@ async function eliminarGastoFijo(id){
   cargarFinanzas();
 }
 async function cargarFinanzas(){
+  const chartReady = asegurarChart(); // en paralelo, no bloquea el resto de Finanzas
   const summary = document.getElementById('fin-summary');
   const movsBox = document.getElementById('fin-movs');
   movsBox.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
@@ -1155,6 +1180,7 @@ async function cargarFinanzas(){
   `;
   const chartCard = document.getElementById('fin-breakdown-card');
   if(chartCard){
+    await chartReady;
     if(egresos>0 && window.Chart){
       chartCard.style.display = '';
       if(finBreakdownChart){ finBreakdownChart.destroy(); finBreakdownChart = null; }
@@ -1195,6 +1221,7 @@ async function cargarFinanzas(){
 /* ---- Balance de varios meses ---- */
 let finBalanceChart = null;
 async function cargarBalanceMultiMes(nMeses){
+  const chartReady = asegurarChart(); // en paralelo con las consultas de abajo
   const wrap = document.getElementById('fin-balance-totales');
   const sel = document.getElementById('fin-balance-rango');
   if(sel && Number(sel.value)!==nMeses) sel.value = String(nMeses);
@@ -1239,6 +1266,7 @@ async function cargarBalanceMultiMes(nMeses){
   const dataGastos = meses.map(mes=>Math.round(porMes[mes].gastos));
 
   const canvas = document.getElementById('finBalanceChart');
+  await chartReady;
   if(canvas && window.Chart){
     if(finBalanceChart){ finBalanceChart.destroy(); finBalanceChart = null; }
     finBalanceChart = new Chart(canvas, {
@@ -1445,7 +1473,7 @@ async function procesarExtractoConciliacion(){
   if(!file){ toast('Elegí un archivo primero.', 'bad'); return; }
   box.innerHTML = '<div class="empty"><span class="spinner dark"></span> Leyendo el extracto…</div>';
   let filas;
-  try{ filas = await leerFilasExtracto(file); }
+  try{ await asegurarXLSX(); filas = await leerFilasExtracto(file); }
   catch(e){ box.innerHTML = `<div class="empty">No se pudo leer el archivo: ${e.message}</div>`; return; }
   const cols = detectarColumnasExtracto(filas);
   if(!cols){ box.innerHTML = '<div class="empty">No encontré columnas de Fecha y Crédito en el archivo. Revisá que sea el extracto tal cual lo exporta Itaú.</div>'; return; }
@@ -3486,13 +3514,15 @@ async function verNinera(id){
     </div>`);
   cargarCarsittingSeccion(n.nombre, 'vn-carsitting', n.tipo, cd.mail);
   cargarJuguetesDeNinera(n.nombre);
-  // cargar los sittings de esta niñera
-  const { data } = await sb.from('sittings_traslados').select('*').eq('ninera_nombre', n.nombre).order('fecha', {ascending:false});
+  // cargar los sittings de esta niñera y sus reseñas (si no están cargadas ya globalmente) en paralelo
+  const necesitaResenas = !Object.keys(sitHistResenas).length;
+  const [{data}, resenasRes] = await Promise.all([
+    sb.from('sittings_traslados').select('*').eq('ninera_nombre', n.nombre).order('fecha', {ascending:false}),
+    necesitaResenas ? sb.from('resenas_ninieras').select('ninera_nombre,puntuacion') : Promise.resolve({data:null}),
+  ]);
   nineraHistItems = data || [];
-  // reseñas (si no están cargadas ya globalmente)
-  if(!Object.keys(sitHistResenas).length){
-    const { data: resenas } = await sb.from('resenas_ninieras').select('ninera_nombre,puntuacion');
-    (resenas||[]).forEach(r=>{
+  if(necesitaResenas){
+    (resenasRes.data||[]).forEach(r=>{
       if(r.puntuacion==null) return;
       const k = normaliza(r.ninera_nombre||'');
       if(!k) return;
