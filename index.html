@@ -327,6 +327,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 }
 @media (max-width:480px){.statrow{grid-template-columns:1fr;}}
 @media (max-width:760px){
+  #modcontent, .card, .person-list{max-width:100%;overflow-x:hidden;}
   input[type=text],input[type=tel],input[type=date],input[type=number],input[type=email],input[type=password],select,textarea{
     font-size:16px; /* evita que iOS haga zoom automático al tocar un campo (el umbral es 16px) */
   }
@@ -3796,7 +3797,7 @@ function renderFamilias(body){
     <div class="card" style="padding:14px 18px;"><div class="grid3">
       <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
       <div class="field" style="margin:0;"><label>Zona</label><select id="fam-zonafiltro" onchange="famZonaFiltro=this.value;renderFamiliasList();"></select></div>
-      <div class="field" style="margin:0;display:flex;align-items:flex-end;"><button class="btn primary" style="width:100%;" onclick="abrirModalNuevaFamilia()">+ Agregar familia</button></div>
+      <div class="field" style="margin:0;"><button class="btn primary" style="width:100%;margin-top:22px;" onclick="abrirModalNuevaFamilia()">+ Agregar familia</button></div>
     </div></div>
     <div id="familiaslist"></div>
   `;
