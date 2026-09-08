@@ -222,7 +222,10 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .mobile-topbar{display:none;align-items:center;gap:12px;position:fixed;top:0;left:0;right:0;height:52px;background:#5B5FA0;padding:0 14px;z-index:45;box-shadow:0 1px 6px rgba(0,0,0,.15);}
 .mobile-menubtn{background:none;border:none;color:#fff;padding:4px;cursor:pointer;display:flex;}
 .mobile-menubtn svg{width:24px;height:24px;}
-.mobile-topbar-logo{height:28px;}
+.mobile-topbar-logo{height:28px;cursor:pointer;}
+.mobile-topbar-user{margin-left:auto;display:flex;align-items:center;gap:7px;}
+.mobile-topbar-avatar{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.24);color:#fff;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.mobile-topbar-name{color:#fff;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13.5px;}
 .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(30,28,50,.4);z-index:49;}
 .sidebar{width:196px;flex-shrink:0;height:100%;background:#5B5FA0;padding:22px 14px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
 .sidebar-logo-wrap{background:#fff;border-radius:12px;padding:8px 12px;margin:0 6px 30px;align-self:flex-start;box-shadow:0 1px 3px rgba(0,0,0,.12);}
@@ -262,6 +265,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 @media (max-width:540px){
   .person-row{flex-wrap:wrap;row-gap:8px;}
   .person-row .rowbtns{flex-basis:100%;justify-content:flex-start;}
+  .agendarow{flex-wrap:wrap;row-gap:4px;}
 }
 .confirmbox.wide{max-width:640px;max-height:88vh;overflow-y:auto;}
 .pendbanner{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;text-align:left;width:100%;font-family:'Inter',sans-serif;transition:transform var(--ease), border-color var(--ease);box-shadow:var(--shadow-sm);}
@@ -604,13 +608,24 @@ let moduloActivo = null;
 let rrhhTab = 'intake';
 let dashPendientesHoy = [];
 
+function nombreUsuario(){
+  const email = session?.user?.email || '';
+  const mapa = { 'pauugericke@gmail.com':'Pau', 'delfifrommel@gmail.com':'Delfi' };
+  if(mapa[email]) return mapa[email];
+  const local = (email.split('@')[0] || '').replace(/[^a-zA-Z]/g,'');
+  return local ? local.charAt(0).toUpperCase()+local.slice(1) : '?';
+}
 function renderApp(){
   document.getElementById('app').innerHTML = `
     <div class="mobile-topbar">
       <button class="mobile-menubtn" onclick="toggleSidebarMobile()" aria-label="Abrir menú">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
-      <img src="logo.png" alt="Parents Break" class="mobile-topbar-logo">
+      <img src="logo.png" alt="Parents Break — ir a Hoy" class="mobile-topbar-logo" role="button" tabindex="0" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}">
+      <div class="mobile-topbar-user">
+        <span class="mobile-topbar-avatar">${nombreUsuario().charAt(0)}</span>
+        <span class="mobile-topbar-name">${nombreUsuario()}</span>
+      </div>
     </div>
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebarMobile(false)"></div>
     <div class="appshell">
@@ -3739,15 +3754,11 @@ let famZonaFiltro = '';
 let famDetalleAbierta = null;
 function renderFamilias(body){
   body.innerHTML = `
-    <div class="card" style="padding:14px 18px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
-        <div class="grid2" style="flex:1;margin:0;min-width:260px;">
-          <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
-          <div class="field" style="margin:0;"><label>Zona</label><select id="fam-zonafiltro" onchange="famZonaFiltro=this.value;renderFamiliasList();"></select></div>
-        </div>
-        <button class="btn primary" onclick="abrirModalNuevaFamilia()">+ Agregar familia</button>
-      </div>
-    </div>
+    <div class="card" style="padding:14px 18px;"><div class="grid3">
+      <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
+      <div class="field" style="margin:0;"><label>Zona</label><select id="fam-zonafiltro" onchange="famZonaFiltro=this.value;renderFamiliasList();"></select></div>
+      <div class="field" style="margin:0;display:flex;align-items:flex-end;"><button class="btn primary" style="width:100%;" onclick="abrirModalNuevaFamilia()">+ Agregar familia</button></div>
+    </div></div>
     <div id="familiaslist"></div>
   `;
   famDetalleAbierta = null;
