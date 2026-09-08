@@ -14,7 +14,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&family=Dancing+Script:wght@700&display=swap');
 :root{
   --bg:#F6F5FB; --paper:#FFFFFF; --ink:#312F45; --ink-soft:#6C6A84; --line:#E3E1EE;
   --accent:#757CBB; --accent-soft:#E7E8F5; --clay:#DF8386; --clay-soft:#FBE7E8; --clay-text:#B8555A;
@@ -223,9 +223,8 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .mobile-menubtn{background:none;border:none;color:#fff;padding:4px;cursor:pointer;display:flex;}
 .mobile-menubtn svg{width:24px;height:24px;}
 .mobile-topbar-logo{height:28px;cursor:pointer;}
-.mobile-topbar-user{margin-left:auto;display:flex;align-items:center;gap:7px;}
-.mobile-topbar-avatar{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.24);color:#fff;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.mobile-topbar-name{color:#fff;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13.5px;}
+.mobile-topbar-user{margin-left:10px;display:flex;align-items:center;}
+.mobile-topbar-name{font-family:'Dancing Script',cursive;font-weight:700;font-size:28px;line-height:1;color:#fff;}
 .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(30,28,50,.4);z-index:49;}
 .sidebar{width:196px;flex-shrink:0;height:100%;background:#5B5FA0;padding:22px 14px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
 .sidebar-logo-wrap{background:#fff;border-radius:12px;padding:8px 12px;margin:0 6px 30px;align-self:flex-start;box-shadow:0 1px 3px rgba(0,0,0,.12);}
@@ -623,7 +622,6 @@ function renderApp(){
       </button>
       <img src="logo.png" alt="Parents Break — ir a Hoy" class="mobile-topbar-logo" role="button" tabindex="0" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}">
       <div class="mobile-topbar-user">
-        <span class="mobile-topbar-avatar">${nombreUsuario().charAt(0)}</span>
         <span class="mobile-topbar-name">${nombreUsuario()}</span>
       </div>
     </div>
