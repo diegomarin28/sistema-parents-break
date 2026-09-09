@@ -1013,7 +1013,7 @@ async function loadDashboardData(){
   let agendaItems = [];
   try{
     const asigError = asigR.status==='fulfilled' ? asigR.value.error : asigR.reason;
-    if(asigError){ box.innerHTML = errBox(asigError); }
+    if(asigError){ if(box) box.innerHTML = errBox(asigError); }
     else{
       const ninTipos = okData(ninierasR);
       const data = okData(asigR);
@@ -1035,6 +1035,11 @@ async function loadDashboardData(){
         });
       }
       agendaItems.sort((a,b)=> (a.hora_inicio||'').localeCompare(b.hora_inicio||''));
+
+      // El usuario puede haber navegado a otro módulo mientras esperábamos estas
+      // consultas — si el contenedor de la agenda ya no está en la pantalla,
+      // no hay nada más para hacer acá (evita el error "null.innerHTML").
+      if(!box) return;
 
       if(!agendaItems.length){
         box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>';
@@ -1068,7 +1073,7 @@ async function loadDashboardData(){
         box.innerHTML = `<div class="timeline">${filas.join('')}${nowInsertado ? '' : `<div class="timeline-now"><div class="agendatime">${ahora.toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit'})}</div><div class="timeline-now-line"></div></div>`}</div>`;
       }
     }
-  }catch(e){ box.innerHTML = errBox(e); }
+  }catch(e){ if(box) box.innerHTML = errBox(e); }
 
   // ---- Pendiente de hoy (sittings de la agenda sin registrar) ----
   try{
@@ -2669,9 +2674,20 @@ function abrirModalRegistroDesdeAgenda(s){
       <div class="agenda-ninerarow"><div><b>${s.ninieras[0].ninera_nombre}</b></div></div>
       ${s.cobro_familia ? `<div class="helper">Cobro a la familia: $${Number(s.cobro_familia).toLocaleString('es-UY')}</div>` : ''}
     </div>
-    <button class="btn primary" style="width:100%;" onclick="editarRegistroDesdeAgenda('${s._regId}')">Editar este registro</button>
+    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="editarRegistroDesdeAgenda('${s._regId}')">Editar este registro</button>
+    <button class="btn danger" style="width:100%;" onclick="eliminarRegistroDesdeAgenda('${s._regId}')">Eliminar este registro</button>
   `;
   abrirModal(cuerpo);
+}
+async function eliminarRegistroDesdeAgenda(regId){
+  const ok = await confirmarAccion('¿Eliminar este registro? No se puede deshacer.');
+  if(!ok) return;
+  const { error } = await sb.from('sittings_traslados').delete().eq('id', regId);
+  if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
+  cerrarModal();
+  toast('Registro eliminado.');
+  await cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
 }
 function editarRegistroDesdeAgenda(regId){
   cerrarModal();
@@ -4342,11 +4358,15 @@ async function renderSittings(body){
       <h2>Historial con filtros</h2>
       <div class="helper">Todos los sittings y traslados registrados, con búsqueda por familia y por período.</div>
       <div class="grid3">
-        <div class="field"><label>Familia</label><select id="sithist-familia" onchange="renderSitHistorial()"><option value="">Todas</option></select></div>
-        <div class="field"><label>Período</label><select id="sithist-periodo" onchange="renderSitHistorial()">
-          <option value="0">Todo</option><option value="7">Últimos 7 días</option><option value="15">Últimos 15 días</option><option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option>
+        <div class="field"><label>Familia</label><select id="sithist-familia" onchange="onSitHistFiltroChange()"><option value="">Todas</option></select></div>
+        <div class="field"><label>Período</label><select id="sithist-periodo" onchange="onSitHistPeriodoChange()">
+          <option value="0">Todo</option><option value="7">Últimos 7 días</option><option value="15">Últimos 15 días</option><option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option><option value="custom">Personalizado…</option>
         </select></div>
-        <div class="field"><label>Tipo</label><select id="sithist-tipo" onchange="renderSitHistorial()"><option value="">Todos</option><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
+        <div class="field"><label>Tipo</label><select id="sithist-tipo" onchange="onSitHistFiltroChange()"><option value="">Todos</option><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
+      </div>
+      <div class="grid2" id="sithist-custom-box" style="display:none;margin-top:-4px;margin-bottom:14px;">
+        <div class="field"><label>Desde</label><input type="date" id="sithist-desde" onchange="renderSitHistorialCustom()"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="sithist-hasta" onchange="renderSitHistorialCustom()"></div>
       </div>
       <div id="sithist-lista"></div>
     </div>
@@ -4413,6 +4433,49 @@ function resenaBadge(nineraNombre){
   const prom = (res.suma/res.cant).toFixed(1);
   const color = Number(prom)>=4 ? 'var(--good)' : Number(prom)>=3 ? '#7A5A16' : 'var(--clay-text)';
   return `<span style="font-weight:600;color:${color};">★ ${prom} (${res.cant})</span>`;
+}
+function onSitHistPeriodoChange(){
+  const val = document.getElementById('sithist-periodo')?.value;
+  const box = document.getElementById('sithist-custom-box');
+  if(box) box.style.display = (val==='custom') ? 'flex' : 'none';
+  if(val==='custom') renderSitHistorialCustom();
+  else renderSitHistorial();
+}
+function onSitHistFiltroChange(){
+  const val = document.getElementById('sithist-periodo')?.value;
+  if(val==='custom') renderSitHistorialCustom();
+  else renderSitHistorial();
+}
+/* Rango de fechas libre (ej. setiembre a noviembre 2025): consulta directa a la base,
+   no depende de los 200 registros más recientes que se cachean para el resto de los filtros
+   — así funciona bien incluso muy atrás en el histórico. */
+async function renderSitHistorialCustom(){
+  const cont = document.getElementById('sithist-lista');
+  if(!cont) return;
+  const desde = document.getElementById('sithist-desde')?.value;
+  const hasta = document.getElementById('sithist-hasta')?.value;
+  if(!desde || !hasta){ cont.innerHTML = '<div class="empty">Elegí las dos fechas del rango.</div>'; return; }
+  if(hasta < desde){ cont.innerHTML = '<div class="empty">La fecha "hasta" tiene que ser posterior a la de "desde".</div>'; return; }
+  const famF = document.getElementById('sithist-familia')?.value||'';
+  const tipoF = document.getElementById('sithist-tipo')?.value||'';
+  cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Buscando…</div>';
+  const data = await sbLeer(
+    sb.from('sittings_traslados').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
+    'los registros de ese período', []
+  );
+  let items = data || [];
+  if(famF) items = items.filter(s=>normaliza(s.familia_nombre)===famF);
+  if(tipoF) items = items.filter(s=>s.tipo===tipoF);
+  if(!items.length){ cont.innerHTML = '<div class="empty">No hay registros en ese rango de fechas.</div>'; return; }
+  const totalCobro = items.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
+  const totalPago = items.reduce((s,r)=>s+(Number(r.pago_ninera)||0),0);
+  cont.innerHTML = `
+    <div class="helper" style="margin:8px 0;">${items.length} registro(s) · cobrado $${totalCobro.toLocaleString('es-UY')} · pagado $${totalPago.toLocaleString('es-UY')}</div>
+    <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
+    <tbody>${items.map(r=>{
+      const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+      return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
 }
 function renderSitHistorial(){
   const cont = document.getElementById('sithist-lista');
