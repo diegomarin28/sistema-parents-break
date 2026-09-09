@@ -62,15 +62,18 @@ async function renderSittings(body){
       </div>
       <div id="sithist-lista"></div>
     </div>
+    <div id="incidentes-wrap"></div>
   `;
   await cargarSitBase();
   cargarSitLista();
   cargarSitHistorial();
+  cargarIncidentes();
 }
 let sitHistItems = [];
 let sitHistOffset = 0;
 let sitHistTotal = 0;
 let sitHistLoadingMore = false;
+let sitHistMostrar = 10; // cuántas filas se ven de una — separado de cuántas se traen del servidor
 const SIT_HIST_PAGE = 200;
 async function cargarSitHistorial(){
   const [{data:pagina, count}, {data:resenas}, {data:soloFamilias}] = await Promise.all([
@@ -127,6 +130,7 @@ function resenaBadge(nineraNombre){
   return `<span style="font-weight:600;color:${color};">★ ${prom} (${res.cant})</span>`;
 }
 function onSitHistPeriodoChange(){
+  sitHistMostrar = 10;
   const val = document.getElementById('sithist-periodo')?.value;
   const box = document.getElementById('sithist-custom-box');
   if(box) box.style.display = (val==='custom') ? 'flex' : 'none';
@@ -134,6 +138,7 @@ function onSitHistPeriodoChange(){
   else renderSitHistorial();
 }
 function onSitHistFiltroChange(){
+  sitHistMostrar = 10;
   const val = document.getElementById('sithist-periodo')?.value;
   if(val==='custom') renderSitHistorialCustom();
   else renderSitHistorial();
@@ -185,7 +190,14 @@ function renderSitHistorial(){
   }
   const hayMasSinCargar = periodo===0 && sitHistItems.length < sitHistTotal;
   const cargadosLabel = hayMasSinCargar ? ` (${sitHistItems.length} de ${sitHistTotal} cargados)` : '';
-  const botonMas = hayMasSinCargar ? `<button class="smallbtn" id="sithist-mas-btn" onclick="cargarSitHistorialMas()" ${sitHistLoadingMore?'disabled':''} style="margin-top:10px;">${sitHistLoadingMore?'Cargando…':'Cargar registros más antiguos'}</button>` : '';
+  // En "Todo" (el período por defecto) no mostramos todo lo que ya está cargado de una —
+  // se revela de a 10 con "Mostrar más". En un período específico (7/15/30/90 días o un
+  // rango elegido a mano) ya es un recorte acotado a propósito, así que se muestra entero.
+  const mostrarTope = periodo===0 ? Math.min(sitHistMostrar, items.length) : items.length;
+  const itemsMostrados = items.slice(0, mostrarTope);
+  const hayMasLocal = periodo===0 && mostrarTope < items.length;
+  const botonMostrarMas = hayMasLocal ? `<button class="smallbtn" onclick="sitHistMostrar+=10;renderSitHistorial();" style="margin-top:10px;">Mostrar más</button>` : '';
+  const botonMas = (!hayMasLocal && hayMasSinCargar) ? `<button class="smallbtn" id="sithist-mas-btn" onclick="cargarSitHistorialMas()" ${sitHistLoadingMore?'disabled':''} style="margin-top:10px;">${sitHistLoadingMore?'Cargando…':'Cargar registros más antiguos'}</button>` : '';
   if(!items.length){
     cont.innerHTML = `<div class="empty">No hay registros que coincidan con estos filtros${hayMasSinCargar?' entre los ya cargados — probá "Cargar registros más antiguos"':''}.</div>${botonMas}`;
     return;
@@ -193,13 +205,13 @@ function renderSitHistorial(){
   const totalCobro = items.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
   const totalPago = items.reduce((s,r)=>s+(Number(r.pago_ninera)||0),0);
   cont.innerHTML = `
-    <div class="helper" style="margin:8px 0;">${items.length} registro(s)${cargadosLabel} · cobrado $${totalCobro.toLocaleString('es-UY')} · pagado $${totalPago.toLocaleString('es-UY')}</div>
+    <div class="helper" style="margin:8px 0;">${itemsMostrados.length} de ${items.length} registro(s)${cargadosLabel} · cobrado $${totalCobro.toLocaleString('es-UY')} · pagado $${totalPago.toLocaleString('es-UY')}</div>
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
-    <tbody>${items.map(r=>{
+    <tbody>${itemsMostrados.map(r=>{
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
       return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
     }).join('')}</tbody></table></div>
-    ${botonMas}`;
+    ${botonMostrarMas}${botonMas}`;
 }
 async function cargarSitBase(){
   const [{data:fams}, {data:nins}] = await Promise.all([
@@ -472,6 +484,129 @@ async function rutaKmTomTom(o, d){
 }
 
 /* ---- autocomplete propio reusable (familia, niñera) ---- */
+/* ============================================================
+   D3 · Bitácora de incidentes — accidentes, quejas de familias, u
+   otros hechos puntuales. Se puede cargar desde un sitting puntual
+   (con niñera/familia/fecha ya cargados), desde la ficha de una
+   niñera, o suelto con el botón "+ Registrar incidente" de acá — las
+   tres puertas abren el mismo formulario.
+   ============================================================ */
+let incidentesItems = [];
+let incAbierto = false;
+let incMostrar = 10;
+let incNineraSel = null, incFamiliaSel = null;
+function abrirModalIncidente(prefill){
+  prefill = prefill || {};
+  incNineraSel = prefill.ninera_id ? {id: prefill.ninera_id, nombre: prefill.ninera_nombre} : null;
+  incFamiliaSel = prefill.familia_id ? {id: prefill.familia_id, nombre: prefill.familia_nombre} : null;
+  const html = `
+    <h2>Registrar incidente</h2>
+    <div class="grid2">
+      <div class="field"><label>Fecha</label><input type="date" id="inc-fecha" value="${prefill.fecha||todayISO()}"></div>
+      <div class="field"><label>Tipo</label><select id="inc-tipo">
+        <option value="accidente">Accidente</option>
+        <option value="queja">Queja de familia</option>
+        <option value="otro" selected>Otro</option>
+      </select></div>
+    </div>
+    <div class="field"><label>Gravedad</label><select id="inc-gravedad">
+      <option value="leve" selected>Leve</option>
+      <option value="moderado">Moderado</option>
+      <option value="grave">Grave</option>
+    </select></div>
+    <div class="grid2">
+      <div class="field" style="position:relative;"><label>Niñera (opcional)</label>
+        <input type="text" id="inc-ninera" autocomplete="off" value="${prefill.ninera_nombre||''}">
+        <div id="inc-ninera-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
+      </div>
+      <div class="field" style="position:relative;"><label>Familia (opcional)</label>
+        <input type="text" id="inc-familia" autocomplete="off" value="${prefill.familia_nombre||''}">
+        <div id="inc-familia-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="field"><label>Descripción</label><textarea id="inc-descripcion" rows="4" placeholder="Qué pasó, cuándo se enteraron, cómo se resolvió…"></textarea></div>
+    <div id="inc-warn"></div>
+    <button class="btn primary" style="width:100%;" onclick="guardarIncidente('${prefill.sitting_id||''}')">Guardar incidente</button>
+  `;
+  abrirModal(html);
+  setTimeout(()=>{
+    attachAutocomplete('inc-ninera', 'inc-ninera-dropdown', ()=>sitNinieras, (o)=>{ incNineraSel = o; });
+    attachAutocomplete('inc-familia', 'inc-familia-dropdown', ()=>sitFamilias, (o)=>{ incFamiliaSel = o; });
+  }, 20);
+}
+async function guardarIncidente(sittingId){
+  const fecha = document.getElementById('inc-fecha').value;
+  const tipo = document.getElementById('inc-tipo').value;
+  const gravedad = document.getElementById('inc-gravedad').value;
+  const nineraTxt = document.getElementById('inc-ninera').value.trim();
+  const familiaTxt = document.getElementById('inc-familia').value.trim();
+  const descripcion = document.getElementById('inc-descripcion').value.trim();
+  const warn = document.getElementById('inc-warn');
+  if(!fecha || !descripcion){ warn.innerHTML = '<div class="warnbox">Completá al menos la fecha y la descripción.</div>'; return; }
+  const { error } = await sb.from('incidentes').insert({
+    fecha, tipo, gravedad,
+    ninera_id: (incNineraSel && normaliza(incNineraSel.nombre)===normaliza(nineraTxt)) ? incNineraSel.id : null,
+    ninera_nombre: nineraTxt || null,
+    familia_id: (incFamiliaSel && normaliza(incFamiliaSel.nombre)===normaliza(familiaTxt)) ? incFamiliaSel.id : null,
+    familia_nombre: familiaTxt || null,
+    sitting_id: sittingId || null,
+    descripcion,
+    registrado_por: registradoPorUsuario(),
+  });
+  if(error){ warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  toast('Incidente registrado.');
+  cargarIncidentes();
+}
+async function cargarIncidentes(){
+  const { data, error } = await sb.from('incidentes').select('*').order('fecha', {ascending:false}).order('created_at', {ascending:false});
+  if(error || !document.getElementById('incidentes-wrap')) return;
+  incidentesItems = data || [];
+  renderIncidentes();
+}
+function toggleIncidentes(){ incAbierto = !incAbierto; renderIncidentes(); }
+function renderIncidentes(){
+  const wrap = document.getElementById('incidentes-wrap');
+  if(!wrap) return;
+  wrap.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div style="cursor:pointer;flex:1;" onclick="toggleIncidentes()">
+          <h2 style="margin:0;">Incidentes</h2>
+          <div class="helper" style="margin:2px 0 0;">${incidentesItems.length} registrado${incidentesItems.length===1?'':'s'} · ${incAbierto?'tocá para cerrar':'tocá para ver'}</div>
+        </div>
+        <button class="smallbtn" onclick="abrirModalIncidente({})">+ Registrar incidente</button>
+      </div>
+      ${incAbierto ? renderIncidentesLista() : ''}
+    </div>`;
+}
+function renderIncidentesLista(){
+  if(!incidentesItems.length) return '<div class="empty" style="margin-top:12px;">No hay incidentes registrados.</div>';
+  const mostrarTope = Math.min(incMostrar, incidentesItems.length);
+  const items = incidentesItems.slice(0, mostrarTope);
+  const hayMas = mostrarTope < incidentesItems.length;
+  const gravedadClase = g => g==='grave' ? 'bad' : g==='moderado' ? 'warn' : 'good';
+  return `
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:2px;">
+      ${items.map(i=>{
+        const fechaFmt = new Date(i.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'});
+        const quienes = [i.ninera_nombre, i.familia_nombre].filter(Boolean).join(' · ');
+        return `
+        <div class="agendarow" style="border-bottom:1px solid var(--line);align-items:flex-start;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <div style="font-weight:700;">${fechaFmt}${quienes?' — '+quienes:''}</div>
+            <div class="helper" style="margin:2px 0 4px;">${i.descripcion}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <span class="badge ${i.tipo==='accidente'?'bad':i.tipo==='queja'?'warn':'brand'}" style="font-size:10.5px;">${i.tipo==='accidente'?'Accidente':i.tipo==='queja'?'Queja':'Otro'}</span>
+            <span class="badge ${gravedadClase(i.gravedad)}" style="font-size:10.5px;">${i.gravedad}</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    ${hayMas ? `<button class="smallbtn" style="margin-top:10px;" onclick="incMostrar+=10;renderIncidentes();">Mostrar más</button>` : ''}
+  `;
+}
 function attachAutocomplete(inputId, dropdownId, getOpciones, onPick){
   const input = document.getElementById(inputId);
   const dd = document.getElementById(dropdownId);
@@ -919,7 +1054,7 @@ async function cargarSitLista(){
     <tbody>${sitItems.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${r.familia_nombre}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm('${r.id}')">Editar</button><button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></div></td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${r.familia_nombre}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm('${r.id}')">Editar</button><button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha}).replace(/'/g,"&#39;")})'>Incidente</button><button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></div></td></tr>`;
     }).join('')}</tbody></table></div>
   `;
 }
