@@ -268,7 +268,7 @@ async function loadDashboardData(){
       // alimentar el banner de "Pendiente de hoy" — no se toca.
       const sinResolver = okData(solSinResolverR);
       if(!sinResolver.length){
-        box.innerHTML = '<div class="empty">Todo lo de hoy y mañana ya tiene niñera confirmada 🎉</div>';
+        box.innerHTML = '<div class="empty">Todo lo de hoy y mañana ya tiene niñera confirmada!</div>';
       } else {
         const hoyStr = todayISO();
         const filas = sinResolver.map(s=>{
