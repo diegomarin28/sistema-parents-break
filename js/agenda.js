@@ -128,6 +128,10 @@ async function cargarAgendaBase(){
   agendaNinierasBase = nins || [];
 }
 
+function diaDeFecha(fechaISO){
+  const d = new Date(fechaISO+'T00:00:00');
+  return ['D','L','M','X','J','V','S'][d.getDay()];
+}
 async function cargarAgendaSolicitudes(){
   const wrap = document.getElementById('agenda-grid-wrap');
   if(wrap) wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
