@@ -436,6 +436,44 @@ async function sbLeer(consulta, queCosa='los datos', fallback=null){
   }
 }
 
+/* ============================================================
+   B2 · Anti-duplicados: detecta nombres parecidos antes de crear
+   una familia/niñera nueva (typos, variantes: "Paola Herpe" vs
+   "Paola Gerpe", "Andrea Camps" vs "Andy Camps").
+   ============================================================ */
+function distanciaEdicion(a, b){
+  const m = a.length, n = b.length;
+  if(!m) return n; if(!n) return m;
+  let prev = Array.from({length:n+1}, (_,j)=>j);
+  for(let i=1;i<=m;i++){
+    const cur = [i];
+    for(let j=1;j<=n;j++){
+      cur[j] = a[i-1]===b[j-1] ? prev[j-1] : 1+Math.min(prev[j-1], prev[j], cur[j-1]);
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function nombreParecido(texto, lista){
+  const q = normaliza((texto||'').trim());
+  if(!q || q.length<3) return null;
+  let mejor = null, mejorDist = Infinity;
+  (lista||[]).forEach(o=>{
+    const cand = normaliza(o.nombre||'');
+    if(!cand || cand===q) return; // exacto no cuenta como "parecido", ya es la misma persona
+    const dist = distanciaEdicion(q, cand);
+    const umbral = cand.length<=6 ? 1 : cand.length<=10 ? 2 : 3;
+    if(dist<=umbral && dist<mejorDist){ mejor = o; mejorDist = dist; }
+  });
+  return mejor;
+}
+/* Devuelve true si está OK seguir (no había parecido, o el usuario confirmó que es alguien distinto). */
+async function confirmarNombreNuevo(texto, lista, tipoLabel){
+  const parecido = nombreParecido(texto, lista);
+  if(!parecido) return true;
+  return confirmarAccion(`¿Quisiste decir "${parecido.nombre}"? Ya existe ${tipoLabel==='familia'?'una familia':'una niñera'} con un nombre muy parecido. Si es alguien distinto, confirmá para crear "${texto.trim()}" igual.`, 'Es alguien distinto, crear igual');
+}
+
 function confirmarAccion(mensaje, textoBoton='Eliminar'){
   return new Promise((resolve)=>{
     const overlay = document.createElement('div');
@@ -2251,6 +2289,7 @@ async function guardarSolicitudPuntual(){
   const tarifa = document.getElementById('agenda-cobro').value;
   const warn = document.getElementById('agenda-nueva-warn');
   if(!familiaTxt || !fecha || !horaInicio){ warn.innerHTML = '<div class="warnbox">Completá al menos familia, fecha y hora de inicio.</div>'; return; }
+  if(!agendaFamilias.some(f=>normaliza(f.nombre)===normaliza(familiaTxt)) && !(await confirmarNombreNuevo(familiaTxt, agendaFamilias, 'familia'))) return;
   if(!cruza && horaFin && horaFin <= horaInicio){
     warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio. Si termina pasada la medianoche, marcá "Termina al día siguiente".</div>';
     return;
@@ -2285,6 +2324,8 @@ async function guardarAsignacionFijaNueva(){
   const nineraNombre = document.getElementById('agenda-repetir-ninera').value.trim();
   const warn = document.getElementById('agenda-nueva-warn');
   if(!familiaTxt || !nineraNombre){ warn.innerHTML = '<div class="warnbox">Elegí la familia y la niñera.</div>'; return; }
+  if(!agendaFamilias.some(f=>normaliza(f.nombre)===normaliza(familiaTxt)) && !(await confirmarNombreNuevo(familiaTxt, agendaFamilias, 'familia'))) return;
+  if(!agendaNinierasBase.some(n=>normaliza(n.nombre)===normaliza(nineraNombre)) && !(await confirmarNombreNuevo(nineraNombre, agendaNinierasBase, 'niñera'))) return;
   const dias = [...document.querySelectorAll('#agenda-repetir-dias .daybtn.selected')].map(b=>b.dataset.dia);
   if(!dias.length){ warn.innerHTML = '<div class="warnbox">Elegí al menos un día.</div>'; return; }
   const varia = document.getElementById('agenda-repetir-varia').checked;
@@ -3927,6 +3968,7 @@ function abrirModalNuevaFamilia(){
 async function addFamilia(){
   const nombre = document.getElementById('fam-nombre').value.trim();
   if(!nombre){ toast('Falta el nombre de la familia.','bad'); return; }
+  if(!(await confirmarNombreNuevo(nombre, familiasItems, 'familia'))) return;
   const fam = { nombre, zona:document.getElementById('fam-zona').value, telefono:document.getElementById('fam-telefono').value,
     cobro_hora:document.getElementById('fam-cobro').value||null, pago_hora:document.getElementById('fam-pago').value||null,
     ninos:document.getElementById('fam-ninos').value, direccion:document.getElementById('fam-direccion').value,
@@ -4912,6 +4954,10 @@ async function guardarSitting(){
   const nineraNombre = document.getElementById('sit-ninera').value.trim();
   const fecha = document.getElementById('sit-fecha').value;
   if(!familiaNombre || !nineraNombre || !fecha){ toast('Faltan familia, niñera o fecha.', 'bad'); return; }
+  if(!sitEditId){
+    if(!sitFamiliaSel && !(await confirmarNombreNuevo(familiaNombre, sitFamilias, 'familia'))) return;
+    if(!sitNineraSel && !(await confirmarNombreNuevo(nineraNombre, sitNinieras, 'niñera'))) return;
+  }
   const registro = {
     tipo: sitTipo,
     registrado_por: document.getElementById('sit-registro').value,
