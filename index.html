@@ -523,10 +523,39 @@ async function chequearDobleReservaDB(nineraNombre, fecha, horaInicio, horaFin){
   }
   return null;
 }
+/* Al crear una asignación fija nueva: chequea contra otros fijos de esa niñera (cualquier fecha, no vencen),
+   y contra sittings ya registrados o solicitudes puntuales confirmadas DE HOY EN ADELANTE cuyo día de
+   semana caiga en los días elegidos para el fijo. */
+async function chequearFijoNuevoContraTodo(nineraNombre, dias, horaInicio, horaFin){
+  if(!horaInicio) return null;
+  const hoy = todayISO();
+  const key = normaliza(nineraNombre);
+  const [{data:fijos}, {data:regs}, {data:sols}] = await Promise.all([
+    sb.from('asignaciones').select('dias,hora_inicio,hora_fin,ninera_nombre, familias(nombre)'),
+    sb.from('sittings_traslados').select('familia_nombre,fecha,hora_inicio,hora_fin,ninera_nombre').gte('fecha', hoy),
+    sb.from('solicitudes').select('familia_nombre,fecha,hora_inicio,hora_fin,estado,solicitud_ninieras(ninera_nombre,estado)').gte('fecha', hoy),
+  ]);
+  for(const ex of (fijos||[])){
+    if(normaliza(ex.ninera_nombre)!==key || !Array.isArray(ex.dias) || !dias.some(d=>ex.dias.includes(d))) continue;
+    if(rangosSolapan(horaInicio, horaFin, ex.hora_inicio, ex.hora_fin)) return {familia_nombre:ex.familias?.nombre||'(familia)', hora_inicio:ex.hora_inicio, hora_fin:ex.hora_fin};
+  }
+  for(const r of (regs||[])){
+    if(normaliza(r.ninera_nombre)!==key || !dias.includes(diaDeFecha(r.fecha))) continue;
+    if(rangosSolapan(horaInicio, horaFin, r.hora_inicio, r.hora_fin)) return {familia_nombre:r.familia_nombre, hora_inicio:r.hora_inicio, hora_fin:r.hora_fin, fecha:r.fecha};
+  }
+  for(const s of (sols||[])){
+    if(s.estado==='cancelada' || !dias.includes(diaDeFecha(s.fecha))) continue;
+    const comprometida = (s.solicitud_ninieras||[]).some(n=>normaliza(n.ninera_nombre)===key && n.estado==='confirmada');
+    if(!comprometida) continue;
+    if(rangosSolapan(horaInicio, horaFin, s.hora_inicio, s.hora_fin)) return {familia_nombre:s.familia_nombre, hora_inicio:s.hora_inicio, hora_fin:s.hora_fin, fecha:s.fecha};
+  }
+  return null;
+}
 function horaTxt(h){ return h ? h.slice(0,5) : '?'; }
 async function avisarSiDobleReserva(choque, nineraNombre, textoBoton){
   if(!choque) return true;
-  return confirmarAccion(`${nineraNombre} ya está comprometida con ${choque.familia_nombre} de ${horaTxt(choque.hora_inicio)} a ${horaTxt(choque.hora_fin)}, que se pisa con este horario. ¿Seguir igual?`, textoBoton);
+  const fechaTxt = choque.fecha ? ` el ${new Date(choque.fecha+'T00:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'})}` : '';
+  return confirmarAccion(`${nineraNombre} ya está comprometida con ${choque.familia_nombre}${fechaTxt} de ${horaTxt(choque.hora_inicio)} a ${horaTxt(choque.hora_fin)}, que se pisa con este horario. ¿Seguir igual?`, textoBoton);
 }
 
 function confirmarAccion(mensaje, textoBoton='Eliminar'){
@@ -2164,9 +2193,9 @@ function selectHora(idPrefix, valHH='', valMM=''){
 }
 function leerHora(idPrefix){
   const hh = document.getElementById(idPrefix+'-hh')?.value;
+  if(!hh) return ''; // sin hora elegida, no hay horario — esto sí queda vacío
   const mm = document.getElementById(idPrefix+'-mm')?.value;
-  if(!hh || mm===''){ return ''; }
-  return `${hh}:${mm}`;
+  return `${hh}:${mm || '00'}`; // minutos en blanco = :00, para no obligar a tocar los dos selectores siempre
 }
 function setHoraSelect(idPrefix, hhmm){
   if(!hhmm) return;
@@ -2393,20 +2422,9 @@ async function guardarAsignacionFijaNueva(){
   } else {
     filas.push({ familia_id: fam?fam.id:null, ninera_nombre:nineraNombre, dias, hora_inicio: leerHora('agenda-rep-hi')||null, hora_fin: leerHora('agenda-rep-hf')||null });
   }
-  const { data: existentes } = await sb.from('asignaciones').select('dias,hora_inicio,hora_fin,ninera_nombre, familias(nombre)').neq('ninera_nombre', '');
-  const key = normaliza(nineraNombre);
   let choque = null;
   for(const fila of filas){
-    if(!fila.hora_inicio) continue;
-    for(const ex of (existentes||[])){
-      if(normaliza(ex.ninera_nombre)!==key) continue;
-      const diasComparten = Array.isArray(ex.dias) && fila.dias.some(d=>ex.dias.includes(d));
-      if(!diasComparten) continue;
-      if(rangosSolapan(fila.hora_inicio, fila.hora_fin, ex.hora_inicio, ex.hora_fin)){
-        choque = {familia_nombre: ex.familias?.nombre||'(familia)', hora_inicio: ex.hora_inicio, hora_fin: ex.hora_fin};
-        break;
-      }
-    }
+    choque = await chequearFijoNuevoContraTodo(nineraNombre, fila.dias, fila.hora_inicio, fila.hora_fin);
     if(choque) break;
   }
   if(!(await avisarSiDobleReserva(choque, nineraNombre, 'Crear igual'))) return;
@@ -5087,17 +5105,7 @@ async function guardarSitting(){
     if(!dias.length){
       toast('Registro guardado, pero elegí al menos un día para la asignación fija.', 'bad');
     } else {
-      const { data: existentes } = await sb.from('asignaciones').select('dias,hora_inicio,hora_fin,ninera_nombre, familias(nombre)').neq('ninera_nombre', '');
-      const key = normaliza(nineraNombre);
-      let choqueFijo = null;
-      for(const ex of (existentes||[])){
-        if(normaliza(ex.ninera_nombre)!==key) continue;
-        if(!Array.isArray(ex.dias) || !dias.some(d=>ex.dias.includes(d))) continue;
-        if(rangosSolapan(registro.hora_inicio, registro.hora_fin, ex.hora_inicio, ex.hora_fin)){
-          choqueFijo = {familia_nombre: ex.familias?.nombre||'(familia)', hora_inicio: ex.hora_inicio, hora_fin: ex.hora_fin};
-          break;
-        }
-      }
+      const choqueFijo = await chequearFijoNuevoContraTodo(nineraNombre, dias, registro.hora_inicio, registro.hora_fin);
       const seguirFijo = await avisarSiDobleReserva(choqueFijo, nineraNombre, 'Crear igual');
       if(!seguirFijo){
         toast('Registro guardado, la asignación fija no se creó.');
