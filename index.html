@@ -474,6 +474,54 @@ async function confirmarNombreNuevo(texto, lista, tipoLabel){
   return confirmarAccion(`¿Quisiste decir "${parecido.nombre}"? Ya existe ${tipoLabel==='familia'?'una familia':'una niñera'} con un nombre muy parecido. Si es alguien distinto, confirmá para crear "${texto.trim()}" igual.`, 'Es alguien distinto, crear igual');
 }
 
+/* ============================================================
+   B4 · Detección de doble reserva: avisa si una niñera queda
+   comprometida en dos horarios que se pisan el mismo día.
+   No bloquea — el criterio final es de quien está cargando.
+   ============================================================ */
+function rangosSolapan(i1, f1, i2, f2){
+  if(!i1 || !i2) return false; // sin horario cargado de un lado, no se puede comparar — no molesta
+  const s1 = agendaMinutos(i1), e1 = f1 ? agendaMinutos(f1) : s1+60;
+  const s2 = agendaMinutos(i2), e2 = f2 ? agendaMinutos(f2) : s2+60;
+  return s1 < e2 && s2 < e1;
+}
+/* Chequea contra lo ya cargado del día en Agenda (solicitudes confirmadas, fijos, registrados) — sin ir a la base. */
+function chequearDobleReservaAgenda(nineraNombre, horaInicio, horaFin, excluirId){
+  if(!horaInicio) return null;
+  const key = normaliza(nineraNombre);
+  for(const s of agendaSolicitudes){
+    if(s.id===excluirId || s.estado==='cancelada') continue;
+    const comprometida = s.ninieras.some(n=>normaliza(n.ninera_nombre)===key && n.estado==='confirmada');
+    if(!comprometida) continue;
+    if(rangosSolapan(horaInicio, horaFin, s.hora_inicio, s.hora_fin)) return s;
+  }
+  return null;
+}
+/* Misma idea pero consultando la base — para usar fuera de Agenda (ej. cargando un sitting a mano). */
+async function chequearDobleReservaDB(nineraNombre, fecha, horaInicio, horaFin){
+  if(!horaInicio) return null;
+  const [{data:regs}, {data:asigs}] = await Promise.all([
+    sb.from('sittings_traslados').select('familia_nombre,hora_inicio,hora_fin,ninera_nombre').eq('fecha', fecha),
+    sb.from('asignaciones').select('hora_inicio,hora_fin,dias,ninera_nombre, familias(nombre)'),
+  ]);
+  const key = normaliza(nineraNombre);
+  const diaSemana = diaDeFecha(fecha);
+  for(const r of (regs||[])){
+    if(normaliza(r.ninera_nombre)!==key) continue;
+    if(rangosSolapan(horaInicio, horaFin, r.hora_inicio, r.hora_fin)) return {familia_nombre:r.familia_nombre, hora_inicio:r.hora_inicio, hora_fin:r.hora_fin};
+  }
+  for(const a of (asigs||[])){
+    if(normaliza(a.ninera_nombre)!==key || !Array.isArray(a.dias) || !a.dias.includes(diaSemana)) continue;
+    if(rangosSolapan(horaInicio, horaFin, a.hora_inicio, a.hora_fin)) return {familia_nombre:a.familias?.nombre||'(familia)', hora_inicio:a.hora_inicio, hora_fin:a.hora_fin};
+  }
+  return null;
+}
+function horaTxt(h){ return h ? h.slice(0,5) : '?'; }
+async function avisarSiDobleReserva(choque, nineraNombre, textoBoton){
+  if(!choque) return true;
+  return confirmarAccion(`${nineraNombre} ya está comprometida con ${choque.familia_nombre} de ${horaTxt(choque.hora_inicio)} a ${horaTxt(choque.hora_fin)}, que se pisa con este horario. ¿Seguir igual?`, textoBoton);
+}
+
 function confirmarAccion(mensaje, textoBoton='Eliminar'){
   return new Promise((resolve)=>{
     const overlay = document.createElement('div');
@@ -2485,6 +2533,8 @@ async function confirmarAsignacionFijaHoy(asigId){
   const horas = Math.max(0, (agendaMinutos(a.hora_fin) - agendaMinutos(a.hora_inicio))) / 60;
   const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
   const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
+  const choque = chequearDobleReservaAgenda(a.ninera_nombre, a.hora_inicio, a.hora_fin, s.id);
+  if(!(await avisarSiDobleReserva(choque, a.ninera_nombre, 'Registrar igual'))) return;
   const { error } = await sb.from('sittings_traslados').insert({
     tipo: 'sitting',
     registrado_por: registradoPorUsuario(),
@@ -2587,6 +2637,12 @@ function editarRegistroDesdeAgenda(regId){
   setTimeout(()=>abrirModalSitForm(regId), 500);
 }
 async function confirmarNinera(solNineraId){
+  let sPrevio = null, nPrevio = null;
+  for(const sx of agendaSolicitudes){ const nx = sx.ninieras.find(x=>x.id===solNineraId); if(nx){ sPrevio=sx; nPrevio=nx; break; } }
+  if(sPrevio && nPrevio){
+    const choque = chequearDobleReservaAgenda(nPrevio.ninera_nombre, sPrevio.hora_inicio, sPrevio.hora_fin, sPrevio.id);
+    if(!(await avisarSiDobleReserva(choque, nPrevio.ninera_nombre, 'Confirmar igual'))) return;
+  }
   const { error } = await sb.from('solicitud_ninieras').update({estado:'confirmada'}).eq('id', solNineraId);
   if(error){ alert(error.message); return; }
   let solId = null;
@@ -4989,6 +5045,10 @@ async function guardarSitting(){
     registro.km = km ? Number(km) : null;
     registro.origen = document.getElementById('sit-origen').value || null;
     registro.destino = document.getElementById('sit-destino').value || null;
+  }
+  if(!sitEditId && registro.hora_inicio){
+    const choque = await chequearDobleReservaDB(nineraNombre, fecha, registro.hora_inicio, registro.hora_fin);
+    if(!(await avisarSiDobleReserva(choque, nineraNombre, 'Guardar igual'))) return;
   }
   let error;
   if(sitEditId){
