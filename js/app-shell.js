@@ -113,7 +113,7 @@ async function renderDashboard(cont){
     <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1>
     </div>
     <div class="statrow" id="statrow">
-      <div class="statcard"><div class="statnum">—</div><div class="statlabel">En proceso</div><div class="statnum-trend" id="trend-proceso"></div></div>
+      <div class="statcard" style="cursor:pointer;" onclick="setModulo('rrhh')"><div class="statnum">—</div><div class="statlabel">En proceso</div><div class="statnum-trend" id="trend-proceso"></div></div>
       <div class="statcard" style="cursor:pointer;" onclick="setModulo('ninieras')"><div class="statnum">—</div><div class="statlabel">Niñeras activas</div><div class="statnum-trend" id="trend-ninieras"></div></div>
       <div class="statcard" style="cursor:pointer;" onclick="setModulo('familias')"><div class="statnum">—</div><div class="statlabel">Familias</div><div class="statnum-trend" id="trend-familias"></div></div>
     </div>
