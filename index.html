@@ -1169,6 +1169,17 @@ async function renderFinanzas(cont){
         </div>
       </div>
     </div>
+    <div class="card" id="fin-margen-wrap">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+        <div><h2 style="margin:0;">Margen por familia / zona / tipo</h2><div class="helper" style="margin:2px 0 0;">De ${monthLabel(finMes)} — para ver dónde rinde más el negocio y dónde el precio no está acompañando.</div></div>
+        <div style="display:flex;gap:6px;">
+          <button class="smallbtn" id="fin-margen-tab-familia" onclick="renderMargen('familia')">Por familia</button>
+          <button class="smallbtn" id="fin-margen-tab-zona" onclick="renderMargen('zona')">Por zona</button>
+          <button class="smallbtn" id="fin-margen-tab-tipo" onclick="renderMargen('tipo')">Por tipo</button>
+        </div>
+      </div>
+      <div id="fin-margen-tabla"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
+    </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
         <div><h2 style="margin:0;">Gastos fijos mensuales</h2><div class="helper" style="margin:2px 0 0;">Suscripciones y gastos que se repiten todos los meses (Claude, Canva, etc.) — se suman solos al total, sin tener que recargarlos cada mes.</div></div>
@@ -1195,6 +1206,57 @@ async function cargarAvisoExtracto(){
   box.innerHTML = dias > 7
     ? `<div style="background:var(--clay-soft);color:var(--clay-text);font-size:13px;padding:10px 14px;border-radius:10px;margin-top:10px;border:1px solid var(--clay);">Hace ${dias} días que no se sube un extracto — subilo para mantener los cobros al día.</div>`
     : `<div class="helper" style="margin-top:6px;">Último extracto subido hace ${dias===0?'menos de un día':dias+' día'+(dias===1?'':'s')}.</div>`;
+}
+/* E3 · Margen por familia/zona/tipo — agrupa los sittings/traslados ya
+   cargados del mes (finSitsDelMes, sin consulta nueva) y muestra cobro,
+   pago y margen por grupo, para ver dónde rinde el negocio y dónde no. */
+function renderMargen(criterio){
+  finMargenTab = criterio;
+  ['familia','zona','tipo'].forEach(c=>{
+    const btn = document.getElementById('fin-margen-tab-'+c);
+    if(btn){
+      const activo = c===criterio;
+      btn.style.background = activo ? '#666EAE' : '';
+      btn.style.color = activo ? '#fff' : '';
+      btn.style.borderColor = activo ? '#666EAE' : '';
+    }
+  });
+  const tabla = document.getElementById('fin-margen-tabla');
+  if(!tabla) return;
+  const grupos = {};
+  finSitsDelMes.forEach(r=>{
+    let key;
+    if(criterio==='tipo'){
+      key = r.tipo==='traslado' ? 'Traslados' : 'Sittings';
+    } else if(criterio==='zona'){
+      key = (r.familia_id && finZonaPorFamiliaId[r.familia_id]) || finZonaPorFamiliaNombre[normaliza(r.familia_nombre||'')] || '(sin zona)';
+    } else {
+      key = r.familia_nombre || '(sin identificar)';
+    }
+    if(!grupos[key]) grupos[key] = {cobro:0, pago:0, cant:0};
+    grupos[key].cobro += Number(r.cobro_familia)||0;
+    grupos[key].pago += Number(r.pago_ninera)||0;
+    grupos[key].cant += 1;
+  });
+  const filas = Object.entries(grupos).map(([nombre, g])=>({
+    nombre, ...g, margen: g.cobro-g.pago, margenPct: g.cobro>0 ? Math.round((g.cobro-g.pago)/g.cobro*100) : 0,
+  })).sort((a,b)=> b.margen-a.margen);
+
+  if(!filas.length){ tabla.innerHTML = '<div class="empty">No hay sittings ni traslados cargados este mes todavía.</div>'; return; }
+
+  tabla.innerHTML = `
+    <div class="tablewrap"><table class="asigtable">
+      <thead><tr><th>${criterio==='tipo'?'Tipo':criterio==='zona'?'Zona':'Familia'}</th><th>Cant.</th><th>Cobrado</th><th>Pagado</th><th>Margen</th><th>%</th></tr></thead>
+      <tbody>${filas.map(f=>`
+        <tr>
+          <td>${f.nombre}</td>
+          <td>${f.cant}</td>
+          <td>$${f.cobro.toLocaleString('es-UY')}</td>
+          <td>$${f.pago.toLocaleString('es-UY')}</td>
+          <td style="color:${f.margen>=0?'var(--good)':'var(--bad)'};font-weight:600;">$${f.margen.toLocaleString('es-UY')}</td>
+          <td>${f.margenPct}%</td>
+        </tr>`).join('')}</tbody>
+    </table></div>`;
 }
 function cambiarFinMesRel(delta){
   finMes = shiftMes(finMes, delta);
@@ -1262,6 +1324,10 @@ async function guardarEdicionGasto(id){
 }
 let finGastosItems = [];
 let finFijosItems = [];
+let finSitsDelMes = [];
+let finZonaPorFamiliaId = {};
+let finZonaPorFamiliaNombre = {};
+let finMargenTab = 'familia';
 let finBreakdownChart = null;
 function abrirModalNuevoGastoFijo(){
   abrirModal(`
@@ -1338,15 +1404,24 @@ async function cargarFinanzas(){
   const [y,m] = finMes.split('-').map(Number);
   const desde = `${finMes}-01`;
   const hasta = new Date(y, m, 1).toISOString().slice(0,10);
-  const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}] = await Promise.all([
+  const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}, {data:famsZona}] = await Promise.all([
     sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('*').order('concepto'),
+    sb.from('familias').select('id,nombre,zona'),
   ]);
   // Si se navegó a otro módulo mientras esperábamos estos datos, no seguir —
   // evita escribir sobre una pantalla que ya no está (mismo caso que "Hoy").
   if(!document.getElementById('fin-movs')) return;
   if(e1 || e2 || e3){ movsBox.innerHTML = errBox(e1||e2||e3); return; }
+  finSitsDelMes = sits || [];
+  finZonaPorFamiliaId = {}; finZonaPorFamiliaNombre = {};
+  (famsZona||[]).forEach(f=>{
+    const zona = zonasDe(f.zona)[0] || '(sin zona)';
+    finZonaPorFamiliaId[f.id] = zona;
+    finZonaPorFamiliaNombre[normaliza(f.nombre)] = zona;
+  });
+  renderMargen(finMargenTab);
   finGastosItems = gastos || [];
   finFijosItems = fijos || [];
   const fijosDelMes = finFijosItems.filter(g => g.activo && g.desde && g.desde < hasta);
