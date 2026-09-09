@@ -2225,13 +2225,22 @@ function abrirModalNuevaSolicitud(){
       <div id="agenda-repetir-horario-por-dia" style="display:none;margin-top:6px;"></div>
     </div>
     <div id="agenda-nueva-warn"></div>
-    <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarSolicitud()">Guardar solicitud</button>
+    <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarSolicitud(event)">Guardar solicitud</button>
   `;
   abrirModal(html);
   setTimeout(()=>attachAutocomplete('agenda-repetir-ninera', 'agenda-repetir-ninera-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
 }
-async function guardarSolicitud(){
-  if(agendaModoNueva==='repetir') return guardarAsignacionFijaNueva();
+async function guardarSolicitud(ev){
+  const btn = ev?.target;
+  if(btn){ if(btn.disabled) return; btn.disabled = true; }
+  try {
+    if(agendaModoNueva==='repetir') return await guardarAsignacionFijaNueva();
+    return await guardarSolicitudPuntual();
+  } finally {
+    if(btn) btn.disabled = false;
+  }
+}
+async function guardarSolicitudPuntual(){
   const familiaTxt = document.getElementById('agenda-familia').value.trim();
   const tipo = document.getElementById('agenda-tipo').value;
   const zona = document.getElementById('agenda-zona').value.trim();
@@ -2269,6 +2278,7 @@ async function guardarSolicitud(){
   agendaFecha = fecha;
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
+  toast('Solicitud guardada.');
 }
 async function guardarAsignacionFijaNueva(){
   const familiaTxt = document.getElementById('agenda-familia').value.trim();
@@ -2292,6 +2302,7 @@ async function guardarAsignacionFijaNueva(){
   cerrarModal();
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
+  toast('Asignación fija guardada — va a aparecer en Agenda los días que elegiste.');
 }
 
 async function abrirModalAsignar(solicitudId){
@@ -3930,6 +3941,7 @@ let famResenaPorNinera = {};
 let famHistorialPorFamilia = {};
 async function cargarFamilias(){
   const cont = document.getElementById('familiaslist');
+  if(!cont) return; // se puede llamar desde otra pantalla (ej. al quitar una asignación fija desde Agenda) — sin esto, rompía ahí.
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const necesitaNinieras = !ninierasItems.length;
   const [{data:familias, error}, {data:asignaciones}, {data:sittings}, {data:resenas}, ninierasRes] = await Promise.all([
