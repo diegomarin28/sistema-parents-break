@@ -1,8 +1,30 @@
 /* ================= AGENDA (solicitudes) ================= */
-let agendaFecha = null;
+let agendaAncla = null; // primer día visible — arranca siempre en hoy
 let agendaFamilias = [];
 let agendaNinierasBase = [];
 let agendaSolicitudes = [];
+let agendaResizeListenerAttached = false;
+
+function agendaDiasVisibles(){
+  const w = window.innerWidth;
+  if(w < 480) return 2;
+  if(w < 760) return 3;
+  return 7;
+}
+function attachAgendaResizeListener(){
+  if(agendaResizeListenerAttached) return;
+  agendaResizeListenerAttached = true;
+  let resizeTimer = null;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(()=>{
+      if(moduloActivo!=='agenda') return;
+      const lbl = document.getElementById('agenda-fecha-label');
+      if(lbl) lbl.textContent = agendaRangoLabel();
+      renderAgendaGrid();
+    }, 200);
+  });
+}
 const AGENDA_START_MIN = 480, AGENDA_END_MIN = 1200, AGENDA_ROWH = 35;
 const AGENDA_GRIDH = Math.round(((AGENDA_END_MIN-AGENDA_START_MIN)/60)*AGENDA_ROWH);
 
@@ -31,12 +53,24 @@ function agendaFechaLarga(f){
   const s = new Intl.DateTimeFormat('es-UY',{weekday:'long', day:'numeric', month:'long'}).format(d);
   return s.charAt(0).toUpperCase()+s.slice(1);
 }
-function cambiarAgendaFechaRel(delta){
-  const d = new Date(agendaFecha+'T00:00:00');
-  d.setDate(d.getDate()+delta);
-  agendaFecha = d.toISOString().slice(0,10);
+const AGENDA_MESES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function agendaRangoLabel(){
+  const n = agendaDiasVisibles();
+  const d1 = new Date(agendaAncla+'T00:00:00');
+  if(n===1) return agendaFechaLarga(agendaAncla);
+  const d2 = new Date(d1); d2.setDate(d2.getDate()+n-1);
+  const mismoMes = d1.getMonth()===d2.getMonth();
+  return mismoMes
+    ? `${d1.getDate()}–${d2.getDate()} ${AGENDA_MESES_CORTO[d1.getMonth()]}`
+    : `${d1.getDate()} ${AGENDA_MESES_CORTO[d1.getMonth()]} – ${d2.getDate()} ${AGENDA_MESES_CORTO[d2.getMonth()]}`;
+}
+function cambiarAgendaRango(delta){
+  const n = agendaDiasVisibles();
+  const d = new Date(agendaAncla+'T00:00:00');
+  d.setDate(d.getDate() + delta*n);
+  agendaAncla = d.toISOString().slice(0,10);
   const lbl = document.getElementById('agenda-fecha-label');
-  if(lbl) lbl.textContent = agendaFechaLarga(agendaFecha);
+  if(lbl) lbl.textContent = agendaRangoLabel();
   cargarAgendaSolicitudes();
 }
 function waLink(telefono, mensaje){
@@ -64,13 +98,14 @@ async function actualizarAgendaBadge(){
 }
 
 async function renderAgenda(cont){
-  agendaFecha = agendaFecha || todayISO();
+  agendaAncla = agendaAncla || todayISO();
+  attachAgendaResizeListener();
   cont.innerHTML = moduloHeader('Agenda') + `
     <div class="mesbar">
       <div class="mesnav">
-        <button onclick="cambiarAgendaFechaRel(-1)" aria-label="Día anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
-        <div class="mesnav-label" id="agenda-fecha-label">${agendaFechaLarga(agendaFecha)}</div>
-        <button onclick="cambiarAgendaFechaRel(1)" aria-label="Día siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
+        <button onclick="cambiarAgendaRango(-1)" aria-label="Días anteriores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="mesnav-label" id="agenda-fecha-label">${agendaRangoLabel()}</div>
+        <button onclick="cambiarAgendaRango(1)" aria-label="Días siguientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
       </div>
       <button class="smallbtn" onclick="abrirModalNuevaSolicitud()">+ Nueva solicitud</button>
     </div>
@@ -93,44 +128,56 @@ async function cargarAgendaBase(){
   agendaNinierasBase = nins || [];
 }
 
-function diaDeFecha(fechaISO){
-  const d = new Date(fechaISO+'T00:00:00');
-  return ['D','L','M','X','J','V','S'][d.getDay()];
-}
 async function cargarAgendaSolicitudes(){
   const wrap = document.getElementById('agenda-grid-wrap');
   if(wrap) wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
+  const n = agendaDiasVisibles();
+  const d1 = new Date(agendaAncla+'T00:00:00');
+  const d2 = new Date(d1); d2.setDate(d2.getDate()+n-1);
+  const desde = agendaAncla, hasta = d2.toISOString().slice(0,10);
+
   const [{data:sols, error}, {data:asigs}, {data:registros}] = await Promise.all([
-    sb.from('solicitudes').select('*, solicitud_ninieras(*)').eq('fecha', agendaFecha).order('hora_inicio', {ascending:true}),
+    sb.from('solicitudes').select('*, solicitud_ninieras(*)').gte('fecha', desde).lte('fecha', hasta).order('hora_inicio', {ascending:true}),
     sb.from('asignaciones').select('*, familias(nombre)'),
-    sb.from('sittings_traslados').select('*').eq('fecha', agendaFecha),
+    sb.from('sittings_traslados').select('*').gte('fecha', desde).lte('fecha', hasta),
   ]);
   if(error){ if(wrap) wrap.innerHTML = errBox(error); return; }
   const puntuales = (sols||[]).map(s=>({...s, ninieras: s.solicitud_ninieras||[], _fuente:'solicitud'}));
 
-  // Horarios fijos (tabla asignaciones) que correspondan al día de la semana de agendaFecha.
-  const diaSemana = diaDeFecha(agendaFecha);
-  const registradosSet = new Set((registros||[]).map(r=>normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
-  const fijas = (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana)).map(a=>({
-    id: 'asig:'+a.id,
-    _fuente: 'asignacion',
-    _raw: a,
-    _asigId: a.id,
-    _yaRegistrado: registradosSet.has(normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||'')),
-    familia_nombre: a.familias?.nombre || '(familia)',
-    tipo: 'sitting',
-    hora_inicio: a.hora_inicio,
-    hora_fin: a.hora_fin,
-    termina_dia_siguiente: false,
-    zona: null,
-    cobro_familia: null,
-    estado: 'confirmada',
-    ninieras: [{ id:'asigninera:'+a.id, ninera_nombre:a.ninera_nombre, estado:'confirmada' }],
-  }));
+  // Ya registrado en Sittings, por día+niñera+familia (antes era solo niñera+familia, sin día).
+  const registradosSet = new Set((registros||[]).map(r=>r.fecha+'|'+normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
 
-  // Registros ya cargados en Sittings & traslados para este día (antes no aparecían acá).
+  // Horarios fijos: una instancia por cada día visible cuyo día de semana matchee.
+  const fijas = [];
+  for(let i=0;i<n;i++){
+    const d = new Date(d1); d.setDate(d.getDate()+i);
+    const fechaISO = d.toISOString().slice(0,10);
+    const diaSemana = diaDeFecha(fechaISO);
+    (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana)).forEach(a=>{
+      fijas.push({
+        id: 'asig:'+a.id+'@'+fechaISO,
+        fecha: fechaISO,
+        _fuente: 'asignacion',
+        _raw: a,
+        _asigId: a.id,
+        _yaRegistrado: registradosSet.has(fechaISO+'|'+normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||'')),
+        familia_nombre: a.familias?.nombre || '(familia)',
+        tipo: 'sitting',
+        hora_inicio: a.hora_inicio,
+        hora_fin: a.hora_fin,
+        termina_dia_siguiente: false,
+        zona: null,
+        cobro_familia: null,
+        estado: 'confirmada',
+        ninieras: [{ id:'asigninera:'+a.id+'@'+fechaISO, ninera_nombre:a.ninera_nombre, estado:'confirmada' }],
+      });
+    });
+  }
+
+  // Registros ya cargados en Sittings & traslados dentro del rango visible.
   const registrados = (registros||[]).map(r=>({
     id: 'reg:'+r.id,
+    fecha: r.fecha,
     _fuente: 'registro',
     _regId: r.id,
     familia_nombre: r.familia_nombre || '(familia)',
@@ -144,52 +191,50 @@ async function cargarAgendaSolicitudes(){
     ninieras: [{ id:'regninera:'+r.id, ninera_nombre:r.ninera_nombre, estado:'confirmada' }],
   }));
 
-  agendaSolicitudes = [...puntuales, ...fijas, ...registrados].sort((a,b)=>(a.hora_inicio||'').localeCompare(b.hora_inicio||''));
+  agendaSolicitudes = [...puntuales, ...fijas, ...registrados];
   renderAgendaGrid();
 }
 
 function renderAgendaGrid(){
   const wrap = document.getElementById('agenda-grid-wrap');
   if(!wrap) return;
-  if(!agendaSolicitudes.length){
-    wrap.innerHTML = '<div class="empty">No hay solicitudes cargadas para este día — usá "+ Nueva solicitud" para cargar un pedido.</div>';
-    return;
+  const n = agendaDiasVisibles();
+  const hoy = todayISO();
+  const dias = [];
+  for(let i=0;i<n;i++){
+    const d = new Date(agendaAncla+'T00:00:00');
+    d.setDate(d.getDate()+i);
+    dias.push(d.toISOString().slice(0,10));
   }
-  const horasEje = [8,10,12,14,16,18,20];
-  const esHoy = agendaFecha === todayISO();
-  const ahora = new Date();
-  const nowMin = ahora.getHours()*60+ahora.getMinutes();
-  const nowHHMM = String(ahora.getHours()).padStart(2,'0')+':'+String(ahora.getMinutes()).padStart(2,'0');
-  const nowTop = agendaTop(nowHHMM);
-  const mostrarNow = esHoy && nowMin>=AGENDA_START_MIN && nowMin<=AGENDA_END_MIN;
-  const N = agendaSolicitudes.length;
   wrap.innerHTML = `
-    <div class="agenda-scroll">
-      <div class="agenda-grid" style="grid-template-columns:44px repeat(${N}, minmax(150px,1fr)); grid-template-rows:auto ${AGENDA_GRIDH}px;">
-        <div></div>
-        ${agendaSolicitudes.map(s=>`<div class="agenda-colhead">${s.familia_nombre}</div>`).join('')}
-        ${mostrarNow ? `<div class="agenda-nowline" style="grid-column:1 / -1; grid-row:2; top:${nowTop}px;"></div>` : ''}
-        <div class="agenda-eje">${horasEje.map(h=>`<div class="agenda-hora" style="top:${agendaTop(String(h).padStart(2,'0')+':00')}px;">${String(h).padStart(2,'0')}</div>`).join('')}${mostrarNow ? `<div class="agenda-nowlabel" style="top:${nowTop}px;">${nowHHMM}</div>` : ''}</div>
-        ${agendaSolicitudes.map(s=>renderAgendaColumna(s)).join('')}
-      </div>
+    <div style="display:grid;grid-template-columns:repeat(${n}, minmax(0,1fr));gap:8px;">
+      ${dias.map(fecha=>{
+        const esHoy = fecha===hoy;
+        const items = agendaSolicitudes
+          .filter(s=>s.fecha===fecha && s.estado!=='cancelada')
+          .sort((a,b)=>(a.hora_inicio||'').localeCompare(b.hora_inicio||''));
+        const d = new Date(fecha+'T00:00:00');
+        const diaLabel = new Intl.DateTimeFormat('es-UY',{weekday:'short'}).format(d).replace('.','');
+        return `<div style="border:1px solid ${esHoy?'var(--accent)':'var(--line)'};border-radius:12px;padding:8px;min-height:140px;background:${esHoy?'var(--accent-soft)':'var(--paper)'};">
+          <div style="text-align:center;margin-bottom:8px;">
+            <div style="font-size:11px;color:${esHoy?'var(--accent)':'var(--ink-soft)'};font-weight:${esHoy?700:400};text-transform:uppercase;">${esHoy?'hoy':diaLabel}</div>
+            <div style="font-size:16px;font-weight:700;color:${esHoy?'var(--accent)':'var(--ink)'};">${d.getDate()}</div>
+          </div>
+          ${items.length ? items.map(s=>renderAgendaTarjetaDia(s)).join('') : '<div class="helper" style="text-align:center;padding-top:16px;">Sin pedidos</div>'}
+        </div>`;
+      }).join('')}
     </div>
   `;
 }
-function renderAgendaColumna(s){
-  const top = agendaTop(s.hora_inicio);
-  const alto = agendaAlto(s.hora_inicio, s.hora_fin, s.termina_dia_siguiente);
-  let claseEstado = 'sinasignar';
-  let resumen = s.tipo==='traslado' ? 'Traslado' : 'Sitting';
-  if(s.estado==='pendiente_confirmar'){ claseEstado='pendiente'; resumen = s.ninieras.map(n=>(n.ninera_nombre||'').split(' ')[0]).join(', '); }
-  if(s.estado==='confirmada'){ claseEstado='confirmada'; resumen = s.ninieras.map(n=>(n.ninera_nombre||'').split(' ')[0]).join(' + ') + (s._fuente==='asignacion' ? ' · fijo' : s._fuente==='registro' ? ' · registrado' : ''); }
-  if(s.estado==='cancelada'){ claseEstado='cancelada'; resumen = 'Cancelada'; }
-  const horaTxt = s.termina_dia_siguiente
-    ? `${(s.hora_inicio||'--:--').slice(0,5)} → +1 día${s.hora_fin?' '+s.hora_fin.slice(0,5):''}`
-    : (s.hora_inicio ? (s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5)) : 'Sin horario');
-  return `<div class="agenda-col"><div class="agenda-card ${claseEstado}" style="top:${top}px;height:${alto}px;" onclick="abrirModalSolicitud('${s.id}')">
-    <div class="agenda-card-hora">${horaTxt}</div>
-    <div class="agenda-card-sub">${resumen}</div>
-  </div></div>`;
+function renderAgendaTarjetaDia(s){
+  const sinAsignar = !s.ninieras.length || s.ninieras.every(x=>x.estado!=='confirmada');
+  const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : 'Sin hora';
+  const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
+  return `<div style="background:var(--bg);border-radius:8px;padding:7px 8px;margin-bottom:6px;cursor:pointer;font-size:12px;" onclick="abrirModalSolicitud('${s.id}')">
+    <div style="font-weight:700;color:var(--ink);margin-bottom:2px;">${s.familia_nombre}</div>
+    <div class="helper" style="margin:0 0 4px;">${horaTxt}</div>
+    <span class="badge ${sinAsignar?'warn':'good'}" style="font-size:10.5px;padding:3px 8px;">${sinAsignar ? 'Sin asignar' : ninTxt}</span>
+  </div>`;
 }
 
 function onHoraSelectChange(){
@@ -333,7 +378,7 @@ function abrirModalNuevaSolicitud(){
       <div class="grid3">
         <div class="field"><label>Tipo</label><select id="agenda-tipo"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
         <div class="field"><label>Zona</label><input type="text" id="agenda-zona" placeholder="Pocitos, Carrasco…"></div>
-        <div class="field"><label>Fecha</label><input type="date" id="agenda-nueva-fecha" value="${agendaFecha}"></div>
+        <div class="field"><label>Fecha</label><input type="date" id="agenda-nueva-fecha" value="${agendaAncla}"></div>
       </div>
       <div class="grid3">
         <div class="field"><label>Hora inicio</label>${selectHora('agenda-hora-inicio')}</div>
@@ -412,7 +457,9 @@ async function guardarSolicitudPuntual(){
   });
   if(error){ warn.innerHTML = errBox(error); return; }
   cerrarModal();
-  agendaFecha = fecha;
+  agendaAncla = fecha;
+  const lbl = document.getElementById('agenda-fecha-label');
+  if(lbl) lbl.textContent = agendaRangoLabel();
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
   toast('Solicitud guardada.');
@@ -568,8 +615,8 @@ function abrirModalAsignacionFija(s){
     <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="cambiarNineraAsignacionFija('${asigId}')">Guardar niñera</button>
     ${s._yaRegistrado
       ? `<div class="helper" style="margin-bottom:8px;">Ya hay un registro cargado para ${a.ninera_nombre} este día en Sittings.</div>`
-      : `<button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="confirmarAsignacionFijaHoy('${asigId}')">✓ Fue como siempre — registrar</button>
-         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionAsignacionFija('${asigId}')">Este día no fue</button>`}
+      : `<button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="confirmarAsignacionFijaHoy('${s.id}')">✓ Fue como siempre — registrar</button>
+         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionAsignacionFija('${s.id}')">Este día no fue</button>`}
     <button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda('${asigId}')">Quitar esta asignación fija</button>
   `;
   abrirModal(cuerpo);
@@ -577,8 +624,8 @@ function abrirModalAsignacionFija(s){
 }
 /* B1 · Confirmar con un toque que el sitting fijo pasó como siempre — sin re-tipear nada.
    Calcula cobro/pago con la tarifa por hora de la familia (misma cuenta que el form manual). */
-async function confirmarAsignacionFijaHoy(asigId){
-  const s = agendaSolicitudes.find(x=>x.id==='asig:'+asigId);
+async function confirmarAsignacionFijaHoy(id){
+  const s = agendaSolicitudes.find(x=>x.id===id);
   if(!s) return;
   const a = s._raw;
   if(!a.hora_inicio || !a.hora_fin){
@@ -598,7 +645,7 @@ async function confirmarAsignacionFijaHoy(asigId){
     familia_nombre: s.familia_nombre,
     ninera_id: a.ninera_id || null,
     ninera_nombre: a.ninera_nombre,
-    fecha: agendaFecha,
+    fecha: s.fecha,
     hora_inicio: a.hora_inicio,
     hora_fin: a.hora_fin,
     cobro_familia: Math.round(horas*cobroHora),
@@ -612,21 +659,21 @@ async function confirmarAsignacionFijaHoy(asigId){
   actualizarAgendaBadge();
   toast('Sitting registrado.');
 }
-function mostrarExcepcionAsignacionFija(asigId){
-  const s = agendaSolicitudes.find(x=>x.id==='asig:'+asigId);
+function mostrarExcepcionAsignacionFija(id){
+  const s = agendaSolicitudes.find(x=>x.id===id);
   if(!s) return;
   const a = s._raw;
-  const fechaTxt = new Date(agendaFecha+'T00:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
+  const fechaTxt = new Date(s.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
   const cuerpo = `
     <h2 style="margin:0 0 6px;">¿${a.ninera_nombre} no fue el ${fechaTxt} a lo de ${s.familia_nombre}?</h2>
     <div class="helper" style="margin-bottom:16px;">No se le cobra nada a la familia ni se le paga nada a ${a.ninera_nombre} por este día.</div>
-    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="registrarExcepcionFija('${asigId}', false)">No fue nadie ese día</button>
-    <button class="btn primary" style="width:100%;text-align:left;" onclick="registrarExcepcionFija('${asigId}', true)">Hubo reemplazo → cargar su sitting</button>
+    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="registrarExcepcionFija('${id}', false)">No fue nadie ese día</button>
+    <button class="btn primary" style="width:100%;text-align:left;" onclick="registrarExcepcionFija('${id}', true)">Hubo reemplazo → cargar su sitting</button>
   `;
   abrirModal(cuerpo);
 }
-async function registrarExcepcionFija(asigId, esReemplazo){
-  const s = agendaSolicitudes.find(x=>x.id==='asig:'+asigId);
+async function registrarExcepcionFija(id, esReemplazo){
+  const s = agendaSolicitudes.find(x=>x.id===id);
   if(!s) return;
   const a = s._raw;
   const { error } = await sb.from('sittings_traslados').insert({
@@ -635,7 +682,7 @@ async function registrarExcepcionFija(asigId, esReemplazo){
     familia_nombre: s.familia_nombre,
     ninera_id: a.ninera_id || null,
     ninera_nombre: a.ninera_nombre,
-    fecha: agendaFecha,
+    fecha: s.fecha,
     hora_inicio: a.hora_inicio || null,
     hora_fin: a.hora_fin || null,
     cobro_familia: 0,
@@ -649,7 +696,7 @@ async function registrarExcepcionFija(asigId, esReemplazo){
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
   if(esReemplazo){
-    sitPrefill = { familiaNombre: s.familia_nombre, fecha: agendaFecha, notas: `Reemplazo de ${a.ninera_nombre}` };
+    sitPrefill = { familiaNombre: s.familia_nombre, fecha: s.fecha, notas: `Reemplazo de ${a.ninera_nombre}` };
     setModulo('sittings');
     setTimeout(()=>abrirModalSitForm(), 500);
   } else {

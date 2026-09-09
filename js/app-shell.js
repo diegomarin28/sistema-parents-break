@@ -108,6 +108,7 @@ function fechaHoyLarga(){
 }
 
 let dashChart = null;
+function mananaISO(){ const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
 async function renderDashboard(cont){
   cont.innerHTML = `
     <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1>
@@ -132,7 +133,7 @@ async function renderDashboard(cont){
       <div class="pendbanner-link">Ver</div>
     </button>
     <div class="card">
-      <h2>Agenda de hoy · ${DIAS_LABEL[diaHoy()]}</h2>
+      <h2>Sin resolver · hoy y mañana</h2>
       <div id="agenda" class="agendabox"><div class="empty">Cargando…</div></div>
     </div>
   `;
@@ -143,7 +144,7 @@ async function loadDashboardData(){
   // Una sola tanda en paralelo con TODAS las consultas independientes del dashboard.
   // Antes eran 4 tandas en serie (4 idas y vueltas a Supabase); ahora es 1.
   // allSettled: si una consulta falla, las demás secciones igual se renderizan.
-  const [pipelineR, ninierasR, familiasR, sitsR, gastosR, asigR, hoyR, solR] = await Promise.allSettled([
+  const [pipelineR, ninierasR, familiasR, sitsR, gastosR, asigR, hoyR, solR, solSinResolverR] = await Promise.allSettled([
     sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
     sb.from('ninieras').select('nombre,tipo,activa'),
     sb.from('familias').select('cobro_hora'),
@@ -152,6 +153,7 @@ async function loadDashboardData(){
     sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false}),
     sb.from('sittings_traslados').select('familia_nombre,ninera_nombre').eq('fecha', todayISO()),
     sb.from('solicitudes').select('*').eq('fecha', todayISO()).eq('estado','confirmada'),
+    sb.from('solicitudes').select('*').gte('fecha', todayISO()).lte('fecha', mananaISO()).in('estado', ['sin_asignar','pendiente_confirmar']).order('fecha', {ascending:true}),
   ]);
   const okData = r => (r.status==='fulfilled' && !r.value.error) ? (r.value.data||[]) : [];
 
@@ -259,36 +261,31 @@ async function loadDashboardData(){
       // no hay nada más para hacer acá (evita el error "null.innerHTML").
       if(!box) return;
 
-      if(!agendaItems.length){
-        box.innerHTML = '<div class="empty">No hay niñeras agendadas para hoy — cargá los horarios en Familias.</div>';
+      // Lo que se ve en la tarjeta ya no es la agenda completa de hoy (redundante
+      // con la pantalla de Agenda) — ahora muestra solo lo que necesita una
+      // decisión: sittings de hoy y mañana que todavía no tienen niñera
+      // confirmada. agendaItems (arriba) sigue existiendo tal cual para
+      // alimentar el banner de "Pendiente de hoy" — no se toca.
+      const sinResolver = okData(solSinResolverR);
+      if(!sinResolver.length){
+        box.innerHTML = '<div class="empty">Todo lo de hoy y mañana ya tiene niñera confirmada 🎉</div>';
       } else {
-        const ahora = new Date();
-        const minAhora = ahora.getHours()*60 + ahora.getMinutes();
-        const minDe = (hhmm) => { if(!hhmm) return null; const [h,m] = hhmm.split(':').map(Number); return h*60+m; };
-        let nowInsertado = false;
-        const filas = agendaItems.map(a=>{
-          const esTraslado = a._tipo ? a._tipo==='traslado' : tipoPorNinera[normaliza(a.ninera_nombre)] === 'Traslados';
-          const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : 'Sin horario';
-          const finMin = minDe(a.hora_fin) ?? minDe(a.hora_inicio);
-          const yaPaso = finMin !== null && finMin < minAhora;
-          let nowMarker = '';
-          const inicioMin = minDe(a.hora_inicio);
-          if(!nowInsertado && inicioMin !== null && inicioMin >= minAhora){
-            nowInsertado = true;
-            const ahoraFmt = ahora.toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit'});
-            nowMarker = `<div class="timeline-now"><div class="agendatime">${ahoraFmt}</div><div class="timeline-now-line"></div></div>`;
-          }
-          return `${nowMarker}
-          <div class="agendarow ${yaPaso?'pasado':''}">
-            <div class="agendatime">${horario}</div>
-            <div class="agendaicon ${esTraslado?'traslado':'sitting'}">${esTraslado?ICONS.sittings:ICONS.ninieras}</div>
+        const hoyStr = todayISO();
+        const filas = sinResolver.map(s=>{
+          const esHoy = s.fecha===hoyStr;
+          const horario = s.hora_inicio ? `${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}` : 'Sin horario';
+          const estadoTxt = s.estado==='pendiente_confirmar' ? 'Invitación enviada, sin confirmar' : 'Sin niñera invitada';
+          return `
+          <div class="agendarow" style="cursor:pointer;" onclick="setModulo('agenda')">
+            <div class="agendatime">${esHoy?'Hoy':'Mañana'} · ${horario}</div>
+            <div class="agendaicon ${s.tipo==='traslado'?'traslado':'sitting'}">${s.tipo==='traslado'?ICONS.sittings:ICONS.ninieras}</div>
             <div class="agendabody">
-              <div><b>${a.ninera_nombre}</b> con <b>${a.familias?.nombre || 'familia sin nombre'}</b></div>
-              <div class="agendatype">${esTraslado?'Traslado':'Sitting'}</div>
+              <div><b>${s.familia_nombre}</b></div>
+              <div class="agendatype">${estadoTxt}</div>
             </div>
           </div>`;
         });
-        box.innerHTML = `<div class="timeline">${filas.join('')}${nowInsertado ? '' : `<div class="timeline-now"><div class="agendatime">${ahora.toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit'})}</div><div class="timeline-now-line"></div></div>`}</div>`;
+        box.innerHTML = `<div class="timeline">${filas.join('')}</div>`;
       }
     }
   }catch(e){ if(box) box.innerHTML = errBox(e); }
