@@ -18,6 +18,7 @@ async function cargarNinieras(){
   if(error){ const g = document.getElementById('ninierasgrid'); if(g) g.innerHTML = errBox(error); return; }
   ninierasItems = data;
   cargarUtilizacionNinieras();
+  cargarConteoIncidentesNinieras();
   // llenar desplegable de zonas: una niñera puede cubrir varias zonas separadas por "/" —
   // cada zona individual entra como su propia opción, agrupando variantes de mayúsculas/tildes
   const zonaSel = document.getElementById('filt-zona');
@@ -133,6 +134,17 @@ function enviarWhatsappNinera(id){
   if(!tel){ toast('Esta niñera no tiene teléfono cargado — agregalo en su ficha primero.', 'bad'); return; }
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensajeUtilizacionPara(n))}`, '_blank');
 }
+let ninIncidentesCount = {};
+async function cargarConteoIncidentesNinieras(){
+  const { data } = await sb.from('incidentes').select('ninera_id,ninera_nombre').not('ninera_nombre','is',null);
+  ninIncidentesCount = {};
+  (data||[]).forEach(i=>{
+    const key = normaliza(i.ninera_nombre||'');
+    if(!key) return;
+    ninIncidentesCount[key] = (ninIncidentesCount[key]||0) + 1;
+  });
+  filtrarNinieras(); // vuelve a pintar la lista ya con los badges de incidentes
+}
 function filtrarNinieras(){
   const grid = document.getElementById('ninierasgrid');
   if(!grid) return;
@@ -156,7 +168,10 @@ function filtrarNinieras(){
         <div class="name">${n.nombre}</div>
         <div class="meta">${n.zona||'zona s/d'}${n.candidatas?.edad?' · '+n.candidatas.edad:''}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
       </div>
-      <div class="badge-slot"><span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span></div>
+      <div class="badge-slot">
+        <span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span>
+        ${ninIncidentesCount[normaliza(n.nombre)] ? `<span class="badge bad" style="font-size:10px;padding:2px 8px;">${ninIncidentesCount[normaliza(n.nombre)]} incidente${ninIncidentesCount[normaliza(n.nombre)]===1?'':'s'}</span>` : ''}
+      </div>
       <div class="rowbtns">
         <button class="smallbtn" onclick="verNinera('${n.id}')">Ver ficha</button>
         <button class="smallbtn" onclick="editarNinera('${n.id}')">Editar</button>
@@ -224,9 +239,10 @@ async function verNinera(id){
       <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
       <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({ninera_id:n.id, ninera_nombre:n.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
     </div>
-    <div class="fichadl">${rows||'<div>Sin más datos.</div>'}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+    <div class="fichadl">${rows||'<div>Sin más datos.</div>'}<div><b>Zona</b>${n.zona||'—'}</div><div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
     <div id="vn-carsitting"></div>
     <div id="vn-juguetes"></div>
+    <div id="vn-incidentes" style="margin-top:18px;"></div>
     <div style="margin-top:18px;">
       <h2 class="card-section-title" style="margin-top:0;">Sittings y traslados de ${n.nombre.split(' ')[0]}</h2>
       <div class="grid2">
@@ -239,6 +255,7 @@ async function verNinera(id){
     </div>`);
   cargarCarsittingSeccion(n.nombre, 'vn-carsitting', n.tipo, cd.mail);
   cargarJuguetesDeNinera(n.nombre);
+  renderIncidentesEnFicha('vn-incidentes', 'ninera', n.id, n.nombre);
   // cargar los sittings de esta niñera y sus reseñas (si no están cargadas ya globalmente) en paralelo
   const necesitaResenas = !Object.keys(sitHistResenas).length;
   const [{data}, resenasRes] = await Promise.all([

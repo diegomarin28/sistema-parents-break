@@ -597,15 +597,67 @@ function renderIncidentesLista(){
             <div style="font-weight:700;">${fechaFmt}${quienes?' — '+quienes:''}</div>
             <div class="helper" style="margin:2px 0 4px;">${i.descripcion}</div>
           </div>
-          <div style="display:flex;gap:6px;flex-shrink:0;">
+          <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
             <span class="badge ${i.tipo==='accidente'?'bad':i.tipo==='queja'?'warn':'brand'}" style="font-size:10.5px;">${i.tipo==='accidente'?'Accidente':i.tipo==='queja'?'Queja':'Otro'}</span>
             <span class="badge ${gravedadClase(i.gravedad)}" style="font-size:10.5px;">${i.gravedad}</span>
+            <button class="smallbtn danger" onclick="eliminarIncidente('${i.id}')">Eliminar</button>
           </div>
         </div>`;
       }).join('')}
     </div>
     ${hayMas ? `<button class="smallbtn" style="margin-top:10px;" onclick="incMostrar+=10;renderIncidentes();">Mostrar más</button>` : ''}
   `;
+}
+async function eliminarIncidente(id){
+  const ok = await confirmarAccion('¿Eliminar este incidente? No se puede deshacer.');
+  if(!ok) return;
+  const { error } = await sb.from('incidentes').delete().eq('id', id);
+  if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
+  toast('Incidente eliminado.');
+  cargarIncidentes();
+}
+/* Mini-listado embebido en la ficha de una niñera o una familia — independiente
+   del panel general de arriba. Busca por id Y por nombre normalizado, para que
+   también aparezcan los incidentes cargados antes de que existiera el vínculo
+   por id (o si se escribió el nombre a mano sin elegir de la lista). */
+async function renderIncidentesEnFicha(containerId, tipo, id, nombre){
+  const cont = document.getElementById(containerId);
+  if(!cont) return;
+  const { data } = await sb.from('incidentes').select('*').order('fecha', {ascending:false});
+  const key = normaliza(nombre||'');
+  const propios = (data||[]).filter(i=>{
+    if(tipo==='ninera') return (id && i.ninera_id===id) || (key && normaliza(i.ninera_nombre||'')===key);
+    return (id && i.familia_id===id) || (key && normaliza(i.familia_nombre||'')===key);
+  });
+  if(!document.getElementById(containerId)) return; // se pudo haber cerrado el modal mientras esperábamos
+  cont.innerHTML = `
+    <h2 class="card-section-title" style="margin-top:0;">Incidentes (${propios.length})</h2>
+    ${propios.length ? propios.map(i=>{
+      const fechaFmt = new Date(i.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'});
+      const otro = tipo==='ninera' ? i.familia_nombre : i.ninera_nombre;
+      return `
+      <div class="agendarow" style="border-bottom:1px solid var(--line);align-items:flex-start;flex-wrap:wrap;">
+        <div style="flex:1;min-width:180px;">
+          <div style="font-weight:700;">${fechaFmt}${otro?' — '+otro:''}</div>
+          <div class="helper" style="margin:2px 0 4px;">${i.descripcion}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          <span class="badge ${i.tipo==='accidente'?'bad':i.tipo==='queja'?'warn':'brand'}" style="font-size:10px;">${i.tipo==='accidente'?'Accidente':i.tipo==='queja'?'Queja':'Otro'}</span>
+          <span class="badge ${i.gravedad==='grave'?'bad':i.gravedad==='moderado'?'warn':'good'}" style="font-size:10px;">${i.gravedad}</span>
+          <button class="smallbtn danger" onclick="eliminarIncidenteFicha('${i.id}','${containerId}','${tipo}','${id||''}',${JSON.stringify(nombre||'').replace(/'/g,"&#39;")})">Eliminar</button>
+        </div>
+      </div>`;
+    }).join('') : '<div class="empty" style="margin-top:8px;">Sin incidentes registrados.</div>'}
+  `;
+}
+async function eliminarIncidenteFicha(incId, containerId, tipo, id, nombre){
+  const ok = await confirmarAccion('¿Eliminar este incidente? No se puede deshacer.');
+  if(!ok) return;
+  const { error } = await sb.from('incidentes').delete().eq('id', incId);
+  if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
+  toast('Incidente eliminado.');
+  renderIncidentesEnFicha(containerId, tipo, id||null, nombre);
+  cargarIncidentes(); // por si el panel general de Sittings también está montado detrás del modal
 }
 function attachAutocomplete(inputId, dropdownId, getOpciones, onPick){
   const input = document.getElementById(inputId);

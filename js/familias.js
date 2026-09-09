@@ -110,6 +110,7 @@ async function cargarFamilias(){
   }
   renderFamiliasList();
   renderFamiliasEnRiesgo();
+  cargarConteoIncidentesFamilias();
   if(famDetalleAbierta){
     if(familiasItems.some(f=>f.id===famDetalleAbierta)) verFamilia(famDetalleAbierta);
     else { famDetalleAbierta = null; cerrarModal(); }
@@ -206,6 +207,17 @@ async function marcarContactadaRiesgo(id){
   toast('Anotado — no la vamos a mostrar como urgente por un tiempo.');
   renderFamiliasEnRiesgo();
 }
+let famIncidentesCount = {};
+async function cargarConteoIncidentesFamilias(){
+  const { data } = await sb.from('incidentes').select('familia_id,familia_nombre').not('familia_nombre','is',null);
+  famIncidentesCount = {};
+  (data||[]).forEach(i=>{
+    const key = normaliza(i.familia_nombre||'');
+    if(!key) return;
+    famIncidentesCount[key] = (famIncidentesCount[key]||0) + 1;
+  });
+  renderFamiliasList(); // vuelve a pintar la lista ya con los badges de incidentes
+}
 function renderFamiliasList(){
   const cont = document.getElementById('familiaslist');
   if(!cont) return;
@@ -231,7 +243,10 @@ function renderFamiliasList(){
         <div class="name">${f.nombre}</div>
         <div class="meta">${f.zona||'zona s/d'}${f.ninos?' · niños: '+f.ninos:''}</div>
       </div>
-      <div class="badge-slot">${badge}</div>
+      <div class="badge-slot">
+        ${badge}
+        ${famIncidentesCount[normaliza(f.nombre)] ? `<span class="badge bad" style="font-size:10px;padding:2px 8px;">${famIncidentesCount[normaliza(f.nombre)]} incidente${famIncidentesCount[normaliza(f.nombre)]===1?'':'s'}</span>` : ''}
+      </div>
       <div class="rowbtns">
         <button class="smallbtn" onclick="verFamilia('${f.id}')">Ver ficha</button>
         <button class="smallbtn" onclick="editarFamilia('${f.id}')">Editar</button>
@@ -270,7 +285,10 @@ function verFamilia(id){
   abrirModal(`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;padding-right:30px;">
       <h2 style="margin:0;">${f.nombre}</h2>
-      <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="editarFamilia('${f.id}')">Editar</button>
+      <div style="display:flex;gap:6px;">
+        <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({familia_id:f.id, familia_nombre:f.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
+        <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="editarFamilia('${f.id}')">Editar</button>
+      </div>
     </div>
     <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
     ${precioHtml}
@@ -278,6 +296,7 @@ function verFamilia(id){
     ${f.cuenta_bancaria?`<div class="helper">Cuenta: ${f.cuenta_bancaria}</div>`:''}
     ${f.notas?`<div class="helper">${f.notas}</div>`:''}
     ${historialHtml}
+    <div id="fam-incidentes" style="margin-top:14px;"></div>
     <div class="card-section-title">Niñeras asignadas</div>
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
       <tbody>${asigRows || '<tr><td colspan="3" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table></div>
@@ -293,6 +312,7 @@ function verFamilia(id){
       </div>
     </div>
     <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Asignar niñera</button>`);
+  renderIncidentesEnFicha('fam-incidentes', 'familia', f.id, f.nombre);
 }
 function editarFamilia(id){
   const f = familiasItems.find(x=>x.id===id);
