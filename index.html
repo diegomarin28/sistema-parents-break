@@ -381,6 +381,20 @@ function scrollToDetalle(id){
   if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
+/* Al editar/eliminar algo de una lista larga (niñeras, familias), recargar la
+   lista reemplaza todo su HTML y el navegador vuelve el scroll arriba del
+   todo — muy molesto si estás revisando la lista una por una. Estas dos
+   funciones guardan la posición antes de recargar y la restauran después. */
+function guardarScrollMainarea(){
+  return document.querySelector('.mainarea')?.scrollTop ?? 0;
+}
+function restaurarScrollMainarea(valor){
+  requestAnimationFrame(()=>{
+    const el = document.querySelector('.mainarea');
+    if(el) el.scrollTop = valor;
+  });
+}
+
 function toast(msg, type='good'){
   let stack = document.querySelector('.toaststack');
   if(!stack){ stack = document.createElement('div'); stack.className='toaststack'; document.body.appendChild(stack); }
@@ -3978,14 +3992,18 @@ async function guardarEdicionNinera(id){
   }
   cerrarModal();
   toast('Cambios guardados.');
-  cargarNinieras();
+  const scrollN1 = guardarScrollMainarea();
+  await cargarNinieras();
+  restaurarScrollMainarea(scrollN1);
 }
 async function eliminarNinera(id){
   if(!(await confirmarAccion('¿Eliminar esta niñera del sistema? No se puede deshacer.'))) return;
   const { error } = await sb.from('ninieras').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   toast('Niñera eliminada.');
-  cargarNinieras();
+  const scrollN2 = guardarScrollMainarea();
+  await cargarNinieras();
+  restaurarScrollMainarea(scrollN2);
 }
 
 /* ---- Generar CV: arma el pedido para pegarle a Claude en el chat ---- */
@@ -4280,7 +4298,9 @@ async function guardarEdicionFamilia(id){
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   cerrarModal();
   toast('Cambios guardados.');
-  cargarFamilias();
+  const scrollF1 = guardarScrollMainarea();
+  await cargarFamilias();
+  restaurarScrollMainarea(scrollF1);
 }
 async function addAsignacion(famId){
   const nombre = document.getElementById('asig-nombre-'+famId).value.trim();
@@ -4303,7 +4323,9 @@ async function eliminarFamilia(id){
   const { error } = await sb.from('familias').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   if(famDetalleAbierta===id){ famDetalleAbierta=null; cerrarModal(); }
-  cargarFamilias();
+  const scrollF2 = guardarScrollMainarea();
+  await cargarFamilias();
+  restaurarScrollMainarea(scrollF2);
 }
 
 /* ================= SITTINGS & TRASLADOS ================= */
