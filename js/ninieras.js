@@ -36,52 +36,79 @@ async function cargarNinieras(){
 }
 const NIN_UTIL_DIAS = 30;
 let ninUtilChart = null;
+let ninUtilAbierto = false; // arranca cerrado — con 77 niñeras sin actividad era un cartel inmenso
+let ninUtilPorNinera = {};
+let ninUtilUltimaActividad = {};
 /* E2 · Utilización de niñeras: cuántos sittings/traslados hizo cada una en
-   los últimos 30 días, y quiénes no tuvieron ninguno — para decidir a quién
-   darle más changas y a quién no sobrecargar. No bloquea el resto de la
-   pantalla si falla — es un panel secundario. */
+   los últimos 30 días, y quiénes no tuvieron ninguno (con la fecha de su
+   último sitting, alguna vez) — para decidir a quién darle más changas,
+   a quién no sobrecargar, y a quién dar de baja si ya no trabaja más con
+   el equipo. No bloquea el resto de la pantalla si falla — es secundario. */
 async function cargarUtilizacionNinieras(){
-  const desde = new Date(Date.now() - NIN_UTIL_DIAS*24*3600*1000).toISOString().slice(0,10);
-  const { data, error } = await sb.from('sittings_traslados').select('ninera_nombre,fecha').gte('fecha', desde);
+  const { data, error } = await sb.from('sittings_traslados').select('ninera_nombre,fecha');
   if(error || !document.getElementById('nin-utilizacion-wrap')) return;
+  const desde30 = new Date(Date.now() - NIN_UTIL_DIAS*24*3600*1000).toISOString().slice(0,10);
   const porNinera = {};
+  const ultimaActividad = {};
   (data||[]).forEach(r=>{
     const k = normaliza(r.ninera_nombre||'');
-    if(!k) return;
-    if(!porNinera[k]) porNinera[k] = {nombre:r.ninera_nombre, cant:0};
-    porNinera[k].cant += 1;
+    if(!k || !r.fecha) return;
+    if(r.fecha >= desde30){
+      if(!porNinera[k]) porNinera[k] = {nombre:r.ninera_nombre, cant:0};
+      porNinera[k].cant += 1;
+    }
+    if(!ultimaActividad[k] || r.fecha > ultimaActividad[k]) ultimaActividad[k] = r.fecha;
   });
-  renderUtilizacionNinieras(porNinera);
+  ninUtilPorNinera = porNinera;
+  ninUtilUltimaActividad = ultimaActividad;
+  renderUtilizacionNinieras();
 }
-function renderUtilizacionNinieras(porNinera){
+function toggleNinUtil(){ ninUtilAbierto = !ninUtilAbierto; renderUtilizacionNinieras(); }
+function renderUtilizacionNinieras(){
   const wrap = document.getElementById('nin-utilizacion-wrap');
   if(!wrap) return;
+  const porNinera = ninUtilPorNinera;
   const top = Object.values(porNinera).sort((a,b)=>b.cant-a.cant).slice(0, 8);
-  const sinActividad = ninierasItems.filter(n => !porNinera[normaliza(n.nombre)]);
+  const sinActividad = ninierasItems
+    .filter(n => !porNinera[normaliza(n.nombre)])
+    .sort((a,b)=>{
+      const ua = ninUtilUltimaActividad[normaliza(a.nombre)] || ''; // nunca tuvo sitting = más atrasada de todas
+      const ub = ninUtilUltimaActividad[normaliza(b.nombre)] || '';
+      return ua.localeCompare(ub);
+    });
 
   if(!top.length && !sinActividad.length){ wrap.innerHTML = ''; return; }
 
   wrap.innerHTML = `
     <div class="card" style="padding:14px 18px;margin-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;cursor:pointer;" onclick="toggleNinUtil()">
         <h2 style="margin:0;">Utilización — últimos ${NIN_UTIL_DIAS} días</h2>
-        <div class="helper" style="margin:0;">Sittings y traslados por niñera</div>
+        <div class="helper" style="margin:0;">${sinActividad.length} sin actividad · ${ninUtilAbierto?'tocá para cerrar ▲':'tocá para ver ▼'}</div>
       </div>
-      ${top.length ? `<div style="height:220px;"><canvas id="ninUtilChart"></canvas></div>` : `<div class="empty">Sin sittings registrados en este período.</div>`}
+      ${ninUtilAbierto ? `
+      ${top.length ? `<div style="height:220px;margin-top:12px;"><canvas id="ninUtilChart"></canvas></div>` : `<div class="empty">Sin sittings registrados en este período.</div>`}
       ${sinActividad.length ? `
-        <div class="helper" style="margin:14px 0 6px;">Sin ningún sitting en ${NIN_UTIL_DIAS} días (${sinActividad.length}):</div>
+        <div class="helper" style="margin:14px 0 6px;">Sin ningún sitting en ${NIN_UTIL_DIAS} días (${sinActividad.length}) — de la más atrasada a la más reciente:</div>
         <div style="display:flex;flex-direction:column;gap:2px;">
-          ${sinActividad.map(n=>`
-            <div class="agendarow" style="border-bottom:1px solid var(--line);padding:7px 0;">
-              <div>${n.nombre}</div>
+          ${sinActividad.map(n=>{
+            const ultima = ninUtilUltimaActividad[normaliza(n.nombre)];
+            const hace = ultima ? `Último sitting: ${new Date(ultima+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'})}` : 'Nunca tuvo un sitting registrado';
+            return `
+            <div class="agendarow" style="border-bottom:1px solid var(--line);padding:7px 0;align-items:center;flex-wrap:wrap;gap:6px;">
+              <div style="flex:1;min-width:160px;">
+                <div>${n.nombre}</div>
+                <div class="helper" style="margin:0;">${hace}</div>
+              </div>
               ${n.telefono
                 ? `<button class="smallbtn" onclick="enviarWhatsappNinera('${n.id}')">Enviar por WhatsApp</button>`
                 : `<span class="helper" style="margin:0;">Sin teléfono cargado</span>`}
-            </div>`).join('')}
-        </div>` : ''}
+              <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="eliminarNinera('${n.id}')">Eliminar niñera</button>
+            </div>`;
+          }).join('')}
+        </div>` : ''}` : ''}
     </div>`;
 
-  if(top.length){
+  if(ninUtilAbierto && top.length){
     asegurarChart().then(()=>{
       const canvas = document.getElementById('ninUtilChart');
       if(!canvas || !window.Chart) return;

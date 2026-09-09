@@ -59,6 +59,7 @@ let famHistorialPorFamilia = {};
 let famUltimaActividad = {};
 const FAM_RIESGO_SEMANAS = 6;      // sin sittings hace más de esto = "en riesgo"
 const FAM_RIESGO_SNOOZE_DIAS = 30; // al marcar "ya la contacté", no volver a avisar por este tiempo
+let famRiesgoAbierto = false;      // arranca cerrado — antes mostraba todas de una, "cartel inmenso"
 async function cargarFamilias(){
   const cont = document.getElementById('familiaslist');
   if(!cont) return; // se puede llamar desde otra pantalla (ej. al quitar una asignación fija desde Agenda) — sin esto, rompía ahí.
@@ -124,6 +125,7 @@ function mensajeRiesgoPara(f){
   const primerNombre = (f.nombre||'').trim().split(' ')[0] || f.nombre;
   return `¡Hola ${primerNombre}! Somos de Parents Break 💛 Hace un tiempo que no coordinamos ningún sitting con ustedes y queríamos saber cómo están. Si necesitan una niñera o un traslado, contanos y lo vemos. Como agradecimiento por seguir confiando en nosotras, tenemos un 5% de descuento para el próximo servicio. ¡Esperamos su mensaje!`;
 }
+function toggleFamRiesgo(){ famRiesgoAbierto = !famRiesgoAbierto; renderFamiliasEnRiesgo(); }
 function renderFamiliasEnRiesgo(){
   const wrap = document.getElementById('fam-riesgo-wrap');
   if(!wrap) return;
@@ -142,11 +144,12 @@ function renderFamiliasEnRiesgo(){
 
   wrap.innerHTML = `
     <div class="card" style="padding:14px 18px;border-left:3px solid var(--clay);margin-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;cursor:pointer;" onclick="toggleFamRiesgo()">
         <h2 style="margin:0;">Familias en riesgo</h2>
-        <div class="helper" style="margin:0;">${enRiesgo.length} sin pedir hace ${FAM_RIESGO_SEMANAS}+ semanas</div>
+        <div class="helper" style="margin:0;">${enRiesgo.length} sin pedir hace ${FAM_RIESGO_SEMANAS}+ semanas · ${famRiesgoAbierto?'tocá para cerrar ▲':'tocá para ver ▼'}</div>
       </div>
-      <div class="helper" style="margin:0 0 12px;">El texto es un borrador — revisalo y ajustalo a tu gusto antes de mandarlo.</div>
+      ${famRiesgoAbierto ? `
+      <div class="helper" style="margin:12px 0 12px;">El texto es un borrador — revisalo y ajustalo a tu gusto antes de mandarlo.</div>
       ${enRiesgo.map(f=>{
         const semanas = semanasDesde(famUltimaActividad[normaliza(f.nombre)]);
         return `
@@ -164,7 +167,7 @@ function renderFamiliasEnRiesgo(){
             <button class="smallbtn" onclick="marcarContactadaRiesgo('${f.id}')">Ya la contacté</button>
           </div>
         </div>`;
-      }).join('')}
+      }).join('')}` : ''}
     </div>`;
 }
 /* Uruguay: números locales vienen como "099123456" o "99123456" — wa.me
