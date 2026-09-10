@@ -244,10 +244,11 @@ function renderAgendaTarjetaDia(s){
 function onHoraSelectChange(){
   actualizarAgendaTotal();
   actualizarPrecioSugeridoTraslado();
+  actualizarCobroPagoPorHorario();
 }
 function selectHora(idPrefix, valHH='', valMM=''){
   const horas = Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
-  const mins = ['00','15','30','45'];
+  const mins = Array.from({length:60},(_,i)=>String(i).padStart(2,'0'));
   return `<div class="timepick">
     <select id="${idPrefix}-hh" onchange="onHoraSelectChange()"><option value="">--</option>${horas.map(h=>`<option value="${h}" ${h===valHH?'selected':''}>${h}</option>`).join('')}</select>
     <span>:</span>
@@ -266,13 +267,7 @@ function setHoraSelect(idPrefix, hhmm){
   const selHH = document.getElementById(idPrefix+'-hh');
   const selMM = document.getElementById(idPrefix+'-mm');
   if(selHH) selHH.value = hh;
-  if(selMM){
-    // el selector solo ofrece :00/:15/:30/:45 — redondea al paso más cercano si el dato guardado tenía otro minuto
-    const mins = ['00','15','30','45'];
-    let mejor = mins[0], mejorDist = 60;
-    mins.forEach(m=>{ const dist = Math.abs(Number(m)-Number(mm)); if(dist<mejorDist){ mejorDist=dist; mejor=m; } });
-    selMM.value = mejor;
-  }
+  if(selMM) selMM.value = mm; // ahora el selector tiene los 60 minutos — coincide exacto, sin redondear
 }
 function mostrarAgendaFamiliaDropdown(){
   const input = document.getElementById('agenda-familia');

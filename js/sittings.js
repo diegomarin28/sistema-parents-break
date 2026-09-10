@@ -271,8 +271,6 @@ function sitFormHTML(){
       <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen()"></div>
       <div class="field"><label>Pago a niñera</label><input type="number" id="sit-pago" value="0" oninput="calcSitMargen()"></div>
     </div>
-    <button type="button" class="extratoggle" id="sit-extra-toggle" onclick="toggleSitExtra()">+ Horas o cobro extra</button>
-    <div class="extrabox" id="sit-extra-box" style="display:none;"></div>
     <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="sit-notas"></textarea></div>
     <div class="actions">
       <button class="btn primary" onclick="guardarSitting()">${sitEditId ? 'Guardar cambios' : 'Guardar registro'}</button>
@@ -287,7 +285,7 @@ function sitCamposTipoHTML(){
       <div class="field"><label>Hora inicio</label>${selectHora('sit-horaini')}</div>
       <div class="field" id="sit-horafin-wrap"><label>Hora fin</label>${selectHora('sit-horafin')}</div>
     </div>
-    <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="sit-cruza-medianoche"> Termina al día siguiente</label>`;
+    <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="sit-cruza-medianoche" onchange="actualizarCobroPagoPorHorario()"> Termina al día siguiente</label>`;
   }
   return `<div class="grid3">
       <div class="field"><label>Fecha</label><input type="date" id="sit-fecha" value="${todayISO()}"></div>
@@ -372,8 +370,6 @@ function setSitTipo(t){
   sitOrigenCoord = null; sitDestinoCoord = null;
   document.getElementById('sit-camposTipo').innerHTML = sitCamposTipoHTML();
   wireSitAutocompletes();
-  const box = document.getElementById('sit-extra-box');
-  if(box) box.style.display = 'none';
   if(t==='traslado') aplicarDireccionSugerida();
   actualizarPrecioSugeridoTraslado();
   calcSitMargen();
@@ -387,22 +383,13 @@ function onSitFamiliaInput(){
   box.innerHTML = (val && !sitFamiliaSel) ? `<button type="button" class="createbtn" onclick="crearFamiliaRapida()">+ Crear familia "${val}"</button>` : '';
   sitOrigenAuto = true;
   if(sitTipo==='traslado') aplicarDireccionSugerida();
-  // Autocompletar cobro/pago desde la tarifa fija de la familia
-  if(sitFamiliaSel && (sitFamiliaSel.cobro_hora!=null || sitFamiliaSel.pago_hora!=null)){
-    const cobroInput = document.getElementById('sit-cobro');
-    const pagoInput = document.getElementById('sit-pago');
-    if(cobroInput && (!cobroInput.value || cobroInput.value==='0') && sitFamiliaSel.cobro_hora!=null) cobroInput.value = sitFamiliaSel.cobro_hora;
-    if(pagoInput && (!pagoInput.value || pagoInput.value==='0') && sitFamiliaSel.pago_hora!=null) pagoInput.value = sitFamiliaSel.pago_hora;
-    calcSitMargen();
-  }
-  actualizarTarifaExtra();
+  actualizarCobroPagoPorHorario();
 }
 function onSitNineraInput(){
   const val = document.getElementById('sit-ninera').value.trim();
   sitNineraSel = findNinera(val);
   const box = document.getElementById('sit-ninera-create');
   box.innerHTML = (val && !sitNineraSel) ? `<button type="button" class="createbtn" onclick="crearNineraRapida()">+ Crear niñera "${val}"</button>` : '';
-  actualizarTarifaExtra();
 }
 async function crearFamiliaRapida(){
   const val = document.getElementById('sit-familia').value.trim();
@@ -897,95 +884,38 @@ async function guardarTarifaTraslado(){
   toast('Tarifa actualizada.');
 }
 
-/* ---- horas / cobro extra ---- */
-function toggleSitExtra(){
-  const box = document.getElementById('sit-extra-box');
-  const opening = box.style.display === 'none';
-  box.style.display = opening ? 'block' : 'none';
-  if(opening) actualizarTarifaExtra();
-}
-function extraTiempoSelect(cobroH, pagoH){
-  const mins = Array.from({length:60},(_,i)=>String(i).padStart(2,'0'));
-  const horas = Array.from({length:13},(_,i)=>String(i).padStart(2,'0'));
-  return `<div class="timepick">
-    <select id="sit-extra-mm" onchange="actualizarExtraPreview(${cobroH}, ${pagoH})">${mins.map(m=>`<option value="${m}">${m}</option>`).join('')}</select>
-    <span>min</span>
-    <select id="sit-extra-hh" onchange="actualizarExtraPreview(${cobroH}, ${pagoH})">${horas.map(h=>`<option value="${h}">${h}</option>`).join('')}</select>
-    <span>h</span>
-  </div>`;
-}
-function actualizarTarifaExtra(){
-  const box = document.getElementById('sit-extra-box');
-  if(!box || box.style.display==='none') return;
-  const cobroH = sitFamiliaSel ? Number(sitFamiliaSel.cobro_hora)||0 : 0;
-  const pagoH = sitFamiliaSel ? Number(sitFamiliaSel.pago_hora)||0 : 0;
-  let html = '';
-  if(sitFamiliaSel && (cobroH || pagoH)){
-    html += `
-      <div class="helper" style="margin:0 0 8px;">Tarifa de ${sitFamiliaSel.nombre}: $${cobroH}/h cobro · $${pagoH}/h pago</div>
-      <div class="field" style="margin-bottom:6px;"><label>Tiempo extra</label>${extraTiempoSelect(cobroH, pagoH)}</div>
-      <div class="helper" id="sit-extra-preview" style="min-height:15px;margin-bottom:8px;"></div>
-      <button type="button" class="smallbtn" onclick="aplicarExtraTiempo(${cobroH}, ${pagoH})">Sumar tiempo extra</button>
-      <div style="height:1px;background:var(--line);margin:16px 0;"></div>
-      <div class="helper" style="margin:0 0 8px;">O cargá un extra puntual (no calculado por tiempo):</div>`;
-  } else {
-    html += `<div class="helper" style="margin:0 0 8px;">${sitFamiliaSel ? 'Esta familia no tiene tarifa por hora cargada (ponela en Familias).' : 'Elegí una familia ya cargada para calcular el extra según su tarifa.'} Mientras tanto, cargá el extra a mano:</div>`;
-  }
-  html += `
-    <div class="grid2">
-      <div class="field"><label>Extra cobro</label><input type="number" id="sit-extra-cobro-manual" value="0"></div>
-      <div class="field"><label>Extra pago</label><input type="number" id="sit-extra-pago-manual" value="0"></div>
-    </div>
-    <button type="button" class="smallbtn" onclick="aplicarExtraManual()">Sumar extra puntual</button>`;
-  box.innerHTML = html;
-}
-function actualizarExtraPreview(cobroH, pagoH){
-  const mm = Number(document.getElementById('sit-extra-mm')?.value||0);
-  const hh = Number(document.getElementById('sit-extra-hh')?.value||0);
-  const totalMin = hh*60+mm;
-  const prev = document.getElementById('sit-extra-preview');
-  if(!prev) return;
-  if(!totalMin){ prev.textContent = ''; return; }
-  const horasFrac = totalMin/60;
-  const extraCobro = Math.round(cobroH*horasFrac);
-  const extraPago = Math.round(pagoH*horasFrac);
-  prev.textContent = `${hh>0?hh+'h ':''}${mm}min → +$${extraCobro} cobro, +$${extraPago} pago`;
-}
-function aplicarExtraTiempo(cobroH, pagoH){
-  const mmSel = document.getElementById('sit-extra-mm');
-  const hhSel = document.getElementById('sit-extra-hh');
-  const mm = Number(mmSel?.value||0);
-  const hh = Number(hhSel?.value||0);
-  const totalMin = hh*60+mm;
-  if(!totalMin){ toast('Elegí minutos u horas primero.', 'bad'); return; }
-  const horasFrac = totalMin/60;
-  const extraCobro = Math.round(cobroH*horasFrac);
-  const extraPago = Math.round(pagoH*horasFrac);
-  const cobroInput = document.getElementById('sit-cobro');
-  const pagoInput = document.getElementById('sit-pago');
-  cobroInput.value = (Number(cobroInput.value)||0) + extraCobro;
-  pagoInput.value = (Number(pagoInput.value)||0) + extraPago;
-  const prev = document.getElementById('sit-extra-preview');
-  if(prev) prev.textContent = `+${hh>0?hh+'h ':''}${mm}min → +$${extraCobro} cobro, +$${extraPago} pago (ya sumado arriba)`;
-  if(mmSel) mmSel.value = '00';
-  if(hhSel) hhSel.value = '00';
-  calcSitMargen();
-}
-function aplicarExtraManual(){
-  const ec = Number(document.getElementById('sit-extra-cobro-manual').value)||0;
-  const ep = Number(document.getElementById('sit-extra-pago-manual').value)||0;
-  const cobroInput = document.getElementById('sit-cobro');
-  const pagoInput = document.getElementById('sit-pago');
-  cobroInput.value = (Number(cobroInput.value)||0) + ec;
-  pagoInput.value = (Number(pagoInput.value)||0) + ep;
-  toast('Extra sumado al cobro y al pago.');
-  calcSitMargen();
-}
 function calcSitMargen(){
   const c = Number((document.getElementById('sit-cobro')||{}).value)||0;
   const p = Number((document.getElementById('sit-pago')||{}).value)||0;
   const el = document.getElementById('sit-margen');
   if(el) el.textContent = '$'+(c-p);
+}
+/* Recalcula cobro/pago según la duración real (hora fin - hora inicio) por la
+   tarifa por hora de la familia — se dispara solo al elegir horario o al
+   cambiar la familia. Reemplaza el viejo botón de "horas o cobro extra": ya
+   no hace falta cargar un extra a mano, alcanza con poner el horario real
+   (por ejemplo, si se quedó 9 minutos más de lo previsto) y esto ya cobra
+   exacto por esos minutos. Si la familia no tiene tarifa cargada, no toca
+   nada — queda en carga manual como siempre. */
+function actualizarCobroPagoPorHorario(){
+  const cobroInput = document.getElementById('sit-cobro');
+  const pagoInput = document.getElementById('sit-pago');
+  if(!cobroInput || !pagoInput || sitTipo!=='sitting' || !sitFamiliaSel) return;
+  const cobroH = Number(sitFamiliaSel.cobro_hora)||0;
+  const pagoH = Number(sitFamiliaSel.pago_hora)||0;
+  if(!cobroH && !pagoH) return;
+  const horaIni = leerHora('sit-horaini');
+  const horaFin = leerHora('sit-horafin');
+  if(!horaIni || !horaFin) return;
+  const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
+  const mi = agendaMinutos(horaIni);
+  let mf = agendaMinutos(horaFin);
+  if(cruza) mf += 24*60;
+  if(mf<=mi) return; // horario todavía inválido/incompleto, no calcula nada raro
+  const horasFrac = (mf-mi)/60;
+  cobroInput.value = Math.round(cobroH*horasFrac);
+  pagoInput.value = Math.round(pagoH*horasFrac);
+  calcSitMargen();
 }
 
 /* ---- guardar / editar / eliminar ---- */
