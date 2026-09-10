@@ -1,6 +1,10 @@
 /* ================= AUTH ================= */
 let session = null;
 let modoRecuperacion = false;
+// Mientras esta bandera está en true, renderRoot() no pinta ni el login ni la app — se está
+// mostrando la pantalla obligatoria de Face ID/Touch ID (registrar o confirmar), aunque ya
+// haya una sesión válida de por medio (por contraseña o por refresh de token).
+let faceidPendiente = false;
 // Face ID / Touch ID vía Passkeys (WebAuthn): funciona en cualquier navegador/dispositivo
 // moderno que lo soporte (iPhone con Face ID incluido). No manda ninguna foto/biometría a
 // ningún servidor — la verificación queda 100% en el dispositivo, Supabase solo recibe la
@@ -18,6 +22,7 @@ async function boot(){
   renderRoot();
 }
 function renderRoot(){
+  if(faceidPendiente) return; // ya se está mostrando la pantalla de Face ID, no la pisamos
   if(modoRecuperacion){ renderNuevaContrasena(); return; }
   if(!session){ renderLogin(); return; }
   renderApp();
@@ -35,7 +40,7 @@ function renderLogin(){
       <div class="loginformside">
         <div class="loginwrap">
           <h2>Bienvenida de vuelta</h2>
-          <div class="helper">Entrá con tu cuenta de equipo.</div>
+          <div class="helper">Entrá con tu cuenta de equipo. Se pide Face ID/Touch ID siempre, aunque uses contraseña.</div>
           ${PASSKEY_SOPORTADO ? `
           <button class="btn" type="button" id="passkeybtn" style="width:100%;margin-bottom:14px;" onclick="entrarConPasskey()">
             <span id="passkeybtn-label">Entrar con Face ID / Touch ID</span>
@@ -77,44 +82,111 @@ async function login(){
   const btn = document.getElementById('loginbtn');
   btn.disabled = true;
   document.getElementById('loginbtn-label').innerHTML = `<span class="spinner"></span> Entrando…`;
+  // Se levanta la bandera ANTES de terminar el login para que, apenas Supabase disponga el
+  // evento SIGNED_IN, renderRoot() no llegue a mostrar la app ni una fracción de segundo
+  // antes de pedir Face ID/Touch ID.
+  if(PASSKEY_SOPORTADO) faceidPendiente = true;
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if(error){
+    faceidPendiente = false;
     btn.disabled = false;
     document.getElementById('loginbtn-label').textContent = 'Entrar';
     document.getElementById('loginwarn').innerHTML = `<div class="warnbox">${error.message==='Invalid login credentials' ? 'Mail o contraseña incorrectos.' : error.message}</div>`;
     return;
   }
   if(!recordar){ window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); }); }
-  if(PASSKEY_SOPORTADO) ofrecerActivarPasskey();
+  if(PASSKEY_SOPORTADO){ await exigirConfirmacionBiometrica(); }
 }
 async function entrarConPasskey(){
   const btn = document.getElementById('passkeybtn');
   if(btn){ btn.disabled = true; document.getElementById('passkeybtn-label').innerHTML = `<span class="spinner"></span> Verificando…`; }
+  // Entrar directo con Face ID/Touch ID ya cumple por sí solo el requisito de biometría
+  // obligatoria — no hace falta pasar por la pantalla de confirmación de abajo.
   const { error } = await sb.auth.signInWithPasskey();
   if(error){
     if(btn){ btn.disabled = false; document.getElementById('passkeybtn-label').textContent = 'Entrar con Face ID / Touch ID'; }
-    // el usuario canceló el prompt, o este dispositivo/cuenta todavía no tiene ninguna
-    // passkey activada — no es un error real, solo mostramos un aviso suave y seguimos
-    // mostrando el formulario de mail/contraseña de abajo como siempre.
     const warn = document.getElementById('loginwarn');
-    if(warn) warn.innerHTML = `<div class="warnbox">No se pudo entrar con Face ID / Touch ID en este dispositivo — entrá con mail y contraseña, y después lo podés activar.</div>`;
+    if(warn) warn.innerHTML = `<div class="warnbox">No se pudo entrar con Face ID / Touch ID en este dispositivo — entrá con mail y contraseña de abajo (te va a volver a pedir la confirmación igual).</div>`;
   }
 }
-// Después de un login con contraseña exitoso, si esta cuenta todavía no tiene ninguna
-// passkey activada en NINGÚN dispositivo, le ofrecemos activarla en este. No es obligatorio
-// (nunca bloqueamos el acceso si Face ID falla o no está activado) — solo una sugerencia.
-async function ofrecerActivarPasskey(){
-  try{
-    const { data: passkeys } = await sb.auth.passkey.list();
-    if(passkeys && passkeys.length) return; // ya tiene alguna activada, en este u otro dispositivo
-  }catch(e){ return; }
-  abrirModal(`
-    <h2 style="margin:0 0 10px;">¿Activar Face ID / Touch ID?</h2>
-    <div class="helper" style="margin-bottom:16px;">La próxima vez podés entrar mirando el celular, sin escribir la contraseña. Se puede desactivar cuando quieras desde "Face ID / Touch ID" abajo del menú.</div>
-    <div class="confirmbtns">
-      <button class="btn ghost" onclick="cerrarModal()">Ahora no</button>
-      <button class="btn primary" onclick="registrarPasskeyDispositivo()">Activar</button>
-    </div>`);
+// Se llama siempre después de un login con contraseña exitoso (si el navegador soporta
+// passkeys). Contraseña sola ya NO alcanza para entrar — decisión explícita de Diego.
+async function exigirConfirmacionBiometrica(){
+  const { data: passkeys } = await sb.auth.passkey.list();
+  if(!passkeys || !passkeys.length){
+    // Esta cuenta no tiene ninguna Face ID/Touch ID activada todavía, en ningún
+    // dispositivo — se activa ahora mismo, de forma obligatoria.
+    renderPantallaBiometrica('registrar');
+  } else {
+    // Ya existe al menos una passkey para la cuenta (acá o en otro dispositivo) —
+    // se exige confirmarla en ESTE dispositivo antes de entrar.
+    renderPantallaBiometrica('confirmar');
+  }
+}
+function renderPantallaBiometrica(modo){
+  document.getElementById('app').innerHTML = `
+    <div class="loginstage">
+      <div class="loginbrand">
+        <div class="blob blob-a"></div>
+        <div class="blob blob-b"></div>
+        <img src="logo.png" alt="Parents Break" class="loginbrand-logo">
+        <h1>Un paso más.</h1>
+        <p>${modo==='registrar' ? 'Confirmá tu identidad con Face ID o Touch ID para terminar de entrar. Solo hace falta la primera vez en cada dispositivo.' : 'Confirmá con Face ID o Touch ID para terminar de entrar en este dispositivo.'}</p>
+      </div>
+      <div class="loginformside">
+        <div class="loginwrap" style="text-align:center;">
+          <h2>${modo==='registrar' ? 'Activar Face ID / Touch ID' : 'Confirmá que sos vos'}</h2>
+          <div class="helper" style="margin-bottom:20px;">${modo==='registrar' ? 'Tu cuenta todavía no tiene ninguna activada — es obligatorio para poder entrar.' : 'Tu cuenta ya tiene Face ID/Touch ID activado — confirmalo en este dispositivo.'}</div>
+          <button class="btn primary" id="bio-btn" style="width:100%;margin-bottom:12px;" onclick="${modo==='registrar' ? 'confirmarRegistroBiometria()' : 'confirmarLoginBiometria()'}">
+            <span id="bio-btn-label">${modo==='registrar' ? 'Activar ahora' : 'Confirmar con Face ID / Touch ID'}</span>
+          </button>
+          <button class="btn ghost" style="width:100%;" onclick="cancelarBiometria()">Cancelar y volver al login</button>
+          <div id="bio-warn"></div>
+        </div>
+      </div>
+    </div>`;
+}
+async function confirmarRegistroBiometria(){
+  const btn = document.getElementById('bio-btn');
+  btn.disabled = true;
+  document.getElementById('bio-btn-label').innerHTML = `<span class="spinner"></span> Confirmando…`;
+  const { error } = await sb.auth.registerPasskey();
+  if(error){
+    btn.disabled = false;
+    document.getElementById('bio-btn-label').textContent = 'Activar ahora';
+    document.getElementById('bio-warn').innerHTML = `<div class="warnbox">${error.message} — probá de nuevo.</div>`;
+    return;
+  }
+  faceidPendiente = false;
+  toast('Face ID / Touch ID activado.');
+  renderRoot();
+}
+async function confirmarLoginBiometria(){
+  const btn = document.getElementById('bio-btn');
+  btn.disabled = true;
+  document.getElementById('bio-btn-label').innerHTML = `<span class="spinner"></span> Confirmando…`;
+  const { error } = await sb.auth.signInWithPasskey();
+  if(error){
+    btn.disabled = false;
+    document.getElementById('bio-btn-label').textContent = 'Confirmar con Face ID / Touch ID';
+    // IMPORTANTE, no tocar: acá NO se ofrece registrar una passkey nueva aunque este
+    // dispositivo en particular no tenga ninguna guardada. Si se ofreciera, alcanzaría con
+    // robar el mail y la contraseña para activar una cara/huella cualquiera y entrar del
+    // todo — justo lo que esto tiene que evitar. Agregar un dispositivo nuevo solo se puede
+    // hacer desde adentro de la app (menú → "Face ID / Touch ID"), con una sesión que ya
+    // pasó por esta misma pantalla en otro dispositivo.
+    const noHayEnEsteDispositivo = /not.?found|no.?credential/i.test(error.message||'');
+    document.getElementById('bio-warn').innerHTML = noHayEnEsteDispositivo
+      ? `<div class="warnbox">Este dispositivo no tiene Face ID/Touch ID activado para tu cuenta. Activalo desde un dispositivo donde ya lo tengas (menú → "Face ID / Touch ID" → "+ Activar en este dispositivo"). Si perdiste el acceso a todos tus dispositivos con Face ID, pedile a Diego que te ayude.</div>`
+      : `<div class="warnbox">${error.message} — probá de nuevo.</div>`;
+    return;
+  }
+  faceidPendiente = false;
+  renderRoot();
+}
+function cancelarBiometria(){
+  faceidPendiente = false;
+  sb.auth.signOut();
 }
 async function registrarPasskeyDispositivo(){
   const { error } = await sb.auth.registerPasskey();
