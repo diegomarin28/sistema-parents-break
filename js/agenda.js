@@ -615,37 +615,30 @@ function abrirModalAsignacionFija(s){
     <button class="btn primary" id="agenda-fija-guardar-${asigId}" style="width:100%;margin-bottom:8px;display:none;" onclick="cambiarNineraAsignacionFija('${asigId}')">Guardar niñera nueva para este horario fijo</button>
     ${s._yaRegistrado
       ? `<div class="helper" style="margin-bottom:8px;">Ya hay un registro cargado para ${a.ninera_nombre} este día en Sittings.</div>`
-      : `<button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="confirmarAsignacionFijaHoy('${s.id}')">✓ Fue como siempre — registrar</button>
-         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarEditarHorarioFijoHoy('${s.id}')">Fue distinto — cambiar horario de hoy y registrar</button>
-         <div id="agenda-fija-horario-box"></div>
+      : `<div class="grid2" style="margin-bottom:8px;">
+           <div class="field"><label>Hora inicio</label>${selectHora('agenda-fija-hi')}</div>
+           <div class="field"><label>Hora fin</label>${selectHora('agenda-fija-hf')}</div>
+         </div>
+         <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="agenda-fija-cruza"> Termina al día siguiente</label>
+         <div id="agenda-fija-horario-warn"></div>
+         <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="registrarSittingFijoDeHoy('${s.id}')">Registrar sitting de hoy</button>
          <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionAsignacionFija('${s.id}')">Este día no fue</button>`}
     <button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda('${asigId}')">Quitar esta asignación fija</button>
   `;
   abrirModal(cuerpo);
+  if(!s._yaRegistrado){
+    setHoraSelect('agenda-fija-hi', a.hora_inicio||'');
+    setHoraSelect('agenda-fija-hf', a.hora_fin||'');
+  }
   setTimeout(()=>attachAutocomplete('agenda-fija-ninera-'+asigId, 'agenda-fija-ninera-'+asigId+'-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
 }
-/* Como "Fue como siempre", pero con el horario de hoy editado a mano — para
-   cuando la niñera se quedó de más o se fue antes. Calcula cobro/pago exacto
-   por la duración real, igual que el resto del sistema (misma cuenta que en
-   Sittings & traslados). */
-function mostrarEditarHorarioFijoHoy(id){
-  const s = agendaSolicitudes.find(x=>x.id===id);
-  if(!s) return;
-  const a = s._raw;
-  const box = document.getElementById('agenda-fija-horario-box');
-  if(!box) return;
-  box.innerHTML = `
-    <div class="grid2" style="margin-bottom:8px;">
-      <div class="field"><label>Hora inicio real</label>${selectHora('agenda-fija-hi')}</div>
-      <div class="field"><label>Hora fin real</label>${selectHora('agenda-fija-hf')}</div>
-    </div>
-    <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="agenda-fija-cruza"> Termina al día siguiente</label>
-    <div id="agenda-fija-horario-warn"></div>
-    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="confirmarAsignacionFijaConHorarioEditado('${id}')">Registrar con este horario</button>`;
-  setHoraSelect('agenda-fija-hi', a.hora_inicio||'');
-  setHoraSelect('agenda-fija-hf', a.hora_fin||'');
-}
-async function confirmarAsignacionFijaConHorarioEditado(id){
+/* Un solo flujo para registrar el sitting de hoy: el horario sale precargado
+   con el habitual de la asignación, pero siempre queda editable ahí mismo —
+   si no cambió nada, se registra tal cual; si la niñera se quedó de más o se
+   fue antes, se ajusta el horario antes de tocar Registrar. Calcula cobro/pago
+   exacto por la duración real, con la tarifa de la familia (misma cuenta que
+   en Sittings & traslados). */
+async function registrarSittingFijoDeHoy(id){
   const s = agendaSolicitudes.find(x=>x.id===id);
   if(!s) return;
   const a = s._raw;
@@ -678,46 +671,9 @@ async function confirmarAsignacionFijaConHorarioEditado(id){
     cobro_familia: Math.round(horasFrac*cobroHora),
     pago_ninera: Math.round(horasFrac*pagoHora),
     cobrado: false, pagado: false,
-    notas: 'Sitting fijo — horario de hoy editado desde Agenda',
+    notas: 'Sitting fijo — registrado desde Agenda',
   });
   if(error){ if(warn) warn.innerHTML = errBox(error); return; }
-  cerrarModal();
-  await cargarAgendaSolicitudes();
-  actualizarAgendaBadge();
-  toast('Sitting registrado con el horario de hoy.');
-}
-/* B1 · Confirmar con un toque que el sitting fijo pasó como siempre — sin re-tipear nada.
-   Calcula cobro/pago con la tarifa por hora de la familia (misma cuenta que el form manual). */
-async function confirmarAsignacionFijaHoy(id){
-  const s = agendaSolicitudes.find(x=>x.id===id);
-  if(!s) return;
-  const a = s._raw;
-  if(!a.hora_inicio || !a.hora_fin){
-    toast('Esta asignación no tiene horario cargado — completalo abriendo "Guardar niñera" o cargalo a mano en Sittings.', 'bad');
-    return;
-  }
-  const familia = agendaFamilias.find(f=>f.id===a.familia_id);
-  const horas = Math.max(0, (agendaMinutos(a.hora_fin) - agendaMinutos(a.hora_inicio))) / 60;
-  const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
-  const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
-  const choque = chequearDobleReservaAgenda(a.ninera_nombre, a.hora_inicio, a.hora_fin, s.id);
-  if(!(await avisarSiDobleReserva(choque, a.ninera_nombre, 'Registrar igual'))) return;
-  const { error } = await sb.from('sittings_traslados').insert({
-    tipo: 'sitting',
-    registrado_por: registradoPorUsuario(),
-    familia_id: a.familia_id || null,
-    familia_nombre: s.familia_nombre,
-    ninera_id: a.ninera_id || null,
-    ninera_nombre: a.ninera_nombre,
-    fecha: s.fecha,
-    hora_inicio: a.hora_inicio,
-    hora_fin: a.hora_fin,
-    cobro_familia: Math.round(horas*cobroHora),
-    pago_ninera: Math.round(horas*pagoHora),
-    cobrado: false, pagado: false,
-    notas: 'Sitting fijo — confirmado desde Agenda',
-  });
-  if(error){ toast('No se pudo registrar: '+error.message, 'bad'); return; }
   cerrarModal();
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
