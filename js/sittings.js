@@ -630,9 +630,13 @@ async function renderIncidentesEnFicha(containerId, tipo, id, nombre){
     return (id && i.familia_id===id) || (key && normaliza(i.familia_nombre||'')===key);
   });
   if(!document.getElementById(containerId)) return; // se pudo haber cerrado el modal mientras esperábamos
+  if(!propios.length){
+    cont.innerHTML = `<div class="helper" style="margin:6px 0;">Incidentes: ninguno registrado.</div>`;
+    return;
+  }
   cont.innerHTML = `
     <h2 class="card-section-title" style="margin-top:0;">Incidentes (${propios.length})</h2>
-    ${propios.length ? propios.map(i=>{
+    ${propios.map(i=>{
       const fechaFmt = new Date(i.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'});
       const otro = tipo==='ninera' ? i.familia_nombre : i.ninera_nombre;
       return `
@@ -644,10 +648,10 @@ async function renderIncidentesEnFicha(containerId, tipo, id, nombre){
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
           <span class="badge ${i.tipo==='accidente'?'bad':i.tipo==='queja'?'warn':'brand'}" style="font-size:10px;">${i.tipo==='accidente'?'Accidente':i.tipo==='queja'?'Queja':'Otro'}</span>
           <span class="badge ${i.gravedad==='grave'?'bad':i.gravedad==='moderado'?'warn':'good'}" style="font-size:10px;">${i.gravedad}</span>
-          <button class="smallbtn danger" onclick="eliminarIncidenteFicha('${i.id}','${containerId}','${tipo}','${id||''}',${JSON.stringify(nombre||'').replace(/'/g,"&#39;")})">Eliminar</button>
+          <button class="smallbtn danger" onclick='eliminarIncidenteFicha("${i.id}","${containerId}","${tipo}","${id||''}",${JSON.stringify(nombre||'').replace(/'/g,"&#39;")})'>Eliminar</button>
         </div>
       </div>`;
-    }).join('') : '<div class="empty" style="margin-top:8px;">Sin incidentes registrados.</div>'}
+    }).join('')}
   `;
 }
 async function eliminarIncidenteFicha(incId, containerId, tipo, id, nombre){

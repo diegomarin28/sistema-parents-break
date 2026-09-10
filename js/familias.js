@@ -292,6 +292,7 @@ function verFamilia(id){
     </div>
     <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
     ${precioHtml}
+    ${f.frecuencia_cobro?`<div class="helper">Frecuencia de cobro: ${f.frecuencia_cobro}</div>`:''}
     ${f.direccion?`<div class="helper">Dirección: ${f.direccion}</div>`:''}
     ${f.cuenta_bancaria?`<div class="helper">Cuenta: ${f.cuenta_bancaria}</div>`:''}
     ${f.notas?`<div class="helper">${f.notas}</div>`:''}

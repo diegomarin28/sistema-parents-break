@@ -211,7 +211,7 @@ function renderAgendaGrid(){
     dias.push(d.toISOString().slice(0,10));
   }
   wrap.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(${n}, minmax(0,1fr));gap:8px;">
+    <div style="display:grid;grid-template-columns:repeat(${n}, minmax(0,1fr));gap:8px;align-items:start;">
       ${dias.map(fecha=>{
         const esHoy = fecha===hoy;
         const items = agendaSolicitudes
@@ -219,9 +219,9 @@ function renderAgendaGrid(){
           .sort((a,b)=>(a.hora_inicio||'').localeCompare(b.hora_inicio||''));
         const d = new Date(fecha+'T00:00:00');
         const diaLabel = new Intl.DateTimeFormat('es-UY',{weekday:'short'}).format(d).replace('.','');
-        return `<div style="border:1px solid ${esHoy?'var(--accent)':'var(--line)'};border-radius:12px;padding:8px;min-height:140px;background:${esHoy?'var(--accent-soft)':'var(--paper)'};">
+        return `<div style="border:1px solid ${esHoy?'var(--accent)':'var(--line)'};border-radius:12px;padding:8px;background:${esHoy?'var(--accent-soft)':'var(--paper)'};">
           <div style="text-align:center;margin-bottom:8px;">
-            <div style="font-size:11px;color:${esHoy?'var(--accent)':'var(--ink-soft)'};font-weight:${esHoy?700:400};text-transform:uppercase;">${esHoy?'hoy':diaLabel}</div>
+            <div style="font-size:11px;color:${esHoy?'var(--accent)':'var(--ink-soft)'};font-weight:${esHoy?700:400};text-transform:uppercase;">${diaLabel}</div>
             <div style="font-size:16px;font-weight:700;color:${esHoy?'var(--accent)':'var(--ink)'};">${d.getDate()}</div>
           </div>
           ${items.length ? items.map(s=>renderAgendaTarjetaDia(s)).join('') : '<div class="helper" style="text-align:center;padding-top:16px;">Sin pedidos</div>'}

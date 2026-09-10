@@ -239,7 +239,7 @@ async function verNinera(id){
       <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
       <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({ninera_id:n.id, ninera_nombre:n.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
     </div>
-    <div class="fichadl">${rows||'<div>Sin más datos.</div>'}<div><b>Zona</b>${n.zona||'—'}</div><div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+    <div class="fichadl">${rows||'<div>Sin más datos.</div>'}<div><b>Zona</b>${n.zona||'—'}</div><div><b>Teléfono</b>${n.telefono||'—'}</div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
     <div id="vn-carsitting"></div>
     <div id="vn-juguetes"></div>
     <div id="vn-incidentes" style="margin-top:18px;"></div>
