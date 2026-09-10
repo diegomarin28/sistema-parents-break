@@ -2,20 +2,34 @@
 let session = null;
 let modoRecuperacion = false;
 // Mientras esta bandera está en true, renderRoot() no pinta ni el login ni la app — se está
-// mostrando la pantalla obligatoria de Face ID/Touch ID (registrar o confirmar), aunque ya
-// haya una sesión válida de por medio (por contraseña o por refresh de token).
+// mostrando alguna pantalla obligatoria de la cadena post-login (cambio de contraseña
+// forzado y/o Face ID/Touch ID), aunque ya haya una sesión válida de por medio.
 let faceidPendiente = false;
+// true cuando se entró por el link de "acceso temporal por mail" (ver más abajo) — esa
+// sesión NO pasa por el paso obligatorio de Face ID/Touch ID a propósito (es justamente el
+// camino para cuando no tenés tu dispositivo con Face ID a mano), así que se cierra sola al
+// salir de la pestaña, para no dejar un acceso permanente en un dispositivo prestado/ajeno.
+let esAccesoTemporal = false;
 // Face ID / Touch ID vía Passkeys (WebAuthn): funciona en cualquier navegador/dispositivo
 // moderno que lo soporte (iPhone con Face ID incluido). No manda ninguna foto/biometría a
 // ningún servidor — la verificación queda 100% en el dispositivo, Supabase solo recibe la
 // confirmación firmada de que pasó.
 const PASSKEY_SOPORTADO = typeof window !== 'undefined' && !!window.PublicKeyCredential;
 async function boot(){
+  if(new URLSearchParams(window.location.search).get('acceso') === 'temporal'){
+    esAccesoTemporal = true;
+    window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); });
+    // Limpiamos el ?acceso=temporal de la URL visible, sin recargar la página.
+    window.history.replaceState({}, '', window.location.pathname);
+  }
   const { data } = await sb.auth.getSession();
   session = data.session;
   sb.auth.onAuthStateChange((event, s) => {
     session = s;
-    if(event === 'SIGNED_IN') moduloActivo = null; // cada login nuevo arranca limpio en "Hoy"
+    if(event === 'SIGNED_IN'){
+      moduloActivo = null; // cada login nuevo arranca limpio en "Hoy"
+      if(esAccesoTemporal) toast('Entraste con acceso temporal — esta sesión se cierra sola al cerrar esta pestaña.');
+    }
     if(event === 'PASSWORD_RECOVERY') modoRecuperacion = true; // vino de un link de "olvidé mi contraseña"
     renderRoot();
   });
@@ -66,6 +80,7 @@ function renderLogin(){
           </div>
           <div style="text-align:right;margin:-8px 0 16px;">
             <a href="#" onclick="event.preventDefault();abrirRecuperarPassword();" style="font-size:12.5px;color:var(--accent);">¿Olvidaste tu contraseña?</a>
+            · <a href="#" onclick="event.preventDefault();abrirAccesoTemporal();" style="font-size:12.5px;color:var(--accent);">¿No tenés tu Face ID a mano?</a>
           </div>
           <label class="chk" style="margin-bottom:16px;"><input type="checkbox" id="login-recordar" checked> Recordarme en este dispositivo</label>
           <button class="btn primary" id="loginbtn" style="width:100%;" onclick="login()"><span id="loginbtn-label">Entrar</span></button>
@@ -82,10 +97,10 @@ async function login(){
   const btn = document.getElementById('loginbtn');
   btn.disabled = true;
   document.getElementById('loginbtn-label').innerHTML = `<span class="spinner"></span> Entrando…`;
-  // Se levanta la bandera ANTES de terminar el login para que, apenas Supabase disponga el
+  // Se levanta la bandera ANTES de terminar el login para que, apenas Supabase dispare el
   // evento SIGNED_IN, renderRoot() no llegue a mostrar la app ni una fracción de segundo
-  // antes de pedir Face ID/Touch ID.
-  if(PASSKEY_SOPORTADO) faceidPendiente = true;
+  // antes de terminar la cadena de pasos obligatorios de abajo.
+  faceidPendiente = true;
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if(error){
     faceidPendiente = false;
@@ -95,18 +110,35 @@ async function login(){
     return;
   }
   if(!recordar){ window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); }); }
-  if(PASSKEY_SOPORTADO){ await exigirConfirmacionBiometrica(); }
+  await continuarPostLogin();
+}
+// Cadena de pasos obligatorios después de un login con contraseña exitoso: primero cambio
+// de contraseña forzado (si esa cuenta lo tiene pendiente), después Face ID/Touch ID (si el
+// navegador lo soporta). Se llama de nuevo al terminar cada paso, hasta que no quede ninguno.
+async function continuarPostLogin(){
+  if(session?.user?.user_metadata?.debe_cambiar_password){
+    renderCambioPasswordObligatorio();
+    return;
+  }
+  if(PASSKEY_SOPORTADO){ await exigirConfirmacionBiometrica(); return; }
+  faceidPendiente = false;
+  renderRoot();
 }
 async function entrarConPasskey(){
   const btn = document.getElementById('passkeybtn');
   if(btn){ btn.disabled = true; document.getElementById('passkeybtn-label').innerHTML = `<span class="spinner"></span> Verificando…`; }
-  // Entrar directo con Face ID/Touch ID ya cumple por sí solo el requisito de biometría
-  // obligatoria — no hace falta pasar por la pantalla de confirmación de abajo.
   const { error } = await sb.auth.signInWithPasskey();
   if(error){
     if(btn){ btn.disabled = false; document.getElementById('passkeybtn-label').textContent = 'Entrar con Face ID / Touch ID'; }
     const warn = document.getElementById('loginwarn');
     if(warn) warn.innerHTML = `<div class="warnbox">No se pudo entrar con Face ID / Touch ID en este dispositivo — entrá con mail y contraseña de abajo (te va a volver a pedir la confirmación igual).</div>`;
+    return;
+  }
+  // Face ID ya cumple el requisito de biometría, pero si esta cuenta tiene pendiente un
+  // cambio de contraseña forzado (ver login()), igual se lo pedimos antes de entrar.
+  if(session?.user?.user_metadata?.debe_cambiar_password){
+    faceidPendiente = true;
+    renderCambioPasswordObligatorio();
   }
 }
 // Se llama siempre después de un login con contraseña exitoso (si el navegador soporta
@@ -245,6 +277,96 @@ async function enviarRecuperacion(){
   cerrarModal();
   toast('Si ese mail está registrado, le va a llegar un link para elegir una contraseña nueva. Revisá también la carpeta de spam.');
 }
+/* ---- Acceso temporal por mail (para cuando no tenés tu Face ID a mano) ---- */
+function abrirAccesoTemporal(){
+  const emailPrellenado = document.getElementById('login-mail')?.value.trim() || '';
+  abrirModal(`
+    <h2 style="margin:0 0 10px;">Acceso temporal por mail</h2>
+    <div class="helper" style="margin-bottom:14px;">Para cuando no tenés a mano el dispositivo con tu Face ID/Touch ID. Te mandamos un link a tu mail — al abrirlo, entrás directo, sin contraseña. Esa sesión se cierra sola al cerrar la pestaña, así que no queda un acceso permanente activado en un dispositivo prestado.</div>
+    <div class="field"><label>Mail</label><input type="email" id="temp-mail" value="${emailPrellenado}"></div>
+    <div id="temp-warn"></div>
+    <div class="confirmbtns" style="margin-top:16px;">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" id="temp-btn" onclick="enviarAccesoTemporal()"><span id="temp-btn-label">Enviar link</span></button>
+    </div>`);
+}
+async function enviarAccesoTemporal(){
+  const email = document.getElementById('temp-mail').value.trim();
+  if(!email){ document.getElementById('temp-warn').innerHTML = `<div class="warnbox">Escribí un mail.</div>`; return; }
+  const btn = document.getElementById('temp-btn');
+  btn.disabled = true;
+  document.getElementById('temp-btn-label').innerHTML = `<span class="spinner"></span> Enviando…`;
+  const redirectUrl = window.location.href.split('#')[0].split('?')[0] + '?acceso=temporal';
+  // shouldCreateUser: false es clave acá — si no, cualquiera podría escribir un mail
+  // cualquiera y crearse una cuenta nueva sola con este formulario. Con esto, solo funciona
+  // para mails que YA son una cuenta existente del equipo.
+  // No miramos "error" antes de avisar — mismo criterio que en recuperar contraseña: la
+  // respuesta tiene que ser igual exista o no ese mail en el sistema, para que este
+  // formulario no sirva para averiguar qué mails están registrados.
+  await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectUrl, shouldCreateUser: false } });
+  cerrarModal();
+  toast('Si ese mail está registrado, le va a llegar un link de acceso temporal. Revisá también la carpeta de spam.');
+}
+// Mínimo 8 caracteres, con mayúscula, minúscula, número y símbolo — mismo criterio para
+// cualquier contraseña nueva del sistema (cambio obligatorio, recuperación, etc.).
+function passwordEsFuerte(p){
+  return p.length >= 8 && /[A-Z]/.test(p) && /[a-z]/.test(p) && /[0-9]/.test(p) && /[^A-Za-z0-9]/.test(p);
+}
+function renderCambioPasswordObligatorio(){
+  document.getElementById('app').innerHTML = `
+    <div class="loginstage">
+      <div class="loginbrand">
+        <div class="blob blob-a"></div>
+        <div class="blob blob-b"></div>
+        <img src="logo.png" alt="Parents Break" class="loginbrand-logo">
+        <h1>Un paso más.</h1>
+        <p>Por seguridad, la primera vez que entrás tenés que cambiar la contraseña genérica por una propia. Después de esto no te lo vuelve a pedir.</p>
+      </div>
+      <div class="loginformside">
+        <div class="loginwrap">
+          <h2>Elegí tu contraseña definitiva</h2>
+          <div class="helper">Mínimo 8 caracteres, con mayúscula, minúscula, número y símbolo.</div>
+          <div class="field">
+            <label>Contraseña nueva</label>
+            <div class="inputicon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8 10.5V7a4 4 0 018 0v3.5"/></svg>
+              <input type="password" id="op-pass1">
+            </div>
+          </div>
+          <div class="field">
+            <label>Repetila</label>
+            <div class="inputicon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8 10.5V7a4 4 0 018 0v3.5"/></svg>
+              <input type="password" id="op-pass2">
+            </div>
+          </div>
+          <button class="btn primary" id="op-btn" style="width:100%;" onclick="confirmarCambioPasswordObligatorio()"><span id="op-btn-label">Guardar y continuar</span></button>
+          <div id="op-warn"></div>
+        </div>
+      </div>
+    </div>`;
+}
+async function confirmarCambioPasswordObligatorio(){
+  const p1 = document.getElementById('op-pass1').value;
+  const p2 = document.getElementById('op-pass2').value;
+  const warn = document.getElementById('op-warn');
+  if(!passwordEsFuerte(p1)){ warn.innerHTML = `<div class="warnbox">Tiene que tener al menos 8 caracteres, con mayúscula, minúscula, número y símbolo.</div>`; return; }
+  if(p1 !== p2){ warn.innerHTML = `<div class="warnbox">Las dos contraseñas no coinciden.</div>`; return; }
+  const btn = document.getElementById('op-btn');
+  btn.disabled = true;
+  document.getElementById('op-btn-label').innerHTML = `<span class="spinner"></span> Guardando…`;
+  // data:{debe_cambiar_password:false} se combina con el resto del user_metadata que ya
+  // tenía (como nombre_mostrar) — no lo pisa.
+  const { error } = await sb.auth.updateUser({ password: p1, data: { debe_cambiar_password: false } });
+  if(error){
+    btn.disabled = false;
+    document.getElementById('op-btn-label').textContent = 'Guardar y continuar';
+    warn.innerHTML = `<div class="warnbox">${error.message}</div>`;
+    return;
+  }
+  toast('Contraseña actualizada.');
+  await continuarPostLogin(); // sigue con Face ID si corresponde, o entra directo
+}
 function renderNuevaContrasena(){
   document.getElementById('app').innerHTML = `
     <div class="loginstage">
@@ -283,7 +405,7 @@ async function guardarNuevaContrasena(){
   const p1 = document.getElementById('np-pass1').value;
   const p2 = document.getElementById('np-pass2').value;
   const warn = document.getElementById('np-warn');
-  if(p1.length < 8){ warn.innerHTML = `<div class="warnbox">La contraseña tiene que tener al menos 8 caracteres.</div>`; return; }
+  if(!passwordEsFuerte(p1)){ warn.innerHTML = `<div class="warnbox">Tiene que tener al menos 8 caracteres, con mayúscula, minúscula, número y símbolo.</div>`; return; }
   if(p1 !== p2){ warn.innerHTML = `<div class="warnbox">Las dos contraseñas no coinciden.</div>`; return; }
   const btn = document.getElementById('np-btn');
   btn.disabled = true;
