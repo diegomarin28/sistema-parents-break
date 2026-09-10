@@ -30,6 +30,58 @@ function asegurarXLSX(){
 
 function normaliza(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
 function zonasDe(zonaStr){ return (zonaStr||'').split('/').map(z=>z.trim()).filter(Boolean); }
+/* Checklist de zonas compartido — reemplaza el texto libre de antes (donde
+   escribir "Pocitos, Malvín" terminaba pisando otras zonas por error). Junta
+   todas las zonas que ya existen entre niñeras y familias, con checkboxes
+   para elegir varias, más un campo para agregar una zona nueva si no está. */
+function obtenerTodasLasZonas(){
+  const mapa = new Map();
+  [...(ninierasItems||[]), ...(familiasItems||[])].forEach(x=>{
+    zonasDe(x.zona).forEach(raw=>{
+      const key = normaliza(raw);
+      if(key && !mapa.has(key)) mapa.set(key, raw);
+    });
+  });
+  return [...mapa.values()].sort((a,b)=>a.localeCompare(b));
+}
+function checklistZonas(idPrefix, zonaActual){
+  const todas = obtenerTodasLasZonas();
+  const actuales = new Set(zonasDe(zonaActual).map(normaliza));
+  return `
+    <div class="field"><label>Zonas</label>
+      <div id="${idPrefix}-zonas-checklist" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;max-height:140px;overflow-y:auto;">
+        ${todas.length ? todas.map(z=>`<label class="chk" style="margin:0;"><input type="checkbox" value="${z}" ${actuales.has(normaliza(z))?'checked':''}> ${z}</label>`).join('') : '<span class="helper" style="margin:0;">Todavía no hay zonas cargadas.</span>'}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <input type="text" id="${idPrefix}-zona-nueva" placeholder="Agregar zona nueva…" style="flex:1;">
+        <button type="button" class="smallbtn" onclick="agregarZonaAlChecklist('${idPrefix}')">+ Agregar</button>
+      </div>
+    </div>`;
+}
+function agregarZonaAlChecklist(idPrefix){
+  const input = document.getElementById(idPrefix+'-zona-nueva');
+  const val = (input?.value||'').trim();
+  if(!val) return;
+  const cont = document.getElementById(idPrefix+'-zonas-checklist');
+  if(!cont) return;
+  const existente = [...cont.querySelectorAll('input[type=checkbox]')].find(chk=>normaliza(chk.value)===normaliza(val));
+  if(existente){ existente.checked = true; }
+  else {
+    const vacio = cont.querySelector('.helper');
+    if(vacio) vacio.remove();
+    const label = document.createElement('label');
+    label.className = 'chk';
+    label.style.margin = '0';
+    label.innerHTML = `<input type="checkbox" value="${val}" checked> ${val}`;
+    cont.appendChild(label);
+  }
+  input.value = '';
+}
+function leerZonasChecklist(idPrefix){
+  const cont = document.getElementById(idPrefix+'-zonas-checklist');
+  if(!cont) return '';
+  return [...cont.querySelectorAll('input[type=checkbox]:checked')].map(chk=>chk.value).join('/');
+}
 function scrollToDetalle(id){
   const el = document.getElementById(id);
   if(el) el.scrollIntoView({behavior:'smooth', block:'start'});

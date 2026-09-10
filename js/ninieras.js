@@ -328,10 +328,10 @@ function editarNinera(id){
     <div class="grid2">
       <div class="field"><label>Nombre</label><input type="text" id="ed-nombre" value="${n.nombre||''}"></div>
       <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${n.telefono||''}"></div>
-      <div class="field"><label>Zona</label><input type="text" id="ed-zona" value="${n.zona||''}"></div>
       <div class="field"><label>Tipo</label><select id="ed-tipo">${tipos.map(t=>`<option ${n.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-cuenta" value="${n.cuenta_bancaria||''}"></div>
     </div>
+    ${checklistZonas('ed', n.zona)}
     <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
     <div id="ed-extra-fields"></div>
     <button class="btn" type="button" style="width:100%;margin-top:10px;" onclick="abrirSelectorCategoriaNinera()">+ Agregar categorías</button>
@@ -428,7 +428,7 @@ async function guardarEdicionNinera(id){
   const cambios = {
     nombre: document.getElementById('ed-nombre').value,
     telefono: document.getElementById('ed-telefono').value,
-    zona: document.getElementById('ed-zona').value,
+    zona: leerZonasChecklist('ed'),
     tipo: document.getElementById('ed-tipo').value,
     foto: ninFotoUrlPendiente,
     cuenta_bancaria: document.getElementById('ed-cuenta').value,

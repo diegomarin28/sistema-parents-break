@@ -324,7 +324,6 @@ function editarFamilia(id){
     </div>
     <div class="grid2">
       <div class="field"><label>Nombre</label><input type="text" id="ed-fam-nombre" value="${f.nombre||''}"></div>
-      <div class="field"><label>Zona</label><input type="text" id="ed-fam-zona" value="${f.zona||''}"></div>
       <div class="field"><label>Teléfono</label><input type="tel" id="ed-fam-telefono" value="${f.telefono||''}"></div>
       <div class="field"><label>Niños (edades)</label><input type="text" id="ed-fam-ninos" value="${f.ninos||''}"></div>
       <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="ed-fam-cobro" value="${f.cobro_hora??''}"></div>
@@ -337,6 +336,7 @@ function editarFamilia(id){
         <option value="mensual" ${(f.frecuencia_cobro||'mensual')==='mensual'?'selected':''}>Mensual</option>
       </select></div>
     </div>
+    ${checklistZonas('ed-fam', f.zona)}
     <div class="field"><label>Notas</label><textarea id="ed-fam-notas">${f.notas||''}</textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
@@ -346,7 +346,7 @@ function editarFamilia(id){
 async function guardarEdicionFamilia(id){
   const cambios = {
     nombre: document.getElementById('ed-fam-nombre').value,
-    zona: document.getElementById('ed-fam-zona').value,
+    zona: leerZonasChecklist('ed-fam'),
     telefono: document.getElementById('ed-fam-telefono').value,
     cobro_hora: document.getElementById('ed-fam-cobro').value||null,
     pago_hora: document.getElementById('ed-fam-pago').value||null,
