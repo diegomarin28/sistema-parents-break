@@ -471,8 +471,8 @@ async function eliminarNinera(id){
 }
 
 /* ---- Generar CV: arma el pedido para pegarle a Claude en el chat ---- */
-const CV_CANVA_DESIGN_ID = 'DAHUy2caXVM';
-const CV_CANVA_DESIGN_NOMBRE = 'PLANTILLA BASE - CV niñeras';
+const CV_CANVA_DESIGN_ID = 'DAHUzD60KqA';
+const CV_CANVA_DESIGN_NOMBRE = 'PLANTILLA BASE v2 - CV niñeras';
 function generarMensajeCV(id){
   const n = ninierasItems.find(x=>x.id===id);
   if(!n) return;
