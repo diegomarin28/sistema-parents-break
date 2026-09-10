@@ -5,6 +5,14 @@ let modoRecuperacion = false;
 // mostrando alguna pantalla obligatoria de la cadena post-login (cambio de contraseña
 // forzado y/o Face ID/Touch ID), aunque ya haya una sesión válida de por medio.
 let faceidPendiente = false;
+// IMPORTANTE: además de la bandera de arriba (que solo vive en memoria y se pierde al
+// recargar), esto mismo se guarda en localStorage bajo esta clave. Sin esto, cerrar la
+// pestaña/app ANTES de terminar el paso obligatorio y volver a abrirla esquivaba el paso
+// por completo — la sesión de Supabase ya queda guardada y válida desde el login con
+// contraseña, así que solo una bandera en memoria no alcanza para bloquear nada de verdad.
+// Se guarda ni bien arranca la cadena de pasos obligatorios, y se borra recién cuando el
+// último paso pendiente (cambio de contraseña y/o Face ID) termina de verdad.
+const LS_POST_LOGIN_PENDIENTE = 'pb_post_login_pendiente';
 // true cuando se entró por el link de "acceso temporal por mail" (ver más abajo) — esa
 // sesión NO pasa por el paso obligatorio de Face ID/Touch ID a propósito (es justamente el
 // camino para cuando no tenés tu dispositivo con Face ID a mano), así que se cierra sola al
@@ -15,6 +23,8 @@ let esAccesoTemporal = false;
 // ningún servidor — la verificación queda 100% en el dispositivo, Supabase solo recibe la
 // confirmación firmada de que pasó.
 const PASSKEY_SOPORTADO = typeof window !== 'undefined' && !!window.PublicKeyCredential;
+function marcarPostLoginPendiente(){ faceidPendiente = true; try{ localStorage.setItem(LS_POST_LOGIN_PENDIENTE,'1'); }catch(e){} }
+function limpiarPostLoginPendiente(){ faceidPendiente = false; try{ localStorage.removeItem(LS_POST_LOGIN_PENDIENTE); }catch(e){} }
 async function boot(){
   if(new URLSearchParams(window.location.search).get('acceso') === 'temporal'){
     esAccesoTemporal = true;
@@ -33,10 +43,19 @@ async function boot(){
     if(event === 'PASSWORD_RECOVERY') modoRecuperacion = true; // vino de un link de "olvidé mi contraseña"
     renderRoot();
   });
-  renderRoot();
+  // Si ya hay sesión válida (persistida de un login anterior) Y todavía quedó marcado como
+  // pendiente un paso obligatorio sin terminar, retomamos ahí en vez de mostrar la app.
+  let pendienteGuardado = false;
+  try{ pendienteGuardado = localStorage.getItem(LS_POST_LOGIN_PENDIENTE) === '1'; }catch(e){}
+  if(session && pendienteGuardado){
+    faceidPendiente = true;
+    await continuarPostLogin();
+  } else {
+    renderRoot();
+  }
 }
 function renderRoot(){
-  if(faceidPendiente) return; // ya se está mostrando la pantalla de Face ID, no la pisamos
+  if(faceidPendiente) return; // ya se está mostrando la pantalla obligatoria, no la pisamos
   if(modoRecuperacion){ renderNuevaContrasena(); return; }
   if(!session){ renderLogin(); return; }
   renderApp();
@@ -99,11 +118,13 @@ async function login(){
   document.getElementById('loginbtn-label').innerHTML = `<span class="spinner"></span> Entrando…`;
   // Se levanta la bandera ANTES de terminar el login para que, apenas Supabase dispare el
   // evento SIGNED_IN, renderRoot() no llegue a mostrar la app ni una fracción de segundo
-  // antes de terminar la cadena de pasos obligatorios de abajo.
-  faceidPendiente = true;
+  // antes de terminar la cadena de pasos obligatorios de abajo. Se guarda también en
+  // localStorage (ver marcarPostLoginPendiente) para que sobreviva si cierran la pestaña
+  // antes de terminar ese paso — si no, era posible saltearse Face ID cerrando y reabriendo.
+  marcarPostLoginPendiente();
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if(error){
-    faceidPendiente = false;
+    limpiarPostLoginPendiente();
     btn.disabled = false;
     document.getElementById('loginbtn-label').textContent = 'Entrar';
     document.getElementById('loginwarn').innerHTML = `<div class="warnbox">${error.message==='Invalid login credentials' ? 'Mail o contraseña incorrectos.' : error.message}</div>`;
@@ -121,7 +142,7 @@ async function continuarPostLogin(){
     return;
   }
   if(PASSKEY_SOPORTADO){ await exigirConfirmacionBiometrica(); return; }
-  faceidPendiente = false;
+  limpiarPostLoginPendiente();
   renderRoot();
 }
 async function entrarConPasskey(){
@@ -137,7 +158,7 @@ async function entrarConPasskey(){
   // Face ID ya cumple el requisito de biometría, pero si esta cuenta tiene pendiente un
   // cambio de contraseña forzado (ver login()), igual se lo pedimos antes de entrar.
   if(session?.user?.user_metadata?.debe_cambiar_password){
-    faceidPendiente = true;
+    marcarPostLoginPendiente();
     renderCambioPasswordObligatorio();
   }
 }
@@ -189,8 +210,8 @@ async function confirmarRegistroBiometria(){
     document.getElementById('bio-warn').innerHTML = `<div class="warnbox">${error.message} — probá de nuevo.</div>`;
     return;
   }
-  faceidPendiente = false;
   toast('Face ID / Touch ID activado.');
+  limpiarPostLoginPendiente();
   renderRoot();
 }
 async function confirmarLoginBiometria(){
@@ -209,15 +230,15 @@ async function confirmarLoginBiometria(){
     // pasó por esta misma pantalla en otro dispositivo.
     const noHayEnEsteDispositivo = /not.?found|no.?credential/i.test(error.message||'');
     document.getElementById('bio-warn').innerHTML = noHayEnEsteDispositivo
-      ? `<div class="warnbox">Este dispositivo no tiene Face ID/Touch ID activado para tu cuenta. Activalo desde un dispositivo donde ya lo tengas (menú → "Face ID / Touch ID" → "+ Activar en este dispositivo"). Si perdiste el acceso a todos tus dispositivos con Face ID, pedile a Diego que te ayude.</div>`
+      ? `<div class="warnbox">Este dispositivo no tiene Face ID/Touch ID activado para tu cuenta todavía. Tocá "Cancelar y volver al login" de abajo y usá "¿No tenés tu Face ID a mano?" para entrar por mail — una vez adentro, activala acá mismo desde "Face ID / Touch ID" en el menú. (O si tenés a mano el otro dispositivo donde ya la activaste, entrá ahí y hacé lo mismo desde ese lado.)</div>`
       : `<div class="warnbox">${error.message} — probá de nuevo.</div>`;
     return;
   }
-  faceidPendiente = false;
+  limpiarPostLoginPendiente();
   renderRoot();
 }
 function cancelarBiometria(){
-  faceidPendiente = false;
+  limpiarPostLoginPendiente();
   sb.auth.signOut();
 }
 async function registrarPasskeyDispositivo(){
@@ -421,5 +442,5 @@ async function guardarNuevaContrasena(){
   toast('Contraseña actualizada.');
   renderRoot();
 }
-async function logout(){ await sb.auth.signOut(); }
+async function logout(){ limpiarPostLoginPendiente(); await sb.auth.signOut(); }
 
