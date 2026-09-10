@@ -156,6 +156,27 @@ async function sbLeer(consulta, queCosa='los datos', fallback=null){
   }
 }
 
+/* Envoltorio para escrituras de Supabase (insert/update/delete/upsert): si falla, avisa con
+   un mensaje consistente y devuelve false para poder cortar el flujo. Antes algunas escrituras
+   sueltas no chequeaban error en absoluto (fallaban en silencio, la pantalla seguía como si
+   hubiera funcionado) o usaban un alert() feo del navegador en vez del aviso normal de la app.
+   Uso: if(!(await sbGuardar(sb.from('solicitudes').update({...}).eq('id', id), 'la solicitud'))) return; */
+async function sbGuardar(consulta, queCosa='los cambios'){
+  try {
+    const { error } = await consulta;
+    if(error){
+      console.error('[Supabase] al guardar', queCosa, error);
+      toast(`No se pudo guardar ${queCosa}: ${error.message}`, 'bad');
+      return false;
+    }
+    return true;
+  } catch(e){
+    console.error('[Supabase] al guardar', queCosa, e);
+    toast(`No se pudo guardar ${queCosa}. Revisá tu conexión.`, 'bad');
+    return false;
+  }
+}
+
 /* ============================================================
    B2 · Anti-duplicados: detecta nombres parecidos antes de crear
    una familia/niñera nueva (typos, variantes: "Paola Herpe" vs

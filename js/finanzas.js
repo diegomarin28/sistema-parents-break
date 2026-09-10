@@ -701,7 +701,7 @@ async function procesarExtractoConciliacion(){
   const exactos = matches.filter(m=>m.exacto);
   const conDiferencia = matches.filter(m=>!m.exacto);
 
-  await sb.from('app_config').upsert({ id:'ultima_conciliacion_cobros', valor:{archivo:file.name}, actualizado_at:new Date().toISOString() });
+  await sbGuardar(sb.from('app_config').upsert({ id:'ultima_conciliacion_cobros', valor:{archivo:file.name}, actualizado_at:new Date().toISOString() }), 'la marca de conciliación');
   actualizarFinanzasBadge();
   cargarAvisoExtracto();
 

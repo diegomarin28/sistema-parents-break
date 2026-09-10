@@ -584,7 +584,7 @@ async function guardarAsignacion(solicitudId){
   const filas = checks.map(c=>({ solicitud_id: solicitudId, ninera_id: c.value, ninera_nombre: c.dataset.nombre, estado:'invitada' }));
   const { error } = await sb.from('solicitud_ninieras').insert(filas);
   if(error){ warn.innerHTML = errBox(error); return; }
-  await sb.from('solicitudes').update({estado:'pendiente_confirmar'}).eq('id', solicitudId);
+  await sbGuardar(sb.from('solicitudes').update({estado:'pendiente_confirmar'}).eq('id', solicitudId), 'la solicitud');
   cerrarModal();
   await cargarAgendaSolicitudes();
   abrirModalSolicitud(solicitudId);
@@ -870,15 +870,14 @@ async function confirmarNinera(solNineraId){
     const choque = chequearDobleReservaAgenda(nPrevio.ninera_nombre, sPrevio.hora_inicio, sPrevio.hora_fin, sPrevio.id);
     if(!(await avisarSiDobleReserva(choque, nPrevio.ninera_nombre, 'Confirmar igual'))) return;
   }
-  const { error } = await sb.from('solicitud_ninieras').update({estado:'confirmada'}).eq('id', solNineraId);
-  if(error){ alert(error.message); return; }
+  if(!(await sbGuardar(sb.from('solicitud_ninieras').update({estado:'confirmada'}).eq('id', solNineraId), 'la confirmación'))) return;
   let solId = null;
   for(const s of agendaSolicitudes){ if(s.ninieras.some(n=>n.id===solNineraId)){ solId = s.id; break; } }
   await cargarAgendaSolicitudes();
   if(solId){
     const s2 = agendaSolicitudes.find(x=>x.id===solId);
     if(s2 && s2.ninieras.length && s2.ninieras.every(n=>n.estado==='confirmada')){
-      await sb.from('solicitudes').update({estado:'confirmada'}).eq('id', solId);
+      await sbGuardar(sb.from('solicitudes').update({estado:'confirmada'}).eq('id', solId), 'la solicitud');
       await cargarAgendaSolicitudes();
     }
     abrirModalSolicitud(solId);
@@ -888,7 +887,7 @@ async function confirmarNinera(solNineraId){
 async function cancelarSolicitud(id){
   const ok = await confirmarAccion('¿Cancelar esta solicitud? Las niñeras invitadas quedarán sin efecto.', 'Cancelar solicitud');
   if(!ok) return;
-  await sb.from('solicitudes').update({estado:'cancelada'}).eq('id', id);
+  if(!(await sbGuardar(sb.from('solicitudes').update({estado:'cancelada'}).eq('id', id), 'la cancelación'))) return;
   cerrarModal();
   cargarAgendaSolicitudes();
   actualizarAgendaBadge();

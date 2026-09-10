@@ -130,6 +130,7 @@ function abrirModalNuevaCandidata(){
 async function addIntake(){
   const nombre = document.getElementById('in-nombre').value.trim();
   if(!nombre){ toast('Falta el nombre.','bad'); return; }
+  if(!(await confirmarNombreNuevo(nombre, [...intakeItems, ...candidatasItems], 'niñera'))) return;
   const item = { nombre, telefono:document.getElementById('in-tel').value, zona:document.getElementById('in-zona').value,
     edad:document.getElementById('in-edad').value, origen:document.getElementById('in-origen').value, experiencia:document.getElementById('in-exp').value,
     tipo:document.getElementById('in-tipo').value, estado:'intake' };
@@ -366,6 +367,7 @@ async function guardarCandidata(){
     const { error } = await sb.from('candidatas').update({ estado:'entrevistada', telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value }).eq('id', candidataId);
     if(error){ warnArea.innerHTML = errBox(error); return; }
   } else {
+    if(!(await confirmarNombreNuevo(nombre, [...intakeItems, ...candidatasItems], 'niñera'))) return;
     const { data, error } = await sb.from('candidatas').insert({
       nombre, telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value,
       origen:document.getElementById('f-origen').value, experiencia:document.getElementById('f-exp-previa').value,
