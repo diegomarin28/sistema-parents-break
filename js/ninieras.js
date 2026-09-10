@@ -445,9 +445,18 @@ async function guardarEdicionNinera(id){
   const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   const extraInputs = [...document.querySelectorAll('#ed-extra-fields [data-campo]')];
-  if(extraInputs.length){
-    const extra = {};
-    extraInputs.forEach(el=>{ extra[el.dataset.campo] = el.value; });
+  const extra = {};
+  extraInputs.forEach(el=>{ extra[el.dataset.campo] = el.value; });
+  // campos que tenían dato al abrir la ficha (ver ninEditCandidataCache) y que se
+  // borraron con el botón "−" durante esta edición: hay que mandarlos como null
+  // explícitamente, si no Supabase nunca los toca y el dato viejo queda pegado en la base
+  const clavesActuales = new Set(extraInputs.map(el=>el.dataset.campo));
+  FICHA_CAMPOS.forEach(f=>{
+    if(!['nombre','apellido','telefono','zona'].includes(f.key) && ninEditCandidataCache[f.key] && !clavesActuales.has(f.key)){
+      extra[f.key] = null;
+    }
+  });
+  if(Object.keys(extra).length){
     const n = ninierasItems.find(x=>x.id===id);
     let candidataId = n?.candidata_id;
     if(!candidataId){
