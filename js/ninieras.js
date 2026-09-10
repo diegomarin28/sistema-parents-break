@@ -18,7 +18,7 @@ async function cargarNinieras(){
   if(error){ const g = document.getElementById('ninierasgrid'); if(g) g.innerHTML = errBox(error); return; }
   ninierasItems = data;
   cargarUtilizacionNinieras();
-  cargarConteoIncidentesNinieras();
+  await cargarConteoIncidentesNinieras();
   // llenar desplegable de zonas: una niñera puede cubrir varias zonas separadas por "/" —
   // cada zona individual entra como su propia opción, agrupando variantes de mayúsculas/tildes
   const zonaSel = document.getElementById('filt-zona');
@@ -143,7 +143,6 @@ async function cargarConteoIncidentesNinieras(){
     if(!key) return;
     ninIncidentesCount[key] = (ninIncidentesCount[key]||0) + 1;
   });
-  filtrarNinieras(); // vuelve a pintar la lista ya con los badges de incidentes
 }
 function filtrarNinieras(){
   const grid = document.getElementById('ninierasgrid');

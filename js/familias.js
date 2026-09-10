@@ -108,9 +108,9 @@ async function cargarFamilias(){
     const zonas = [...zonaMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
     zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(([key,label])=>`<option value="${key}" ${famZonaFiltro===key?'selected':''}>${label}</option>`).join('');
   }
+  await cargarConteoIncidentesFamilias();
   renderFamiliasList();
   renderFamiliasEnRiesgo();
-  cargarConteoIncidentesFamilias();
   if(famDetalleAbierta){
     if(familiasItems.some(f=>f.id===famDetalleAbierta)) verFamilia(famDetalleAbierta);
     else { famDetalleAbierta = null; cerrarModal(); }
@@ -216,7 +216,6 @@ async function cargarConteoIncidentesFamilias(){
     if(!key) return;
     famIncidentesCount[key] = (famIncidentesCount[key]||0) + 1;
   });
-  renderFamiliasList(); // vuelve a pintar la lista ya con los badges de incidentes
 }
 function renderFamiliasList(){
   const cont = document.getElementById('familiaslist');
