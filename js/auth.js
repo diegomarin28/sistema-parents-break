@@ -1,5 +1,6 @@
 /* ================= AUTH ================= */
 let session = null;
+let modoRecuperacion = false;
 // Face ID / Touch ID vía Passkeys (WebAuthn): funciona en cualquier navegador/dispositivo
 // moderno que lo soporte (iPhone con Face ID incluido). No manda ninguna foto/biometría a
 // ningún servidor — la verificación queda 100% en el dispositivo, Supabase solo recibe la
@@ -11,11 +12,13 @@ async function boot(){
   sb.auth.onAuthStateChange((event, s) => {
     session = s;
     if(event === 'SIGNED_IN') moduloActivo = null; // cada login nuevo arranca limpio en "Hoy"
+    if(event === 'PASSWORD_RECOVERY') modoRecuperacion = true; // vino de un link de "olvidé mi contraseña"
     renderRoot();
   });
   renderRoot();
 }
 function renderRoot(){
+  if(modoRecuperacion){ renderNuevaContrasena(); return; }
   if(!session){ renderLogin(); return; }
   renderApp();
 }
@@ -55,6 +58,9 @@ function renderLogin(){
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8 10.5V7a4 4 0 018 0v3.5"/></svg>
               <input type="password" id="login-pass">
             </div>
+          </div>
+          <div style="text-align:right;margin:-8px 0 16px;">
+            <a href="#" onclick="event.preventDefault();abrirRecuperarPassword();" style="font-size:12.5px;color:var(--accent);">¿Olvidaste tu contraseña?</a>
           </div>
           <label class="chk" style="margin-bottom:16px;"><input type="checkbox" id="login-recordar" checked> Recordarme en este dispositivo</label>
           <button class="btn primary" id="loginbtn" style="width:100%;" onclick="login()"><span id="loginbtn-label">Entrar</span></button>
@@ -140,6 +146,86 @@ async function eliminarPasskey(id){
   if(error){ toast('No se pudo borrar: '+error.message, 'bad'); return; }
   toast('Borrado.');
   gestionarPasskeys();
+}
+/* ---- Recuperar contraseña ---- */
+function abrirRecuperarPassword(){
+  const emailPrellenado = document.getElementById('login-mail')?.value.trim() || '';
+  abrirModal(`
+    <h2 style="margin:0 0 10px;">Recuperar contraseña</h2>
+    <div class="helper" style="margin-bottom:14px;">Si ese mail está registrado en el sistema, le va a llegar un link para elegir una contraseña nueva.</div>
+    <div class="field"><label>Mail</label><input type="email" id="rec-mail" value="${emailPrellenado}"></div>
+    <div id="rec-warn"></div>
+    <div class="confirmbtns" style="margin-top:16px;">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" id="rec-btn" onclick="enviarRecuperacion()"><span id="rec-btn-label">Enviar link</span></button>
+    </div>`);
+}
+async function enviarRecuperacion(){
+  const email = document.getElementById('rec-mail').value.trim();
+  if(!email){ document.getElementById('rec-warn').innerHTML = `<div class="warnbox">Escribí un mail.</div>`; return; }
+  const btn = document.getElementById('rec-btn');
+  btn.disabled = true;
+  document.getElementById('rec-btn-label').innerHTML = `<span class="spinner"></span> Enviando…`;
+  // Ojo: no avisamos acá si el mail existe o no en el sistema — Supabase responde igual en
+  // los dos casos a propósito, así nadie puede usar este formulario para descubrir qué mails
+  // están registrados en la cuenta.
+  await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split('#')[0].split('?')[0] });
+  cerrarModal();
+  toast('Si ese mail está registrado, le va a llegar un link para elegir una contraseña nueva. Revisá también la carpeta de spam.');
+}
+function renderNuevaContrasena(){
+  document.getElementById('app').innerHTML = `
+    <div class="loginstage">
+      <div class="loginbrand">
+        <div class="blob blob-a"></div>
+        <div class="blob blob-b"></div>
+        <img src="logo.png" alt="Parents Break" class="loginbrand-logo">
+        <h1>El día a día de tu equipo, en un solo lugar.</h1>
+        <p>Candidatas, entrevistas, niñeras activas y tarifas por familia — todo conectado, sin planillas sueltas.</p>
+      </div>
+      <div class="loginformside">
+        <div class="loginwrap">
+          <h2>Elegí una contraseña nueva</h2>
+          <div class="helper">Se aplica a tu cuenta ahora mismo, no hace falta la contraseña vieja.</div>
+          <div class="field">
+            <label>Contraseña nueva</label>
+            <div class="inputicon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8 10.5V7a4 4 0 018 0v3.5"/></svg>
+              <input type="password" id="np-pass1">
+            </div>
+          </div>
+          <div class="field">
+            <label>Repetila</label>
+            <div class="inputicon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8 10.5V7a4 4 0 018 0v3.5"/></svg>
+              <input type="password" id="np-pass2">
+            </div>
+          </div>
+          <button class="btn primary" id="np-btn" style="width:100%;" onclick="guardarNuevaContrasena()"><span id="np-btn-label">Guardar contraseña</span></button>
+          <div id="np-warn"></div>
+        </div>
+      </div>
+    </div>`;
+}
+async function guardarNuevaContrasena(){
+  const p1 = document.getElementById('np-pass1').value;
+  const p2 = document.getElementById('np-pass2').value;
+  const warn = document.getElementById('np-warn');
+  if(p1.length < 8){ warn.innerHTML = `<div class="warnbox">La contraseña tiene que tener al menos 8 caracteres.</div>`; return; }
+  if(p1 !== p2){ warn.innerHTML = `<div class="warnbox">Las dos contraseñas no coinciden.</div>`; return; }
+  const btn = document.getElementById('np-btn');
+  btn.disabled = true;
+  document.getElementById('np-btn-label').innerHTML = `<span class="spinner"></span> Guardando…`;
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if(error){
+    btn.disabled = false;
+    document.getElementById('np-btn-label').textContent = 'Guardar contraseña';
+    warn.innerHTML = `<div class="warnbox">${error.message}</div>`;
+    return;
+  }
+  modoRecuperacion = false;
+  toast('Contraseña actualizada.');
+  renderRoot();
 }
 async function logout(){ await sb.auth.signOut(); }
 
