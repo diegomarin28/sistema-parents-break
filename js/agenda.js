@@ -814,7 +814,9 @@ function suscribirRealtimeModuloActivo(){
       clearTimeout(rtRefrescarTimer);
       rtRefrescarTimer = setTimeout(()=>{
         if(document.querySelector('.confirmoverlay.show')) return; // no interrumpir un modal abierto
+        const scrollRT = guardarScrollMainarea();
         renderModulo();
+        restaurarScrollMainarea(scrollRT);
       }, 600);
     });
   });

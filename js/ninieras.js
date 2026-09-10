@@ -17,7 +17,7 @@ async function cargarNinieras(){
   const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true).order('nombre');
   if(error){ const g = document.getElementById('ninierasgrid'); if(g) g.innerHTML = errBox(error); return; }
   ninierasItems = data;
-  cargarUtilizacionNinieras();
+  await cargarUtilizacionNinieras();
   await cargarConteoIncidentesNinieras();
   // llenar desplegable de zonas: una niñera puede cubrir varias zonas separadas por "/" —
   // cada zona individual entra como su propia opción, agrupando variantes de mayúsculas/tildes
