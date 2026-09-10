@@ -911,6 +911,18 @@ const RT_TABLAS_POR_MODULO = {
 };
 let rtChannel = null;
 let rtRefrescarTimer = null;
+// Recarga liviana por módulo: solo trae los datos de nuevo y repinta la lista, sin destruir
+// y reconstruir el módulo entero (buscador, filtros, etc.) como hace renderModulo(). Antes,
+// CUALQUIER cambio en 'ninieras' o 'familias' — incluido tu propio guardado, que ya se
+// mostraba bien al toque — disparaba 600ms después una reconstrucción completa del módulo
+// vía Realtime, y esa reconstrucción de más era la causa real de que el scroll se siguiera
+// yendo arriba pese a los dos intentos anteriores (que sí guardaban/restauraban el scroll,
+// pero sobre un DOM que se estaba tirando abajo y volviendo a armar de cero). De paso, esto
+// evita perder lo que estabas escribiendo en el buscador cuando llega un cambio de otro lado.
+const RT_RECARGA_LIVIANA = {
+  ninieras: 'cargarNinieras',
+  familias: 'cargarFamilias',
+};
 function suscribirRealtimeModuloActivo(){
   if(rtChannel){ sb.removeChannel(rtChannel); rtChannel = null; }
   const clave = moduloActivo && !moduloActivo.startsWith('pend-') ? moduloActivo : 'hoy';
@@ -920,10 +932,12 @@ function suscribirRealtimeModuloActivo(){
   tablas.forEach(t=>{
     rtChannel.on('postgres_changes', {event:'*', schema:'public', table:t}, ()=>{
       clearTimeout(rtRefrescarTimer);
-      rtRefrescarTimer = setTimeout(()=>{
+      rtRefrescarTimer = setTimeout(async ()=>{
         if(document.querySelector('.confirmoverlay.show')) return; // no interrumpir un modal abierto
+        const recargaLiviana = RT_RECARGA_LIVIANA[clave] && window[RT_RECARGA_LIVIANA[clave]];
         const scrollRT = guardarScrollMainarea();
-        renderModulo();
+        if(recargaLiviana){ await recargaLiviana(); }
+        else { renderModulo(); }
         restaurarScrollMainarea(scrollRT);
       }, 600);
     });
