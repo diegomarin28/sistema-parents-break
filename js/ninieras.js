@@ -340,6 +340,14 @@ function editarNinera(id){
       <button class="btn primary" onclick="guardarEdicionNinera('${id}')">Guardar</button>
     </div>`);
   ninFotoUrlPendiente = n.foto || null;
+  // precargar los campos de categorías que ya tenían datos cargados —
+  // si no se hace esto, al reabrir "Editar" los campos con dato quedaban
+  // invisibles (solo se veían en "Ver ficha") y no había forma de corregirlos
+  FICHA_CAMPOS.forEach(f=>{
+    if(!['nombre','apellido','telefono','zona'].includes(f.key) && ninEditCandidataCache[f.key]){
+      agregarCampoExtraNinera(f.key);
+    }
+  });
 }
 function quitarFotoNinera(){
   ninFotoUrlPendiente = null;
