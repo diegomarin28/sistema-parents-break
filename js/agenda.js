@@ -4,6 +4,7 @@ let agendaFamilias = [];
 let agendaNinierasBase = [];
 let agendaSolicitudes = [];
 let agendaResizeListenerAttached = false;
+let agendaReemplazoNineraSel = null;
 
 function agendaDiasVisibles(){
   const w = window.innerWidth;
@@ -607,19 +608,83 @@ function abrirModalAsignacionFija(s){
     <h2>${s.familia_nombre}</h2>
     <div class="helper">Horario fijo · ${diasTxt || 'sin días'} · ${horario}</div>
     <div class="field" style="margin-top:14px;position:relative;"><label>Niñera asignada</label>
-      <input type="text" id="agenda-fija-ninera-${asigId}" autocomplete="off" value="${a.ninera_nombre||''}">
+      <input type="text" id="agenda-fija-ninera-${asigId}" autocomplete="off" value="${a.ninera_nombre||''}" oninput="document.getElementById('agenda-fija-guardar-${asigId}').style.display = (this.value.trim() && normaliza(this.value.trim())!==normaliza('${(a.ninera_nombre||'').replace(/'/g,"\\'")}')) ? 'block' : 'none';">
       <div id="agenda-fija-ninera-${asigId}-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
     </div>
     <div id="agenda-fija-warn"></div>
-    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="cambiarNineraAsignacionFija('${asigId}')">Guardar niñera</button>
+    <button class="btn primary" id="agenda-fija-guardar-${asigId}" style="width:100%;margin-bottom:8px;display:none;" onclick="cambiarNineraAsignacionFija('${asigId}')">Guardar niñera nueva para este horario fijo</button>
     ${s._yaRegistrado
       ? `<div class="helper" style="margin-bottom:8px;">Ya hay un registro cargado para ${a.ninera_nombre} este día en Sittings.</div>`
       : `<button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="confirmarAsignacionFijaHoy('${s.id}')">✓ Fue como siempre — registrar</button>
+         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarEditarHorarioFijoHoy('${s.id}')">Fue distinto — cambiar horario de hoy y registrar</button>
+         <div id="agenda-fija-horario-box"></div>
          <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionAsignacionFija('${s.id}')">Este día no fue</button>`}
     <button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda('${asigId}')">Quitar esta asignación fija</button>
   `;
   abrirModal(cuerpo);
   setTimeout(()=>attachAutocomplete('agenda-fija-ninera-'+asigId, 'agenda-fija-ninera-'+asigId+'-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
+}
+/* Como "Fue como siempre", pero con el horario de hoy editado a mano — para
+   cuando la niñera se quedó de más o se fue antes. Calcula cobro/pago exacto
+   por la duración real, igual que el resto del sistema (misma cuenta que en
+   Sittings & traslados). */
+function mostrarEditarHorarioFijoHoy(id){
+  const s = agendaSolicitudes.find(x=>x.id===id);
+  if(!s) return;
+  const a = s._raw;
+  const box = document.getElementById('agenda-fija-horario-box');
+  if(!box) return;
+  box.innerHTML = `
+    <div class="grid2" style="margin-bottom:8px;">
+      <div class="field"><label>Hora inicio real</label>${selectHora('agenda-fija-hi')}</div>
+      <div class="field"><label>Hora fin real</label>${selectHora('agenda-fija-hf')}</div>
+    </div>
+    <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="agenda-fija-cruza"> Termina al día siguiente</label>
+    <div id="agenda-fija-horario-warn"></div>
+    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="confirmarAsignacionFijaConHorarioEditado('${id}')">Registrar con este horario</button>`;
+  setHoraSelect('agenda-fija-hi', a.hora_inicio||'');
+  setHoraSelect('agenda-fija-hf', a.hora_fin||'');
+}
+async function confirmarAsignacionFijaConHorarioEditado(id){
+  const s = agendaSolicitudes.find(x=>x.id===id);
+  if(!s) return;
+  const a = s._raw;
+  const horaIni = leerHora('agenda-fija-hi');
+  const horaFin = leerHora('agenda-fija-hf');
+  const cruza = document.getElementById('agenda-fija-cruza')?.checked || false;
+  const warn = document.getElementById('agenda-fija-horario-warn');
+  if(!horaIni || !horaFin){ if(warn) warn.innerHTML = '<div class="warnbox">Completá las dos horas.</div>'; return; }
+  const mi = agendaMinutos(horaIni);
+  let mf = agendaMinutos(horaFin);
+  if(cruza) mf += 24*60;
+  if(mf<=mi){ if(warn) warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio (o marcá "Termina al día siguiente").</div>'; return; }
+  const familia = agendaFamilias.find(f=>f.id===a.familia_id);
+  const horasFrac = (mf-mi)/60;
+  const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
+  const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
+  const choque = chequearDobleReservaAgenda(a.ninera_nombre, horaIni, horaFin, s.id);
+  if(!(await avisarSiDobleReserva(choque, a.ninera_nombre, 'Registrar igual'))) return;
+  const { error } = await sb.from('sittings_traslados').insert({
+    tipo: 'sitting',
+    registrado_por: registradoPorUsuario(),
+    familia_id: a.familia_id || null,
+    familia_nombre: s.familia_nombre,
+    ninera_id: a.ninera_id || null,
+    ninera_nombre: a.ninera_nombre,
+    fecha: s.fecha,
+    hora_inicio: horaIni,
+    hora_fin: horaFin,
+    termina_dia_siguiente: cruza,
+    cobro_familia: Math.round(horasFrac*cobroHora),
+    pago_ninera: Math.round(horasFrac*pagoHora),
+    cobrado: false, pagado: false,
+    notas: 'Sitting fijo — horario de hoy editado desde Agenda',
+  });
+  if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
+  toast('Sitting registrado con el horario de hoy.');
 }
 /* B1 · Confirmar con un toque que el sitting fijo pasó como siempre — sin re-tipear nada.
    Calcula cobro/pago con la tarifa por hora de la familia (misma cuenta que el form manual). */
@@ -666,12 +731,13 @@ function mostrarExcepcionAsignacionFija(id){
   const cuerpo = `
     <h2 style="margin:0 0 6px;">¿${a.ninera_nombre} no fue el ${fechaTxt} a lo de ${s.familia_nombre}?</h2>
     <div class="helper" style="margin-bottom:16px;">No se le cobra nada a la familia ni se le paga nada a ${a.ninera_nombre} por este día.</div>
-    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="registrarExcepcionFija('${id}', false)">No fue nadie ese día</button>
-    <button class="btn primary" style="width:100%;text-align:left;" onclick="registrarExcepcionFija('${id}', true)">Hubo reemplazo → cargar su sitting</button>
+    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="registrarExcepcionFija('${id}')">No fue nadie ese día</button>
+    <button class="btn primary" style="width:100%;text-align:left;" onclick="mostrarReemplazoFijoHoy('${id}')">Vino otra niñera</button>
+    <div id="agenda-fija-reemplazo-box"></div>
   `;
   abrirModal(cuerpo);
 }
-async function registrarExcepcionFija(id, esReemplazo){
+async function registrarExcepcionFija(id){
   const s = agendaSolicitudes.find(x=>x.id===id);
   if(!s) return;
   const a = s._raw;
@@ -688,19 +754,84 @@ async function registrarExcepcionFija(id, esReemplazo){
     pago_ninera: 0,
     cobrado: true,
     pagado: true,
-    notas: esReemplazo ? `${a.ninera_nombre} no fue — reemplazo cargado aparte` : `${a.ninera_nombre} no fue — sin reemplazo`,
+    notas: `${a.ninera_nombre} no fue — sin reemplazo`,
   });
   if(error){ toast('No se pudo registrar: '+error.message, 'bad'); return; }
   cerrarModal();
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
-  if(esReemplazo){
-    sitPrefill = { familiaNombre: s.familia_nombre, fecha: s.fecha, notas: `Reemplazo de ${a.ninera_nombre}` };
-    setModulo('sittings');
-    setTimeout(()=>abrirModalSitForm(), 500);
-  } else {
-    toast('Registrado: no fue nadie ese día.');
-  }
+  toast('Registrado: no fue nadie ese día.');
+}
+/* Reemplazo puntual: otra niñera cubrió el horario fijo ese día. Se registra
+   directo su sitting con el cálculo automático de cobro/pago — sin saltar a
+   Sittings & traslados a completarlo a mano. */
+function mostrarReemplazoFijoHoy(id){
+  const s = agendaSolicitudes.find(x=>x.id===id);
+  if(!s) return;
+  const a = s._raw;
+  agendaReemplazoNineraSel = null;
+  const box = document.getElementById('agenda-fija-reemplazo-box');
+  if(!box) return;
+  box.innerHTML = `
+    <div style="height:1px;background:var(--line);margin:14px 0;"></div>
+    <div class="field" style="position:relative;margin-bottom:8px;"><label>¿Quién vino en su lugar?</label>
+      <input type="text" id="agenda-fija-reemplazo-ninera" autocomplete="off" oninput="agendaReemplazoNineraSel=null;">
+      <div id="agenda-fija-reemplazo-ninera-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
+    </div>
+    <div class="grid2" style="margin-bottom:8px;">
+      <div class="field"><label>Hora inicio</label>${selectHora('agenda-fija-rhi')}</div>
+      <div class="field"><label>Hora fin</label>${selectHora('agenda-fija-rhf')}</div>
+    </div>
+    <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="agenda-fija-rcruza"> Termina al día siguiente</label>
+    <div id="agenda-fija-reemplazo-warn"></div>
+    <button class="btn primary" style="width:100%;" onclick="confirmarReemplazoFijoHoy('${id}')">Registrar reemplazo</button>`;
+  setHoraSelect('agenda-fija-rhi', a.hora_inicio||'');
+  setHoraSelect('agenda-fija-rhf', a.hora_fin||'');
+  setTimeout(()=>attachAutocomplete('agenda-fija-reemplazo-ninera', 'agenda-fija-reemplazo-ninera-dropdown', ()=>agendaNinierasBase, (o)=>{ agendaReemplazoNineraSel = o; }), 20);
+}
+async function confirmarReemplazoFijoHoy(id){
+  const s = agendaSolicitudes.find(x=>x.id===id);
+  if(!s) return;
+  const a = s._raw;
+  const warn = document.getElementById('agenda-fija-reemplazo-warn');
+  const nineraTxt = document.getElementById('agenda-fija-reemplazo-ninera')?.value.trim();
+  if(!nineraTxt){ if(warn) warn.innerHTML = '<div class="warnbox">Elegí quién vino en su lugar.</div>'; return; }
+  const horaIni = leerHora('agenda-fija-rhi');
+  const horaFin = leerHora('agenda-fija-rhf');
+  const cruza = document.getElementById('agenda-fija-rcruza')?.checked || false;
+  if(!horaIni || !horaFin){ if(warn) warn.innerHTML = '<div class="warnbox">Completá las dos horas.</div>'; return; }
+  const mi = agendaMinutos(horaIni);
+  let mf = agendaMinutos(horaFin);
+  if(cruza) mf += 24*60;
+  if(mf<=mi){ if(warn) warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio (o marcá "Termina al día siguiente").</div>'; return; }
+  const familia = agendaFamilias.find(f=>f.id===a.familia_id);
+  const horasFrac = (mf-mi)/60;
+  const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
+  const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
+  const nineraSel = agendaReemplazoNineraSel && normaliza(agendaReemplazoNineraSel.nombre)===normaliza(nineraTxt) ? agendaReemplazoNineraSel : null;
+  const choque = chequearDobleReservaAgenda(nineraTxt, horaIni, horaFin, s.id);
+  if(!(await avisarSiDobleReserva(choque, nineraTxt, 'Registrar igual'))) return;
+  const { error } = await sb.from('sittings_traslados').insert({
+    tipo: 'sitting',
+    registrado_por: registradoPorUsuario(),
+    familia_id: a.familia_id || null,
+    familia_nombre: s.familia_nombre,
+    ninera_id: nineraSel?.id || null,
+    ninera_nombre: nineraTxt,
+    fecha: s.fecha,
+    hora_inicio: horaIni,
+    hora_fin: horaFin,
+    termina_dia_siguiente: cruza,
+    cobro_familia: Math.round(horasFrac*cobroHora),
+    pago_ninera: Math.round(horasFrac*pagoHora),
+    cobrado: false, pagado: false,
+    notas: `Reemplazo de ${a.ninera_nombre}`,
+  });
+  if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
+  toast('Reemplazo registrado.');
 }
 async function cambiarNineraAsignacionFija(asigId){
   const nueva = document.getElementById('agenda-fija-ninera-'+asigId).value.trim();
