@@ -220,13 +220,17 @@ function renderAgendaGrid(){
   if(agendaEsMobile()){
     // Celular: lista vertical, un día abajo del otro — entran los 7 sin apretar
     // columnas ni scrollear al costado, solo hace falta scrollear para abajo.
+    // Cada día tiene su propio fondo en el encabezado (no solo una línea fina)
+    // para que se distinga bien uno de otro, y cada sitting es una sola línea
+    // compacta — así un día con varios sittings no empuja tanto al resto.
     wrap.innerHTML = porDia.map(({fecha, esHoy, items, numero, diaLabel})=>`
-      <div style="margin-bottom:16px;">
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid ${esHoy?'var(--accent)':'var(--line)'};">
-          <div style="font-size:12px;font-weight:${esHoy?700:400};color:${esHoy?'var(--accent)':'var(--ink-soft)'};text-transform:uppercase;">${diaLabel}</div>
-          <div style="font-size:17px;font-weight:700;color:${esHoy?'var(--accent)':'var(--ink)'};">${numero}</div>
+      <div style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;margin-bottom:6px;background:${esHoy?'var(--accent-soft)':'var(--paper)'};">
+          <div style="font-size:11px;font-weight:700;color:${esHoy?'var(--accent)':'var(--ink-soft)'};text-transform:uppercase;letter-spacing:0.03em;">${diaLabel}</div>
+          <div style="font-size:16px;font-weight:700;color:${esHoy?'var(--accent)':'var(--ink)'};">${numero}</div>
+          ${esHoy ? `<div style="font-size:10px;font-weight:700;color:var(--accent);background:var(--bg);padding:2px 7px;border-radius:100px;margin-left:2px;">HOY</div>` : ''}
         </div>
-        ${items.length ? items.map(s=>renderAgendaTarjetaDia(s)).join('') : '<div class="helper" style="padding:2px 0 4px;">Sin pedidos</div>'}
+        ${items.length ? items.map(s=>renderAgendaFilaMobile(s)).join('') : '<div class="helper" style="padding:4px 10px;">Sin pedidos</div>'}
       </div>`).join('');
   } else {
     // Compu: columnas lado a lado, cada una crece según su propio contenido.
@@ -243,6 +247,16 @@ function renderAgendaGrid(){
       </div>
     `;
   }
+}
+function renderAgendaFilaMobile(s){
+  const sinAsignar = !s.ninieras.length || s.ninieras.every(x=>x.estado!=='confirmada');
+  const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : '--:--';
+  const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
+  return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;" onclick="abrirModalSolicitud('${s.id}')">
+    <div style="color:var(--ink-soft);font-variant-numeric:tabular-nums;width:38px;flex-shrink:0;">${horaTxt}</div>
+    <div style="flex:1;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.familia_nombre}</div>
+    <div style="font-size:11px;font-weight:700;color:${sinAsignar?'var(--warn)':'var(--good)'};flex-shrink:0;">${sinAsignar ? 'Sin asignar' : ninTxt}</div>
+  </div>`;
 }
 function renderAgendaTarjetaDia(s){
   const sinAsignar = !s.ninieras.length || s.ninieras.every(x=>x.estado!=='confirmada');
