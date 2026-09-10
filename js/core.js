@@ -1,7 +1,7 @@
 const SUPABASE_URL = 'https://wvewzamdohrpfhpccvcz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_NX4E4FfAkwFQSFo4Rgl0Jg_IcebuaaI';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage }
+  auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage, experimental: { passkey: true } }
 });
 
 /* ---- Carga de librerías pesadas SOLO cuando hacen falta (Chart.js y xlsx no bloquean el arranque de la app) ---- */

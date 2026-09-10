@@ -31,9 +31,13 @@ let rrhhTab = 'intake';
 let dashPendientesHoy = [];
 
 function nombreUsuario(){
+  // El nombre a mostrar vive en user_metadata.nombre_mostrar (Supabase Auth), no en el
+  // código público — antes había un mapa mail->nombre hardcodeado acá, que exponía los
+  // mails personales de Pau y Delfi en el repo público. Si algún día se agrega una cuenta
+  // nueva sin este campo cargado, cae al nombre derivado del mail como antes.
+  const meta = session?.user?.user_metadata || {};
+  if(meta.nombre_mostrar) return meta.nombre_mostrar;
   const email = session?.user?.email || '';
-  const mapa = { 'pauugericke@gmail.com':'Pau Gericke', 'delfifrommel@gmail.com':'Delfi Frommel' };
-  if(mapa[email]) return mapa[email];
   const local = (email.split('@')[0] || '').replace(/[^a-zA-Z]/g,'');
   return local ? local.charAt(0).toUpperCase()+local.slice(1) : '?';
 }
@@ -81,7 +85,8 @@ function renderSidebar(){
         </button>`).join('')}
     </nav>
     <div class="sidebar-foot">
-      ${session.user.email}<br><button onclick="logout()">Cerrar sesión</button>
+      ${nombreUsuario()}<br>
+      ${PASSKEY_SOPORTADO ? `<button onclick="gestionarPasskeys()">Face ID / Touch ID</button> · ` : ''}<button onclick="logout()">Cerrar sesión</button>
     </div>
   `;
   actualizarAgendaBadge();

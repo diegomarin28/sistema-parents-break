@@ -1,5 +1,10 @@
 /* ================= AUTH ================= */
 let session = null;
+// Face ID / Touch ID vía Passkeys (WebAuthn): funciona en cualquier navegador/dispositivo
+// moderno que lo soporte (iPhone con Face ID incluido). No manda ninguna foto/biometría a
+// ningún servidor — la verificación queda 100% en el dispositivo, Supabase solo recibe la
+// confirmación firmada de que pasó.
+const PASSKEY_SOPORTADO = typeof window !== 'undefined' && !!window.PublicKeyCredential;
 async function boot(){
   const { data } = await sb.auth.getSession();
   session = data.session;
@@ -28,6 +33,15 @@ function renderLogin(){
         <div class="loginwrap">
           <h2>Bienvenida de vuelta</h2>
           <div class="helper">Entrá con tu cuenta de equipo.</div>
+          ${PASSKEY_SOPORTADO ? `
+          <button class="btn" type="button" id="passkeybtn" style="width:100%;margin-bottom:14px;" onclick="entrarConPasskey()">
+            <span id="passkeybtn-label">Entrar con Face ID / Touch ID</span>
+          </button>
+          <div style="display:flex;align-items:center;gap:10px;margin:2px 0 16px;">
+            <div style="flex:1;height:1px;background:var(--line);"></div>
+            <span class="helper" style="margin:0;">o con mail y contraseña</span>
+            <div style="flex:1;height:1px;background:var(--line);"></div>
+          </div>` : ''}
           <div class="field">
             <label>Mail</label>
             <div class="inputicon">
@@ -65,6 +79,67 @@ async function login(){
     return;
   }
   if(!recordar){ window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); }); }
+  if(PASSKEY_SOPORTADO) ofrecerActivarPasskey();
+}
+async function entrarConPasskey(){
+  const btn = document.getElementById('passkeybtn');
+  if(btn){ btn.disabled = true; document.getElementById('passkeybtn-label').innerHTML = `<span class="spinner"></span> Verificando…`; }
+  const { error } = await sb.auth.signInWithPasskey();
+  if(error){
+    if(btn){ btn.disabled = false; document.getElementById('passkeybtn-label').textContent = 'Entrar con Face ID / Touch ID'; }
+    // el usuario canceló el prompt, o este dispositivo/cuenta todavía no tiene ninguna
+    // passkey activada — no es un error real, solo mostramos un aviso suave y seguimos
+    // mostrando el formulario de mail/contraseña de abajo como siempre.
+    const warn = document.getElementById('loginwarn');
+    if(warn) warn.innerHTML = `<div class="warnbox">No se pudo entrar con Face ID / Touch ID en este dispositivo — entrá con mail y contraseña, y después lo podés activar.</div>`;
+  }
+}
+// Después de un login con contraseña exitoso, si esta cuenta todavía no tiene ninguna
+// passkey activada en NINGÚN dispositivo, le ofrecemos activarla en este. No es obligatorio
+// (nunca bloqueamos el acceso si Face ID falla o no está activado) — solo una sugerencia.
+async function ofrecerActivarPasskey(){
+  try{
+    const { data: passkeys } = await sb.auth.passkey.list();
+    if(passkeys && passkeys.length) return; // ya tiene alguna activada, en este u otro dispositivo
+  }catch(e){ return; }
+  abrirModal(`
+    <h2 style="margin:0 0 10px;">¿Activar Face ID / Touch ID?</h2>
+    <div class="helper" style="margin-bottom:16px;">La próxima vez podés entrar mirando el celular, sin escribir la contraseña. Se puede desactivar cuando quieras desde "Face ID / Touch ID" abajo del menú.</div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Ahora no</button>
+      <button class="btn primary" onclick="registrarPasskeyDispositivo()">Activar</button>
+    </div>`);
+}
+async function registrarPasskeyDispositivo(){
+  const { error } = await sb.auth.registerPasskey();
+  cerrarModal();
+  if(error){ toast('No se pudo activar: '+error.message, 'bad'); return; }
+  toast('Face ID / Touch ID activado en este dispositivo.');
+}
+async function gestionarPasskeys(){
+  abrirModal(`<h2 style="margin:0 0 10px;">Face ID / Touch ID</h2><div id="passkeys-list"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>`);
+  const { data: passkeys, error } = await sb.auth.passkey.list();
+  const cont = document.getElementById('passkeys-list');
+  if(!cont) return; // se cerró el modal mientras cargaba
+  if(error){ cont.innerHTML = errBox(error); return; }
+  cont.innerHTML = `
+    <div class="helper" style="margin-bottom:12px;">Dispositivos con Face ID/Touch ID activado para tu cuenta. Borrá los que ya no uses (por ejemplo, un celular viejo).</div>
+    ${!passkeys || !passkeys.length ? '<div class="empty">Todavía no activaste ninguno.</div>' : passkeys.map(p=>`
+      <div class="agendarow" style="border-bottom:1px solid var(--line);padding:8px 0;align-items:center;">
+        <div style="flex:1;">
+          <div>${p.friendly_name || 'Dispositivo'}</div>
+          <div class="helper" style="margin:0;">Activado ${new Date(p.created_at).toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'})}</div>
+        </div>
+        <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="eliminarPasskey('${p.id}')">Borrar</button>
+      </div>`).join('')}
+    <button class="btn" type="button" style="width:100%;margin-top:14px;" onclick="registrarPasskeyDispositivo()">+ Activar en este dispositivo</button>`;
+}
+async function eliminarPasskey(id){
+  if(!(await confirmarAccion('¿Borrar este Face ID/Touch ID? Ese dispositivo va a tener que entrar con contraseña.'))) return;
+  const { error } = await sb.auth.passkey.delete({ passkeyId: id });
+  if(error){ toast('No se pudo borrar: '+error.message, 'bad'); return; }
+  toast('Borrado.');
+  gestionarPasskeys();
 }
 async function logout(){ await sb.auth.signOut(); }
 
