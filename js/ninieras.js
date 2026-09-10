@@ -471,16 +471,15 @@ async function eliminarNinera(id){
 }
 
 /* ---- Generar CV: arma el pedido para pegarle a Claude en el chat ---- */
-const CV_CANVA_DESIGN_ID = 'DAHErvfrB3A';
-const CV_CANVA_DESIGN_NOMBRE = 'CV babysitter nueva identidad';
+const CV_CANVA_DESIGN_ID = 'DAHUy2caXVM';
+const CV_CANVA_DESIGN_NOMBRE = 'PLANTILLA BASE - CV niñeras';
 function generarMensajeCV(id){
   const n = ninierasItems.find(x=>x.id===id);
   if(!n) return;
   const cd = n.candidatas || {};
+  // Importante: NUNCA incluir teléfono, mail ni zona acá — esos son datos internos
+  // (quedan en la ficha/directorio), no van en el CV que ve la familia.
   const datos = [`Nombre: ${n.nombre}`];
-  if(n.telefono) datos.push(`Teléfono: ${n.telefono}`);
-  if(n.zona) datos.push(`Zona: ${n.zona}`);
-  datos.push(`Tipo: ${n.tipo || 'Niñera'}`);
   if(n.foto) datos.push(`Foto (URL): ${n.foto}`);
   FICHA_CAMPOS.forEach(f=>{ if(cd[f.key]) datos.push(`${f.label}: ${cd[f.key]}`); });
   if(n.notas) datos.push(`Notas: ${n.notas}`);
@@ -488,7 +487,7 @@ function generarMensajeCV(id){
 
 Antes de generarlo, leé en los Files de este Project el archivo "instrucciones_generar_cv_ninieras.md" y la imagen de ejemplo de un CV ya terminado — ahí está el paso a paso exacto y el formato visual a respetar (fondo salvia, nombre en violeta bold, foto circular, bullets coral).
 
-Usá como base el diseño "${CV_CANVA_DESIGN_NOMBRE}" (ID: ${CV_CANVA_DESIGN_ID}) de mi cuenta de Canva conectada — duplicá una página nueva ahí (no edites el diseño original), reemplazá los datos por los de abajo, y mandámelo acá como PDF.
+Usá como plantilla base el diseño "${CV_CANVA_DESIGN_NOMBRE}" (ID: ${CV_CANVA_DESIGN_ID}) de mi cuenta de Canva conectada — copiá su única página a un diseño nuevo con Canva:copy-design (no edites la plantilla base en sí), reemplazá los placeholders por los datos de abajo respetando el formato ya definido (fondo salvia, nombre en violeta bold, foto circular, bullets coral), y mandámelo acá como PDF.
 
 Datos de la niñera:
 ${datos.map(d=>'- '+d).join('\n')}`;
