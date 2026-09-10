@@ -313,13 +313,28 @@ function renderPendHoy(cont){
         const fechaFmt = new Date(a.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
         const esHoy = a.fecha===todayISO();
         return `
-        <div class="agendarow" style="border-bottom:1px solid var(--line);">
-          <div><b>${esHoy?'Hoy':fechaFmt}</b> · ${a.ninera_nombre} → ${a.familia_nombre || 'familia sin nombre'}</div>
-          <div style="color:var(--ink-soft);">${a.hora_inicio ? a.hora_inicio.slice(0,5) : ''}${a.hora_fin ? '–'+a.hora_fin.slice(0,5) : ''}</div>
+        <div class="agendarow" style="border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
+          <div>
+            <div><b>${esHoy?'Hoy':fechaFmt}</b> · ${a.ninera_nombre} → ${a.familia_nombre || 'familia sin nombre'}</div>
+            <div style="color:var(--ink-soft);">${a.hora_inicio ? a.hora_inicio.slice(0,5) : ''}${a.hora_fin ? '–'+a.hora_fin.slice(0,5) : ''}</div>
+          </div>
+          <button class="smallbtn" onclick='cargarSittingDesdePendiente(${JSON.stringify(a).replace(/'/g,"&#39;")})'>Cargar sitting</button>
         </div>`;
       }).join('') : '<div class="empty">Está todo registrado.</div>'}
     </div>
-    <div class="actions"><button class="btn primary" onclick="setModulo('sittings')">Ir a cargar sittings</button></div>
+    <div class="actions"><button class="btn primary" onclick="setModulo('sittings')">Ir a cargar un sitting suelto</button></div>
   `;
+}
+function cargarSittingDesdePendiente(item){
+  sitPrefill = {
+    familiaNombre: item.familia_nombre,
+    nineraNombre: item.ninera_nombre,
+    fecha: item.fecha,
+    horaInicio: item.hora_inicio,
+    horaFin: item.hora_fin,
+    notas: 'Cargado desde "Sittings sin registrar"',
+  };
+  setModulo('sittings');
+  setTimeout(()=>abrirModalSitForm(), 500);
 }
 

@@ -3,7 +3,7 @@ let sitFamilias = [];
 let sitNinieras = [];
 let sitItems = [];
 let sitTipo = 'sitting';
-let sitPrefill = null; // {familiaNombre, fecha, notas} — usado para precargar el form de sitting desde Agenda (ej. reemplazo)
+let sitPrefill = null; // {familiaNombre, nineraNombre, fecha, horaInicio, horaFin, notas} — precarga el form de sitting desde Agenda o desde "Pendiente" en Hoy
 let sitEditId = null;
 let sitFamiliaSel = null;
 let sitNineraSel = null;
@@ -355,8 +355,14 @@ function abrirModalSitForm(id=null){
       document.getElementById('sit-familia').value = sitPrefill.familiaNombre || '';
       sitFamiliaSel = findFamilia(sitPrefill.familiaNombre||'');
       document.getElementById('sit-fecha').value = sitPrefill.fecha || todayISO();
+      if(sitPrefill.nineraNombre){
+        document.getElementById('sit-ninera').value = sitPrefill.nineraNombre;
+        sitNineraSel = findNinera(sitPrefill.nineraNombre);
+      }
+      if(sitPrefill.horaInicio) setHoraSelect('sit-horaini', sitPrefill.horaInicio);
+      if(sitPrefill.horaFin) setHoraSelect('sit-horafin', sitPrefill.horaFin);
       if(sitPrefill.notas) document.getElementById('sit-notas').value = sitPrefill.notas;
-      onSitFamiliaInput();
+      onSitFamiliaInput(); // ya calcula cobro/pago solo si la familia tiene tarifa y el horario está cargado
       sitPrefill = null;
     }
     calcSitMargen();
