@@ -271,6 +271,7 @@ function sitFormHTML(){
       <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen()"></div>
       <div class="field"><label>Pago a niñera</label><input type="number" id="sit-pago" value="0" oninput="calcSitMargen()"></div>
     </div>
+    <div id="sit-sin-tarifa-box"></div>
     <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="sit-notas"></textarea></div>
     <div class="actions">
       <button class="btn primary" onclick="guardarSitting()">${sitEditId ? 'Guardar cambios' : 'Guardar registro'}</button>
@@ -900,12 +901,30 @@ function calcSitMargen(){
 function actualizarCobroPagoPorHorario(){
   const cobroInput = document.getElementById('sit-cobro');
   const pagoInput = document.getElementById('sit-pago');
-  if(!cobroInput || !pagoInput || sitTipo!=='sitting' || !sitFamiliaSel) return;
+  const sinTarifaBox = document.getElementById('sit-sin-tarifa-box');
+  if(!cobroInput || !pagoInput) return;
+  if(sitTipo!=='sitting' || !sitFamiliaSel){ if(sinTarifaBox) sinTarifaBox.innerHTML = ''; return; }
   const cobroH = Number(sitFamiliaSel.cobro_hora)||0;
   const pagoH = Number(sitFamiliaSel.pago_hora)||0;
-  if(!cobroH && !pagoH) return;
   const horaIni = leerHora('sit-horaini');
   const horaFin = leerHora('sit-horafin');
+  if(!cobroH && !pagoH){
+    // Sin tarifa cargada: no hay nada para calcular, pero ofrecemos cargarla ahí mismo
+    // en vez de dejarlo en silencio — así la próxima vez con esta familia ya calcula solo.
+    if(sinTarifaBox && horaIni && horaFin){
+      sinTarifaBox.innerHTML = `
+        <div class="helper" style="margin:8px 0 6px;color:var(--clay-text);">${sitFamiliaSel.nombre} no tiene tarifa por hora cargada — cargala ahora y calculamos este sitting y los que vengan:</div>
+        <div class="grid2">
+          <div class="field"><label>Cobro por hora</label><input type="number" id="sit-tarifa-cobro-nueva" placeholder="ej. 400"></div>
+          <div class="field"><label>Pago por hora</label><input type="number" id="sit-tarifa-pago-nueva" placeholder="ej. 280"></div>
+        </div>
+        <button type="button" class="smallbtn" onclick="guardarTarifaFamiliaDesdeSitting()">Guardar tarifa y calcular</button>`;
+    } else if(sinTarifaBox){
+      sinTarifaBox.innerHTML = '';
+    }
+    return;
+  }
+  if(sinTarifaBox) sinTarifaBox.innerHTML = '';
   if(!horaIni || !horaFin) return;
   const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
   const mi = agendaMinutos(horaIni);
@@ -916,6 +935,20 @@ function actualizarCobroPagoPorHorario(){
   cobroInput.value = Math.round(cobroH*horasFrac);
   pagoInput.value = Math.round(pagoH*horasFrac);
   calcSitMargen();
+}
+async function guardarTarifaFamiliaDesdeSitting(){
+  if(!sitFamiliaSel) return;
+  const cobroH = Number(document.getElementById('sit-tarifa-cobro-nueva')?.value)||0;
+  const pagoH = Number(document.getElementById('sit-tarifa-pago-nueva')?.value)||0;
+  if(!cobroH && !pagoH){ toast('Cargá al menos uno de los dos valores.', 'bad'); return; }
+  const { error } = await sb.from('familias').update({cobro_hora:cobroH||null, pago_hora:pagoH||null}).eq('id', sitFamiliaSel.id);
+  if(error){ toast('No se pudo guardar la tarifa: '+error.message, 'bad'); return; }
+  sitFamiliaSel.cobro_hora = cobroH||null;
+  sitFamiliaSel.pago_hora = pagoH||null;
+  const enLista = sitFamilias.find(f=>f.id===sitFamiliaSel.id);
+  if(enLista){ enLista.cobro_hora = cobroH||null; enLista.pago_hora = pagoH||null; }
+  toast('Tarifa guardada — esta familia ya calcula sola de acá en más.');
+  actualizarCobroPagoPorHorario();
 }
 
 /* ---- guardar / editar / eliminar ---- */
