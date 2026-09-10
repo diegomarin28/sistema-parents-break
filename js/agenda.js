@@ -6,12 +6,8 @@ let agendaSolicitudes = [];
 let agendaResizeListenerAttached = false;
 let agendaReemplazoNineraSel = null;
 
-function agendaDiasVisibles(){
-  const w = window.innerWidth;
-  if(w < 480) return 2;
-  if(w < 760) return 3;
-  return 7;
-}
+function agendaDiasVisibles(){ return 7; } // la página siempre es de una semana — lo que cambia con el ancho es CÓMO se dibuja (ver agendaEsMobile)
+function agendaEsMobile(){ return window.innerWidth <= 760; }
 function attachAgendaResizeListener(){
   if(agendaResizeListenerAttached) return;
   agendaResizeListenerAttached = true;
@@ -211,25 +207,42 @@ function renderAgendaGrid(){
     d.setDate(d.getDate()+i);
     dias.push(d.toISOString().slice(0,10));
   }
-  wrap.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(${n}, minmax(0,1fr));gap:8px;align-items:start;">
-      ${dias.map(fecha=>{
-        const esHoy = fecha===hoy;
-        const items = agendaSolicitudes
-          .filter(s=>s.fecha===fecha && s.estado!=='cancelada')
-          .sort((a,b)=>(a.hora_inicio||'').localeCompare(b.hora_inicio||''));
-        const d = new Date(fecha+'T00:00:00');
-        const diaLabel = new Intl.DateTimeFormat('es-UY',{weekday:'short'}).format(d).replace('.','');
-        return `<div style="border:1px solid ${esHoy?'var(--accent)':'var(--line)'};border-radius:12px;padding:8px;background:${esHoy?'var(--accent-soft)':'var(--paper)'};">
+  const porDia = dias.map(fecha=>{
+    const esHoy = fecha===hoy;
+    const items = agendaSolicitudes
+      .filter(s=>s.fecha===fecha && s.estado!=='cancelada')
+      .sort((a,b)=>(a.hora_inicio||'').localeCompare(b.hora_inicio||''));
+    const d = new Date(fecha+'T00:00:00');
+    const diaLabel = new Intl.DateTimeFormat('es-UY',{weekday:'short'}).format(d).replace('.','');
+    return { fecha, esHoy, items, numero: d.getDate(), diaLabel };
+  });
+
+  if(agendaEsMobile()){
+    // Celular: lista vertical, un día abajo del otro — entran los 7 sin apretar
+    // columnas ni scrollear al costado, solo hace falta scrollear para abajo.
+    wrap.innerHTML = porDia.map(({fecha, esHoy, items, numero, diaLabel})=>`
+      <div style="margin-bottom:16px;">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid ${esHoy?'var(--accent)':'var(--line)'};">
+          <div style="font-size:12px;font-weight:${esHoy?700:400};color:${esHoy?'var(--accent)':'var(--ink-soft)'};text-transform:uppercase;">${diaLabel}</div>
+          <div style="font-size:17px;font-weight:700;color:${esHoy?'var(--accent)':'var(--ink)'};">${numero}</div>
+        </div>
+        ${items.length ? items.map(s=>renderAgendaTarjetaDia(s)).join('') : '<div class="helper" style="padding:2px 0 4px;">Sin pedidos</div>'}
+      </div>`).join('');
+  } else {
+    // Compu: columnas lado a lado, cada una crece según su propio contenido.
+    wrap.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(${n}, minmax(0,1fr));gap:8px;align-items:start;">
+        ${porDia.map(({fecha, esHoy, items, numero, diaLabel})=>`
+        <div style="border:1px solid ${esHoy?'var(--accent)':'var(--line)'};border-radius:12px;padding:8px;background:${esHoy?'var(--accent-soft)':'var(--paper)'};">
           <div style="text-align:center;margin-bottom:8px;">
             <div style="font-size:11px;color:${esHoy?'var(--accent)':'var(--ink-soft)'};font-weight:${esHoy?700:400};text-transform:uppercase;">${diaLabel}</div>
-            <div style="font-size:16px;font-weight:700;color:${esHoy?'var(--accent)':'var(--ink)'};">${d.getDate()}</div>
+            <div style="font-size:16px;font-weight:700;color:${esHoy?'var(--accent)':'var(--ink)'};">${numero}</div>
           </div>
           ${items.length ? items.map(s=>renderAgendaTarjetaDia(s)).join('') : '<div class="helper" style="text-align:center;padding-top:16px;">Sin pedidos</div>'}
-        </div>`;
-      }).join('')}
-    </div>
-  `;
+        </div>`).join('')}
+      </div>
+    `;
+  }
 }
 function renderAgendaTarjetaDia(s){
   const sinAsignar = !s.ninieras.length || s.ninieras.every(x=>x.estado!=='confirmada');
