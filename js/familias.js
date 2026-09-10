@@ -282,7 +282,7 @@ function verFamilia(id){
       }).join('')}
     </div>` : '';
   abrirModal(`
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;padding-right:30px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;padding-right:44px;">
       <h2 style="margin:0;">${f.nombre}</h2>
       <div style="display:flex;gap:6px;">
         <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({familia_id:f.id, familia_nombre:f.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>

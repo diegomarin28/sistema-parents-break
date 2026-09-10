@@ -234,7 +234,7 @@ async function verNinera(id){
   const fotoHtml = n.foto ? `<img src="${n.foto}" alt="Foto de ${n.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')" onerror="this.style.display='none'">` : '';
   abrirModal(`
     ${fotoHtml}
-    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;padding-right:44px;">
       <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
       <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({ninera_id:n.id, ninera_nombre:n.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
     </div>
