@@ -109,6 +109,15 @@ function fechaHoyLarga(){
 
 let dashChart = null;
 function mananaISO(){ const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
+function diasAtras(n){ const d = new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
+const PENDIENTE_DIAS_ATRAS = 14; // hasta cuántos días hacia atrás se avisa si algo previsto quedó sin registrar
+function rangoFechas(desdeISO, hastaISO){
+  const dias = [];
+  let d = new Date(desdeISO+'T00:00:00');
+  const hasta = new Date(hastaISO+'T00:00:00');
+  while(d <= hasta){ dias.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
+  return dias;
+}
 async function renderDashboard(cont){
   cont.innerHTML = `
     <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1>
@@ -128,7 +137,7 @@ async function renderDashboard(cont){
     <button class="pendbanner" onclick="setModulo('pend-hoy')">
       <div class="pendbanner-left">
         <div class="pendbanner-num" id="dash-pend-num">—</div>
-        <div class="pendbanner-label">Sittings/traslados de hoy sin registrar</div>
+        <div class="pendbanner-label">Sittings/traslados sin registrar</div>
       </div>
       <div class="pendbanner-link">Ver</div>
     </button>
@@ -151,8 +160,8 @@ async function loadDashboardData(){
     sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false}),
-    sb.from('sittings_traslados').select('familia_nombre,ninera_nombre').eq('fecha', todayISO()),
-    sb.from('solicitudes').select('*').eq('fecha', todayISO()).eq('estado','confirmada'),
+    sb.from('sittings_traslados').select('fecha,familia_nombre,ninera_nombre').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()),
+    sb.from('solicitudes').select('*').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()).eq('estado','confirmada'),
     sb.from('solicitudes').select('*').gte('fecha', todayISO()).lte('fecha', mananaISO()).in('estado', ['sin_asignar','pendiente_confirmar']).order('fecha', {ascending:true}),
   ]);
   const okData = r => (r.status==='fulfilled' && !r.value.error) ? (r.value.data||[]) : [];
@@ -228,76 +237,67 @@ async function loadDashboardData(){
     }
   }catch(e){}
 
-  // ---- Agenda de hoy ----
+  // ---- Panel "Sin resolver · hoy y mañana" ----
   const box = document.getElementById('agenda');
-  let agendaItems = [];
   try{
-    const asigError = asigR.status==='fulfilled' ? asigR.value.error : asigR.reason;
-    if(asigError){ if(box) box.innerHTML = errBox(asigError); }
-    else{
-      const ninTipos = okData(ninierasR);
-      const data = okData(asigR);
-      const tipoPorNinera = {};
-      (ninTipos||[]).forEach(n=>{ tipoPorNinera[normaliza(n.nombre)] = n.tipo || 'Niñera'; });
-      const hoy = diaHoy();
-      agendaItems = (data||[]).filter(a => Array.isArray(a.dias) && a.dias.includes(hoy));
-
-      // Solicitudes puntuales (Agenda) confirmadas para hoy — se suman a los horarios fijos.
-      const solicitudesHoy = okData(solR);
-      if(solicitudesHoy.length){
-        const { data: snHoy } = await sb.from('solicitud_ninieras').select('*').in('solicitud_id', solicitudesHoy.map(s=>s.id)).eq('estado','confirmada');
-        const porSol = {};
-        (snHoy||[]).forEach(r=>{ (porSol[r.solicitud_id] ||= []).push(r); });
-        solicitudesHoy.forEach(s=>{
-          (porSol[s.id]||[]).forEach(n=>{
-            agendaItems.push({ ninera_nombre: n.ninera_nombre, hora_inicio: s.hora_inicio, hora_fin: s.hora_fin, familias: {nombre: s.familia_nombre}, _tipo: s.tipo });
-          });
-        });
-      }
-      agendaItems.sort((a,b)=> (a.hora_inicio||'').localeCompare(b.hora_inicio||''));
-
-      // El usuario puede haber navegado a otro módulo mientras esperábamos estas
-      // consultas — si el contenedor de la agenda ya no está en la pantalla,
-      // no hay nada más para hacer acá (evita el error "null.innerHTML").
-      if(!box) return;
-
-      // Lo que se ve en la tarjeta ya no es la agenda completa de hoy (redundante
-      // con la pantalla de Agenda) — ahora muestra solo lo que necesita una
-      // decisión: sittings de hoy y mañana que todavía no tienen niñera
-      // confirmada. agendaItems (arriba) sigue existiendo tal cual para
-      // alimentar el banner de "Pendiente de hoy" — no se toca.
-      const sinResolver = okData(solSinResolverR);
-      if(!sinResolver.length){
-        box.innerHTML = '<div class="empty">Todo lo de hoy y mañana ya tiene niñera confirmada!</div>';
-      } else {
-        const hoyStr = todayISO();
-        const filas = sinResolver.map(s=>{
-          const esHoy = s.fecha===hoyStr;
-          const horario = s.hora_inicio ? `${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}` : 'Sin horario';
-          const estadoTxt = s.estado==='pendiente_confirmar' ? 'Invitación enviada, sin confirmar' : 'Sin niñera invitada';
-          return `
-          <div class="agendarow" style="cursor:pointer;" onclick="setModulo('agenda')">
-            <div class="agendatime">${esHoy?'Hoy':'Mañana'} · ${horario}</div>
-            <div class="agendaicon ${s.tipo==='traslado'?'traslado':'sitting'}">${s.tipo==='traslado'?ICONS.sittings:ICONS.ninieras}</div>
-            <div class="agendabody">
-              <div><b>${s.familia_nombre}</b></div>
-              <div class="agendatype">${estadoTxt}</div>
-            </div>
-          </div>`;
-        });
-        box.innerHTML = `<div class="timeline">${filas.join('')}</div>`;
-      }
+    if(!box) return;
+    const sinResolver = okData(solSinResolverR);
+    if(!sinResolver.length){
+      box.innerHTML = '<div class="empty">Todo lo de hoy y mañana ya tiene niñera confirmada.</div>';
+    } else {
+      const hoyStr = todayISO();
+      const filas = sinResolver.map(s=>{
+        const esHoy = s.fecha===hoyStr;
+        const horario = s.hora_inicio ? `${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}` : 'Sin horario';
+        const estadoTxt = s.estado==='pendiente_confirmar' ? 'Invitación enviada, sin confirmar' : 'Sin niñera invitada';
+        return `
+        <div class="agendarow" style="cursor:pointer;" onclick="setModulo('agenda')">
+          <div class="agendatime">${esHoy?'Hoy':'Mañana'} · ${horario}</div>
+          <div class="agendaicon ${s.tipo==='traslado'?'traslado':'sitting'}">${s.tipo==='traslado'?ICONS.sittings:ICONS.ninieras}</div>
+          <div class="agendabody">
+            <div><b>${s.familia_nombre}</b></div>
+            <div class="agendatype">${estadoTxt}</div>
+          </div>
+        </div>`;
+      });
+      box.innerHTML = `<div class="timeline">${filas.join('')}</div>`;
     }
   }catch(e){ if(box) box.innerHTML = errBox(e); }
 
-  // ---- Pendiente de hoy (sittings de la agenda sin registrar) ----
+  // ---- Pendiente (sittings/traslados previstos, hasta hoy, sin registrar) ----
+  // Mira hacia atrás PENDIENTE_DIAS_ATRAS días, no solo hoy — si un fijo o un
+  // puntual confirmado de hace unos días quedó sin cargar en Sittings &
+  // traslados, se sigue avisando en vez de perderse apenas pasa el día.
   try{
-    const registrosHoy = okData(hoyR);
-    dashPendientesHoy = agendaItems.filter(a=>{
-      const famN = normaliza(a.familias?.nombre||'');
-      const ninN = normaliza(a.ninera_nombre||'');
-      return !(registrosHoy||[]).some(r => normaliza(r.familia_nombre)===famN && normaliza(r.ninera_nombre)===ninN);
+    const registros = okData(hoyR);
+    const asigTodas = okData(asigR);
+    const solicitudesConfirmadas = okData(solR);
+    const registradosSet = new Set((registros||[]).map(r=>r.fecha+'|'+normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
+
+    const previstos = [];
+    rangoFechas(diasAtras(PENDIENTE_DIAS_ATRAS), todayISO()).forEach(fechaISO=>{
+      const diaSemana = diaDeFecha(fechaISO);
+      (asigTodas||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana)).forEach(a=>{
+        previstos.push({ fecha: fechaISO, ninera_nombre: a.ninera_nombre, familia_nombre: a.familias?.nombre||'(familia)', hora_inicio: a.hora_inicio, hora_fin: a.hora_fin });
+      });
     });
+
+    if(solicitudesConfirmadas.length){
+      const { data: snRango } = await sb.from('solicitud_ninieras').select('*').in('solicitud_id', solicitudesConfirmadas.map(s=>s.id)).eq('estado','confirmada');
+      const porSol = {};
+      (snRango||[]).forEach(r=>{ (porSol[r.solicitud_id] ||= []).push(r); });
+      solicitudesConfirmadas.forEach(s=>{
+        (porSol[s.id]||[]).forEach(n=>{
+          previstos.push({ fecha: s.fecha, ninera_nombre: n.ninera_nombre, familia_nombre: s.familia_nombre, hora_inicio: s.hora_inicio, hora_fin: s.hora_fin });
+        });
+      });
+    }
+
+    dashPendientesHoy = previstos.filter(p=>{
+      const key = p.fecha+'|'+normaliza(p.ninera_nombre||'')+'|'+normaliza(p.familia_nombre||'');
+      return !registradosSet.has(key);
+    }).sort((a,b)=> a.fecha.localeCompare(b.fecha));
+
     const el = document.getElementById('dash-pend-num');
     if(el) el.textContent = dashPendientesHoy.length;
   }catch(e){}
@@ -306,14 +306,18 @@ async function loadDashboardData(){
 function renderPendHoy(cont){
   cont.innerHTML = `
     <button class="backbtn" onclick="setModulo(null)">← Volver</button>
-    <h1 class="modtitle">Sittings/traslados de hoy sin registrar</h1>
-    <div class="helper">Comparando la agenda de hoy (armada en Familias) contra lo que ya cargaste en Sittings &amp; traslados.</div>
+    <h1 class="modtitle">Sittings/traslados sin registrar</h1>
+    <div class="helper">Comparando lo previsto de los últimos ${PENDIENTE_DIAS_ATRAS} días (horarios fijos + pedidos puntuales confirmados) contra lo que ya cargaste en Sittings &amp; traslados.</div>
     <div class="card">
-      ${dashPendientesHoy.length ? dashPendientesHoy.map(a=>`
+      ${dashPendientesHoy.length ? dashPendientesHoy.map(a=>{
+        const fechaFmt = new Date(a.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
+        const esHoy = a.fecha===todayISO();
+        return `
         <div class="agendarow" style="border-bottom:1px solid var(--line);">
-          <div><b>${a.ninera_nombre}</b> → ${a.familias?.nombre || 'familia sin nombre'}</div>
+          <div><b>${esHoy?'Hoy':fechaFmt}</b> · ${a.ninera_nombre} → ${a.familia_nombre || 'familia sin nombre'}</div>
           <div style="color:var(--ink-soft);">${a.hora_inicio ? a.hora_inicio.slice(0,5) : ''}${a.hora_fin ? '–'+a.hora_fin.slice(0,5) : ''}</div>
-        </div>`).join('') : '<div class="empty">Ya está todo registrado por hoy.</div>'}
+        </div>`;
+      }).join('') : '<div class="empty">Está todo registrado.</div>'}
     </div>
     <div class="actions"><button class="btn primary" onclick="setModulo('sittings')">Ir a cargar sittings</button></div>
   `;
