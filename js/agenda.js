@@ -859,7 +859,7 @@ function abrirModalRegistroDesdeAgenda(s){
     const cuerpoCancelado = `
     <h2>${s.familia_nombre}</h2>
     <div class="helper">La madre canceló este día — no se le cobró a la familia ni se le pagó a nadie.</div>
-    <button class="btn danger" style="width:100%;margin-top:14px;" onclick="eliminarRegistroDesdeAgenda('${s._regId}')">Deshacer cancelación</button>
+    <button class="btn danger" style="width:100%;margin-top:14px;" onclick="deshacerCancelacionFija('${s._regId}')">Deshacer cancelación</button>
     `;
     abrirModal(cuerpoCancelado);
     return;
@@ -883,6 +883,20 @@ async function eliminarRegistroDesdeAgenda(regId){
   if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
   cerrarModal();
   toast('Registro eliminado.');
+  await cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
+}
+/* Deshacer una cancelación (día puntual de un horario fijo) es distinto de eliminar un
+   registro real: no hay nada que perder (cobro y pago ya eran 0), y el efecto es que ese
+   día vuelve a aparecer sin resolver en la Agenda — por eso el texto de confirmación es
+   otro, en vez de reusar el de eliminarRegistroDesdeAgenda que dice "no se puede deshacer". */
+async function deshacerCancelacionFija(regId){
+  const ok = await confirmarAccion('¿Deshacer la cancelación? Este día puntual vuelve a aparecer sin resolver en la Agenda.', 'Deshacer');
+  if(!ok) return;
+  const { error } = await sb.from('sittings_traslados').delete().eq('id', regId);
+  if(error){ toast('No se pudo deshacer: '+error.message, 'bad'); return; }
+  cerrarModal();
+  toast('Cancelación deshecha — el día vuelve a aparecer sin resolver.');
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
 }
