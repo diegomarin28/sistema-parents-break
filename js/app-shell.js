@@ -165,7 +165,7 @@ async function loadDashboardData(){
     sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false}),
-    sb.from('sittings_traslados').select('fecha,familia_nombre,ninera_nombre').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()),
+    sb.from('sittings_traslados').select('fecha,familia_nombre,ninera_nombre,asignacion_id').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()),
     sb.from('solicitudes').select('*').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()).eq('estado','confirmada'),
     sb.from('solicitudes').select('*').gte('fecha', todayISO()).lte('fecha', mananaISO()).in('estado', ['sin_asignar','pendiente_confirmar']).order('fecha', {ascending:true}),
   ]);
@@ -278,12 +278,13 @@ async function loadDashboardData(){
     const asigTodas = okData(asigR);
     const solicitudesConfirmadas = okData(solR);
     const registradosSet = new Set((registros||[]).map(r=>r.fecha+'|'+normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
+    const registradosPorAsignacion = new Set((registros||[]).filter(r=>r.asignacion_id).map(r=>r.fecha+'|'+r.asignacion_id));
 
     const previstos = [];
     rangoFechas(diasAtras(PENDIENTE_DIAS_ATRAS), todayISO()).forEach(fechaISO=>{
       const diaSemana = diaDeFecha(fechaISO);
       (asigTodas||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana)).forEach(a=>{
-        previstos.push({ fecha: fechaISO, ninera_nombre: a.ninera_nombre, familia_nombre: a.familias?.nombre||'(familia)', hora_inicio: a.hora_inicio, hora_fin: a.hora_fin });
+        previstos.push({ fecha: fechaISO, ninera_nombre: a.ninera_nombre, familia_nombre: a.familias?.nombre||'(familia)', hora_inicio: a.hora_inicio, hora_fin: a.hora_fin, _asigId: a.id });
       });
     });
 
@@ -298,7 +299,12 @@ async function loadDashboardData(){
       });
     }
 
+    // Para horarios fijos, "ya resuelto" se chequea primero por asignacion_id+fecha (no
+    // depende de qué niñera terminó haciéndolo — importa cuando se asignó una niñera
+    // distinta a la original). Los pedidos puntuales (sin _asigId) siguen matcheando por
+    // niñera+familia+fecha como siempre.
     dashPendientesHoy = previstos.filter(p=>{
+      if(p._asigId && registradosPorAsignacion.has(p.fecha+'|'+p._asigId)) return false;
       const key = p.fecha+'|'+normaliza(p.ninera_nombre||'')+'|'+normaliza(p.familia_nombre||'');
       return !registradosSet.has(key);
     }).sort((a,b)=> a.fecha.localeCompare(b.fecha));
