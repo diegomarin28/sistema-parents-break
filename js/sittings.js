@@ -11,6 +11,7 @@ let sitOrigenAuto = true;
 let sitOrigenCoord = null;
 let sitDestinoCoord = null;
 let sitMes = null;
+let sitSemana = null; // lunes de la semana visible en "Registros de..." (el bloque de arriba, separado del historial con filtros)
 
 function currentMonthStr(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function shiftMes(mesStr, delta){ const [y,m] = mesStr.split('-').map(Number); const d = new Date(y, m-1+delta, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
@@ -26,11 +27,36 @@ function monthLabel(mesStr){
   const f = new Intl.DateTimeFormat('es-UY', {month:'long', year:'numeric'}).format(new Date(y, m-1, 1));
   return f.charAt(0).toUpperCase() + f.slice(1);
 }
+/* Semana calendario (lunes a domingo) para el bloque "Registros de..." — separado del mes
+   que sigue usando el resto de la pantalla (Historial con filtros, Finanzas). Con los
+   sittings fijos generándose solos, una vista mensual completa se hacía interminable. */
+const SIT_MESES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function primerDiaSemana(fechaISO){
+  const d = new Date(fechaISO+'T00:00:00');
+  const dow = d.getDay(); // 0=domingo … 6=sábado
+  const diff = dow===0 ? -6 : 1-dow;
+  d.setDate(d.getDate()+diff);
+  return d.toISOString().slice(0,10);
+}
+function shiftSemana(semanaStr, delta){
+  const d = new Date(semanaStr+'T00:00:00');
+  d.setDate(d.getDate()+delta*7);
+  return d.toISOString().slice(0,10);
+}
+function weekLabel(semanaStr){
+  const d1 = new Date(semanaStr+'T00:00:00');
+  const d2 = new Date(d1); d2.setDate(d2.getDate()+6);
+  const mismoMes = d1.getMonth()===d2.getMonth();
+  return mismoMes
+    ? `${d1.getDate()}–${d2.getDate()} ${SIT_MESES_CORTO[d1.getMonth()]}`
+    : `${d1.getDate()} ${SIT_MESES_CORTO[d1.getMonth()]} – ${d2.getDate()} ${SIT_MESES_CORTO[d2.getMonth()]}`;
+}
 function findFamilia(nombre){ const n = normaliza(nombre); return sitFamilias.find(f=>normaliza(f.nombre)===n) || null; }
 function findNinera(nombre){ const n = normaliza(nombre); return sitNinieras.find(x=>normaliza(x.nombre)===n) || null; }
 
 async function renderSittings(body){
   sitMes = sitMes || currentMonthStr();
+  sitSemana = sitSemana || primerDiaSemana(todayISO());
   sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
   body.innerHTML = `
     <div style="display:flex;justify-content:center;margin-bottom:16px;">
@@ -38,9 +64,9 @@ async function renderSittings(body){
     </div>
     <div class="mesbar">
       <div class="mesnav">
-        <button onclick="cambiarSitMesRel(-1)" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
-        <div class="mesnav-label" id="sit-mes-label">${monthLabel(sitMes)}</div>
-        <button onclick="cambiarSitMesRel(1)" aria-label="Mes siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
+        <button onclick="cambiarSitSemanaRel(-1)" aria-label="Semana anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="mesnav-label" id="sit-semana-label">${weekLabel(sitSemana)}</div>
+        <button onclick="cambiarSitSemanaRel(1)" aria-label="Semana siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
       </div>
       <button class="smallbtn" onclick="exportarSitCSV()">Exportar CSV</button>
     </div>
@@ -1049,6 +1075,11 @@ async function eliminarSitting(id){
 }
 
 /* ---- lista del mes / resumen / export ---- */
+function cambiarSitSemanaRel(delta){
+  sitSemana = shiftSemana(sitSemana, delta);
+  const lbl = document.getElementById('sit-semana-label'); if(lbl) lbl.textContent = weekLabel(sitSemana);
+  cargarSitLista();
+}
 function cambiarSitMesRel(delta){
   sitMes = shiftMes(sitMes, delta);
   const lbl = document.getElementById('sit-mes-label'); if(lbl) lbl.textContent = monthLabel(sitMes);
@@ -1059,22 +1090,22 @@ async function cargarSitLista(){
   const summary = document.getElementById('sit-summary');
   if(!wrap) return;
   wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
-  const [y,m] = sitMes.split('-').map(Number);
-  const desde = `${sitMes}-01`;
-  const hasta = new Date(y, m, 1).toISOString().slice(0,10);
+  const desde = sitSemana;
+  const finD = new Date(sitSemana+'T00:00:00'); finD.setDate(finD.getDate()+7);
+  const hasta = finD.toISOString().slice(0,10);
   const { data, error } = await sb.from('sittings_traslados').select('*').eq('cancelado', false).gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
   if(error){ wrap.innerHTML = errBox(error); return; }
   sitItems = data || [];
   const cobrado = sitItems.reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
   const pagado = sitItems.reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
   summary.innerHTML = `
-    <div class="summarycard"><div class="statlabel">Cobrado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${cobrado}</div></div>
-    <div class="summarycard"><div class="statlabel">Pagado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${pagado}</div></div>
+    <div class="summarycard"><div class="statlabel">Cobrado esta semana</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${cobrado}</div></div>
+    <div class="summarycard"><div class="statlabel">Pagado esta semana</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${pagado}</div></div>
     <div class="summarycard" style="border-left:3px solid var(--good);"><div class="statlabel">Margen</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${cobrado-pagado}</div></div>
   `;
-  if(!sitItems.length){ wrap.innerHTML = `<div class="empty">No hay registros cargados en ${monthLabel(sitMes)} todavía.</div>`; return; }
+  if(!sitItems.length){ wrap.innerHTML = `<div class="empty">No hay registros cargados en la semana del ${weekLabel(sitSemana)} todavía.</div>`; return; }
   wrap.innerHTML = `
-    <h2>Registros de ${monthLabel(sitMes)}</h2>
+    <h2>Registros de la semana del ${weekLabel(sitSemana)}</h2>
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Tipo</th><th>Familia</th><th>Niñera</th><th>Cobro</th><th>Pago</th><th>Margen</th><th></th></tr></thead>
     <tbody>${sitItems.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
@@ -1084,9 +1115,9 @@ async function cargarSitLista(){
   `;
 }
 function exportarSitCSV(){
-  if(!sitItems.length){ toast('No hay registros para exportar en este mes.', 'bad'); return; }
+  if(!sitItems.length){ toast('No hay registros para exportar en esta semana.', 'bad'); return; }
   const headers = ['Fecha','Tipo','Registró','Familia','Niñera','Hora inicio','Hora fin','Km','Origen','Destino','Cobro familia','Pago niñera','Margen','Notas'];
   const rows = sitItems.map(r=>[r.fecha, r.tipo, r.registrado_por, r.familia_nombre, r.ninera_nombre, r.hora_inicio||'', r.hora_fin||'', r.km||'', r.origen||'', r.destino||'', r.cobro_familia||0, r.pago_ninera||0, (Number(r.cobro_familia)||0)-(Number(r.pago_ninera)||0), (r.notas||'').replace(/\n/g,' ')]);
-  descargarCSV(headers, rows, `sittings_traslados_${sitMes}.csv`);
+  descargarCSV(headers, rows, `sittings_traslados_semana_${sitSemana}.csv`);
 }
 
