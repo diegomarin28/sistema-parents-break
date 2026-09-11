@@ -34,6 +34,8 @@ async function boot(){
   }
   const { data } = await sb.auth.getSession();
   session = data.session;
+  // Autogenera los sittings de horarios fijos para esta semana si todavía no existen — silencioso, no bloquea el boot.
+  if(session && typeof autogenerarSittingsFijosSemana === 'function') autogenerarSittingsFijosSemana();
   sb.auth.onAuthStateChange((event, s) => {
     session = s;
     if(event === 'SIGNED_IN'){
