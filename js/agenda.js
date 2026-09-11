@@ -145,23 +145,31 @@ async function cargarAgendaSolicitudes(){
   if(error){ if(wrap) wrap.innerHTML = errBox(error); return; }
   const puntuales = (sols||[]).map(s=>({...s, ninieras: s.solicitud_ninieras||[], _fuente:'solicitud'}));
 
-  // Ya registrado en Sittings, por día+niñera+familia (antes era solo niñera+familia, sin día).
+  // Ya resuelto en Sittings para ese día puntual de una asignación fija: se guarda con
+  // asignacion_id+fecha (exacto, no depende de qué niñera terminó haciéndolo — importa cuando
+  // se asignó otra niñera, porque el registro real queda a nombre de la niñera nueva).
+  // El key viejo (fecha+niñera+familia) queda como respaldo para registros previos a este campo.
+  const registradosPorAsignacion = new Set((registros||[]).filter(r=>r.asignacion_id).map(r=>r.fecha+'|'+r.asignacion_id));
   const registradosSet = new Set((registros||[]).map(r=>r.fecha+'|'+normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
 
-  // Horarios fijos: una instancia por cada día visible cuyo día de semana matchee.
+  // Horarios fijos: una instancia por cada día visible cuyo día de semana matchee — salvo que
+  // ese día puntual ya se haya resuelto (sitting normal, reemplazo, o cancelación), en cuyo caso
+  // no se duplica la tarjeta: la tarjeta real la aporta el registro de Sittings.
   const fijas = [];
   for(let i=0;i<n;i++){
     const d = new Date(d1); d.setDate(d.getDate()+i);
     const fechaISO = d.toISOString().slice(0,10);
     const diaSemana = diaDeFecha(fechaISO);
     (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana)).forEach(a=>{
+      const yaResuelto = registradosPorAsignacion.has(fechaISO+'|'+a.id) || registradosSet.has(fechaISO+'|'+normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||''));
+      if(yaResuelto) return;
       fijas.push({
         id: 'asig:'+a.id+'@'+fechaISO,
         fecha: fechaISO,
         _fuente: 'asignacion',
         _raw: a,
         _asigId: a.id,
-        _yaRegistrado: registradosSet.has(fechaISO+'|'+normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||'')),
+        _yaRegistrado: false,
         familia_nombre: a.familias?.nombre || '(familia)',
         tipo: 'sitting',
         hora_inicio: a.hora_inicio,
@@ -188,6 +196,7 @@ async function cargarAgendaSolicitudes(){
     termina_dia_siguiente: r.termina_dia_siguiente || false,
     zona: null,
     cobro_familia: r.cobro_familia,
+    _cancelado: r.cancelado || false,
     estado: 'confirmada',
     ninieras: [{ id:'regninera:'+r.id, ninera_nombre:r.ninera_nombre, estado:'confirmada' }],
   }));
@@ -252,20 +261,24 @@ function renderAgendaFilaMobile(s){
   const sinAsignar = !s.ninieras.length || s.ninieras.every(x=>x.estado!=='confirmada');
   const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : '--:--';
   const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
-  return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;" onclick="abrirModalSolicitud('${s.id}')">
+  const estadoTxt = s._cancelado ? 'Cancelada' : (sinAsignar ? 'Sin asignar' : ninTxt);
+  const estadoColor = s._cancelado ? 'var(--bad)' : (sinAsignar ? 'var(--warn)' : 'var(--good)');
+  return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;${s._cancelado?'opacity:0.6;':''}" onclick="abrirModalSolicitud('${s.id}')">
     <div style="color:var(--ink-soft);font-variant-numeric:tabular-nums;width:38px;flex-shrink:0;">${horaTxt}</div>
     <div style="flex:1;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.familia_nombre}</div>
-    <div style="font-size:11px;font-weight:700;color:${sinAsignar?'var(--warn)':'var(--good)'};flex-shrink:0;">${sinAsignar ? 'Sin asignar' : ninTxt}</div>
+    <div style="font-size:11px;font-weight:700;color:${estadoColor};flex-shrink:0;">${estadoTxt}</div>
   </div>`;
 }
 function renderAgendaTarjetaDia(s){
   const sinAsignar = !s.ninieras.length || s.ninieras.every(x=>x.estado!=='confirmada');
   const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : 'Sin hora';
   const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
-  return `<div style="background:var(--bg);border-radius:8px;padding:7px 8px;margin-bottom:6px;cursor:pointer;font-size:12px;" onclick="abrirModalSolicitud('${s.id}')">
+  const badgeClase = s._cancelado ? 'bad' : (sinAsignar ? 'warn' : 'good');
+  const badgeTxt = s._cancelado ? 'Cancelada' : (sinAsignar ? 'Sin asignar' : ninTxt);
+  return `<div style="background:var(--bg);border-radius:8px;padding:7px 8px;margin-bottom:6px;cursor:pointer;font-size:12px;${s._cancelado?'opacity:0.6;':''}" onclick="abrirModalSolicitud('${s.id}')">
     <div style="font-weight:700;color:var(--ink);margin-bottom:2px;">${s.familia_nombre}</div>
     <div class="helper" style="margin:0 0 4px;">${horaTxt}</div>
-    <span class="badge ${sinAsignar?'warn':'good'}" style="font-size:10.5px;padding:3px 8px;">${sinAsignar ? 'Sin asignar' : ninTxt}</span>
+    <span class="badge ${badgeClase}" style="font-size:10.5px;padding:3px 8px;">${badgeTxt}</span>
   </div>`;
 }
 
@@ -699,6 +712,7 @@ async function registrarSittingFijoDeHoy(id){
     pago_ninera: Math.round(horasFrac*pagoHora),
     cobrado: false, pagado: false,
     notas: 'Sitting fijo — registrado desde Agenda',
+    asignacion_id: a.id,
   });
   if(error){ if(warn) warn.innerHTML = errBox(error); return; }
   cerrarModal();
@@ -712,10 +726,12 @@ function mostrarExcepcionAsignacionFija(id){
   const a = s._raw;
   const fechaTxt = new Date(s.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
   const cuerpo = `
-    <h2 style="margin:0 0 6px;">¿${a.ninera_nombre} no fue el ${fechaTxt} a lo de ${s.familia_nombre}?</h2>
-    <div class="helper" style="margin-bottom:16px;">No se le cobra nada a la familia ni se le paga nada a ${a.ninera_nombre} por este día.</div>
-    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="registrarExcepcionFija('${id}')">No fue nadie ese día</button>
-    <button class="btn primary" style="width:100%;text-align:left;" onclick="mostrarReemplazoFijoHoy('${id}')">Vino otra niñera</button>
+    <h2 style="margin:0 0 6px;">${a.ninera_nombre} no fue el ${fechaTxt} a lo de ${s.familia_nombre}</h2>
+    <div class="helper" style="margin-bottom:16px;">Elegí qué pasó ese día puntual — el resto de los días fijos de esta asignación no se tocan.</div>
+    <button class="btn" style="width:100%;text-align:left;" onclick="registrarExcepcionFija('${id}')">La madre canceló</button>
+    <div class="helper" style="margin:4px 0 14px;">No se le cobra a la familia ni se le paga a nadie por este día.</div>
+    <button class="btn primary" style="width:100%;text-align:left;" onclick="mostrarReemplazoFijoHoy('${id}')">Se asignó otra niñera</button>
+    <div class="helper" style="margin:4px 0 0;">Se le cobra a la familia como siempre — se le paga a la niñera nueva, no a ${a.ninera_nombre}.</div>
     <div id="agenda-fija-reemplazo-box"></div>
   `;
   abrirModal(cuerpo);
@@ -737,13 +753,15 @@ async function registrarExcepcionFija(id){
     pago_ninera: 0,
     cobrado: true,
     pagado: true,
-    notas: `${a.ninera_nombre} no fue — sin reemplazo`,
+    cancelado: true,
+    asignacion_id: a.id,
+    notas: 'La madre canceló este día',
   });
   if(error){ toast('No se pudo registrar: '+error.message, 'bad'); return; }
   cerrarModal();
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
-  toast('Registrado: no fue nadie ese día.');
+  toast('Cancelado: no se cobra ni se paga por este día.');
 }
 /* Reemplazo puntual: otra niñera cubrió el horario fijo ese día. Se registra
    directo su sitting con el cálculo automático de cobro/pago — sin saltar a
@@ -809,6 +827,7 @@ async function confirmarReemplazoFijoHoy(id){
     pago_ninera: Math.round(horasFrac*pagoHora),
     cobrado: false, pagado: false,
     notas: `Reemplazo de ${a.ninera_nombre}`,
+    asignacion_id: a.id,
   });
   if(error){ if(warn) warn.innerHTML = errBox(error); return; }
   cerrarModal();
@@ -836,6 +855,15 @@ function abrirModalRegistroDesdeAgenda(s){
   const horario = s.termina_dia_siguiente
     ? `${(s.hora_inicio||'--:--').slice(0,5)} → +1 día${s.hora_fin?' '+s.hora_fin.slice(0,5):''}`
     : (s.hora_inicio ? (s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5)) : 'Sin horario');
+  if(s._cancelado){
+    const cuerpoCancelado = `
+    <h2>${s.familia_nombre}</h2>
+    <div class="helper">La madre canceló este día — no se le cobró a la familia ni se le pagó a nadie.</div>
+    <button class="btn danger" style="width:100%;margin-top:14px;" onclick="eliminarRegistroDesdeAgenda('${s._regId}')">Deshacer cancelación</button>
+    `;
+    abrirModal(cuerpoCancelado);
+    return;
+  }
   const cuerpo = `
     <h2>${s.familia_nombre}</h2>
     <div class="helper">${s.tipo==='traslado'?'Traslado':'Sitting'} · ${horario} · ya registrado en Sittings &amp; traslados</div>
