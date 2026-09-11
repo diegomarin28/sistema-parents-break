@@ -101,6 +101,41 @@ function restaurarScrollMainarea(valor){
   });
 }
 
+/* ============================================================
+   Lista de cuentas bancarias (columna cuenta_bancaria: text[]).
+   UI repetible para poder cargar más de una cuenta por niñera o familia
+   (ej. cambió de banco, o cobra/paga por dos cuentas distintas) — antes
+   solo se podía guardar una sola.
+   ============================================================ */
+function htmlCuentasBancarias(prefix, cuentas){
+  const lista = Array.isArray(cuentas) ? cuentas.filter(Boolean) : (cuentas ? [cuentas] : []);
+  const filas = lista.length ? lista : [''];
+  return `<div class="field">
+    <label>Cuenta(s) bancaria(s)</label>
+    <div id="${prefix}-cuentas-list">${filas.map(c=>filaCuentaBancaria(c)).join('')}</div>
+    <button class="smallbtn" type="button" onclick="agregarFilaCuentaBancaria('${prefix}')" style="margin-top:6px;">+ Agregar otra cuenta</button>
+  </div>`;
+}
+function filaCuentaBancaria(valor=''){
+  const v = String(valor||'').replace(/"/g,'&quot;');
+  return `<div class="cuentabancaria-row" style="display:flex;gap:6px;margin-bottom:6px;">
+    <input type="text" class="cuentabancaria-input" placeholder="ej. Itaú 1234567" value="${v}" style="flex:1;">
+    <button class="smallbtn danger" type="button" onclick="this.closest('.cuentabancaria-row').remove()">−</button>
+  </div>`;
+}
+function agregarFilaCuentaBancaria(prefix){
+  document.getElementById(prefix+'-cuentas-list').insertAdjacentHTML('beforeend', filaCuentaBancaria());
+}
+function leerCuentasBancarias(prefix){
+  return [...document.querySelectorAll(`#${prefix}-cuentas-list .cuentabancaria-input`)]
+    .map(el=>el.value.trim()).filter(v=>v);
+}
+// Para mostrar en una ficha (view-only): une las cuentas con · , o '—' si no hay ninguna.
+function textoCuentasBancarias(cuentas){
+  const lista = Array.isArray(cuentas) ? cuentas.filter(Boolean) : (cuentas ? [cuentas] : []);
+  return lista.length ? lista.join(' · ') : '—';
+}
+
 function toast(msg, type='good'){
   let stack = document.querySelector('.toaststack');
   if(!stack){ stack = document.createElement('div'); stack.className='toaststack'; document.body.appendChild(stack); }

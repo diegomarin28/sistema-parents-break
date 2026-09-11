@@ -516,7 +516,7 @@ async function cargarPorCobrarPorPagar(){
     const bucket = bucketKeyFecha(r.fecha, frec);
     const info = r.ninera_id ? ninInfoPorId[r.ninera_id] : ninInfoPorNombre[normaliza(r.ninera_nombre)];
     const key = (r.ninera_id||normaliza(r.ninera_nombre))+'|'+bucket;
-    if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, frec, bucket, total:0, ids:[], cuenta:info?.cuenta_bancaria||''};
+    if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, frec, bucket, total:0, ids:[], cuenta:(info?.cuenta_bancaria&&info.cuenta_bancaria.length)?info.cuenta_bancaria.join(' · '):''};
     gruposPagar[key].total += Number(r.pago_ninera)||0;
     gruposPagar[key].ids.push(r.id);
   });
@@ -657,10 +657,13 @@ async function procesarExtractoConciliacion(){
   ]);
   const famPorCuenta = {};
   (fams||[]).forEach(f=>{
-    const d = soloDigitos(f.cuenta_bancaria);
-    if(!d) return;
-    famPorCuenta[d] = f;
-    famPorCuenta[d.replace(/^0+/,'')] = f;
+    const cuentas = Array.isArray(f.cuenta_bancaria) ? f.cuenta_bancaria : (f.cuenta_bancaria ? [f.cuenta_bancaria] : []);
+    cuentas.forEach(cta=>{
+      const d = soloDigitos(cta);
+      if(!d) return;
+      famPorCuenta[d] = f;
+      famPorCuenta[d.replace(/^0+/,'')] = f;
+    });
   });
   const famFrecPorId = {}; (fams||[]).forEach(f=>{ famFrecPorId[f.id] = f.frecuencia_cobro || 'mensual'; });
 

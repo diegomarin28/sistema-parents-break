@@ -238,7 +238,7 @@ async function verNinera(id){
       <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
       <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({ninera_id:n.id, ninera_nombre:n.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
     </div>
-    <div class="fichadl">${rows||'<div>Sin más datos.</div>'}<div><b>Zona</b>${n.zona||'—'}</div><div><b>Teléfono</b>${n.telefono||'—'}</div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${n.cuenta_bancaria||'—'}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+    <div class="fichadl">${rows||'<div>Sin más datos.</div>'}<div><b>Zona</b>${n.zona||'—'}</div><div><b>Teléfono</b>${n.telefono||'—'}</div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${textoCuentasBancarias(n.cuenta_bancaria)}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
     <div id="vn-carsitting"></div>
     <div id="vn-juguetes"></div>
     <div id="vn-incidentes" style="margin-top:18px;"></div>
@@ -329,8 +329,8 @@ function editarNinera(id){
       <div class="field"><label>Nombre</label><input type="text" id="ed-nombre" value="${n.nombre||''}"></div>
       <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${n.telefono||''}"></div>
       <div class="field"><label>Tipo</label><select id="ed-tipo">${tipos.map(t=>`<option ${n.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
-      <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-cuenta" value="${n.cuenta_bancaria||''}"></div>
     </div>
+    ${htmlCuentasBancarias('ed', n.cuenta_bancaria)}
     ${checklistZonas('ed', n.zona)}
     <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
     <div id="ed-extra-fields"></div>
@@ -439,7 +439,7 @@ async function guardarEdicionNinera(id){
     zona: leerZonasChecklist('ed'),
     tipo: document.getElementById('ed-tipo').value,
     foto: ninFotoUrlPendiente,
-    cuenta_bancaria: document.getElementById('ed-cuenta').value,
+    cuenta_bancaria: leerCuentasBancarias('ed'),
     notas: document.getElementById('ed-notas').value,
   };
   const { error } = await sb.from('ninieras').update(cambios).eq('id', id);

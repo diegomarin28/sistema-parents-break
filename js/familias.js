@@ -32,8 +32,8 @@ function abrirModalNuevaFamilia(){
     </div>
     <div class="grid2">
       <div class="field"><label>Dirección</label><input type="text" id="fam-direccion" placeholder="Para sugerir origen en traslados"></div>
-      <div class="field"><label>Cuenta bancaria</label><input type="text" id="fam-cuenta"></div>
     </div>
+    ${htmlCuentasBancarias('fam', [])}
     <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
@@ -47,7 +47,7 @@ async function addFamilia(){
   const fam = { nombre, zona:document.getElementById('fam-zona').value, telefono:document.getElementById('fam-telefono').value,
     cobro_hora:document.getElementById('fam-cobro').value||null, pago_hora:document.getElementById('fam-pago').value||null,
     ninos:document.getElementById('fam-ninos').value, direccion:document.getElementById('fam-direccion').value,
-    cuenta_bancaria:document.getElementById('fam-cuenta').value, notas:document.getElementById('fam-notas').value };
+    cuenta_bancaria:leerCuentasBancarias('fam'), notas:document.getElementById('fam-notas').value };
   const { error } = await sb.from('familias').insert(fam);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   cerrarModal();
@@ -293,7 +293,7 @@ function verFamilia(id){
     ${precioHtml}
     ${f.frecuencia_cobro?`<div class="helper">Frecuencia de cobro: ${f.frecuencia_cobro}</div>`:''}
     ${f.direccion?`<div class="helper">Dirección: ${f.direccion}</div>`:''}
-    ${f.cuenta_bancaria?`<div class="helper">Cuenta: ${f.cuenta_bancaria}</div>`:''}
+    ${f.cuenta_bancaria && f.cuenta_bancaria.length ? `<div class="helper">Cuenta: ${textoCuentasBancarias(f.cuenta_bancaria)}</div>` : ''}
     ${f.notas?`<div class="helper">${f.notas}</div>`:''}
     ${historialHtml}
     <div id="fam-incidentes" style="margin-top:14px;"></div>
@@ -329,13 +329,13 @@ function editarFamilia(id){
       <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="ed-fam-cobro" value="${f.cobro_hora??''}"></div>
       <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="ed-fam-pago" value="${f.pago_hora??''}"></div>
       <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion" value="${f.direccion||''}"></div>
-      <div class="field"><label>Cuenta bancaria</label><input type="text" id="ed-fam-cuenta" value="${f.cuenta_bancaria||''}"></div>
       <div class="field"><label>Frecuencia de cobro</label><select id="ed-fam-frecuencia">
         <option value="diario" ${f.frecuencia_cobro==='diario'?'selected':''}>Diario (puntual)</option>
         <option value="semanal" ${f.frecuencia_cobro==='semanal'?'selected':''}>Semanal</option>
         <option value="mensual" ${(f.frecuencia_cobro||'mensual')==='mensual'?'selected':''}>Mensual</option>
       </select></div>
     </div>
+    ${htmlCuentasBancarias('ed-fam', f.cuenta_bancaria)}
     ${checklistZonas('ed-fam', f.zona)}
     <div class="field"><label>Notas</label><textarea id="ed-fam-notas">${f.notas||''}</textarea></div>
     <div class="confirmbtns">
@@ -352,7 +352,7 @@ async function guardarEdicionFamilia(id){
     pago_hora: document.getElementById('ed-fam-pago').value||null,
     ninos: document.getElementById('ed-fam-ninos').value,
     direccion: document.getElementById('ed-fam-direccion').value,
-    cuenta_bancaria: document.getElementById('ed-fam-cuenta').value,
+    cuenta_bancaria: leerCuentasBancarias('ed-fam'),
     frecuencia_cobro: document.getElementById('ed-fam-frecuencia').value,
     notas: document.getElementById('ed-fam-notas').value,
   };
