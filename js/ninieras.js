@@ -230,7 +230,13 @@ async function cargarCarsittingSeccion(nombre, boxId, tipo, mail){
 async function verNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
   const cd = n.candidatas || {};
-  const rows = FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
+  const edadCalculada = calcularEdad(cd.fecha_nacimiento);
+  // Si hay fecha de nacimiento cargada, la edad calculada pisa al texto viejo ("19 años")
+  // en la lista de campos — así nunca se muestran las dos ni queda la vieja dando vueltas.
+  const rows = FICHA_CAMPOS.filter(f=>cd[f.key] && !(f.key==='edad' && edadCalculada!==null)).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
+  const edadRow = edadCalculada!==null ? `<div><b>Edad</b>${edadCalculada} años</div>` : '';
+  // Aviso si el CV de Canva quedó viejo: cumplió años después de la última vez que se generó.
+  const cvDesactualizado = n.cv_generado_en && edadCalculada!==null && calcularEdad(cd.fecha_nacimiento, n.cv_generado_en) < edadCalculada;
   const fotoHtml = n.foto ? `<img src="${n.foto}" alt="Foto de ${n.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')" onerror="this.style.display='none'">` : '';
   abrirModal(`
     ${fotoHtml}
@@ -238,7 +244,8 @@ async function verNinera(id){
       <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
       <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({ninera_id:n.id, ninera_nombre:n.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
     </div>
-    <div class="fichadl">${rows||'<div>Sin más datos.</div>'}<div><b>Zona</b>${n.zona||'—'}</div><div><b>Teléfono</b>${n.telefono||'—'}</div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${textoCuentasBancarias(n.cuenta_bancaria)}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+    ${cvDesactualizado ? `<div class="warnbox" style="margin-bottom:10px;">Cumplió años desde que se generó el CV — convendría rehacerlo.</div>` : ''}
+    <div class="fichadl">${edadRow}${rows||(edadRow?'':'<div>Sin más datos.</div>')}<div><b>Zona</b>${n.zona||'—'}</div><div><b>Teléfono</b>${n.telefono||'—'}</div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${textoCuentasBancarias(n.cuenta_bancaria)}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
     <div id="vn-carsitting"></div>
     <div id="vn-juguetes"></div>
     <div id="vn-incidentes" style="margin-top:18px;"></div>
@@ -333,6 +340,11 @@ function editarNinera(id){
     ${htmlCuentasBancarias('ed', n.cuenta_bancaria)}
     ${checklistZonas('ed', n.zona)}
     <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
+    <div class="field">
+      <label>Fecha de nacimiento</label>
+      <input type="date" id="ed-fecha-nac" value="${(n.candidatas && n.candidatas.fecha_nacimiento) || ''}">
+      <div class="helper" style="margin:4px 0 0;">Con esto cargado, la edad se calcula sola en todos lados (ficha y CV) — no vuelve a quedar vieja.</div>
+    </div>
     <div id="ed-extra-fields"></div>
     <button class="btn" type="button" style="width:100%;margin-top:10px;" onclick="abrirSelectorCategoriaNinera()">+ Agregar categorías</button>
     <div class="confirmbtns" style="margin-top:18px;">
@@ -447,6 +459,11 @@ async function guardarEdicionNinera(id){
   const extraInputs = [...document.querySelectorAll('#ed-extra-fields [data-campo]')];
   const extra = {};
   extraInputs.forEach(el=>{ extra[el.dataset.campo] = el.value; });
+  // Fecha de nacimiento: campo propio, no es parte del sistema de categorías genérico —
+  // mismo criterio de "mandar null si se borró" que el resto.
+  const fechaNac = document.getElementById('ed-fecha-nac').value;
+  if(fechaNac) extra.fecha_nacimiento = fechaNac;
+  else if(ninEditCandidataCache.fecha_nacimiento) extra.fecha_nacimiento = null;
   // campos que tenían dato al abrir la ficha (ver ninEditCandidataCache) y que se
   // borraron con el botón "−" durante esta edición: hay que mandarlos como null
   // explícitamente, si no Supabase nunca los toca y el dato viejo queda pegado en la base
@@ -498,7 +515,13 @@ function generarMensajeCV(id){
   // (quedan en la ficha/directorio), no van en el CV que ve la familia.
   const datos = [`Nombre: ${n.nombre}`];
   if(n.foto) datos.push(`Foto (URL): ${n.foto}`);
-  FICHA_CAMPOS.forEach(f=>{ if(cd[f.key]) datos.push(`${f.label}: ${cd[f.key]}`); });
+  // Si hay fecha de nacimiento cargada, la edad calculada pisa al texto viejo ("edad") —
+  // así el CV siempre sale con la edad real de hoy, no la que tenía cuando se cargó el dato.
+  const edadCalculada = calcularEdad(cd.fecha_nacimiento);
+  FICHA_CAMPOS.forEach(f=>{
+    if(f.key==='edad' && edadCalculada!==null){ datos.push(`${f.label}: ${edadCalculada} años`); return; }
+    if(cd[f.key]) datos.push(`${f.label}: ${cd[f.key]}`);
+  });
   if(n.notas) datos.push(`Notas: ${n.notas}`);
   const mensaje = `Generame el CV de ${n.nombre} en Canva.
 
@@ -522,10 +545,19 @@ async function copiarMensajeCV(id){
   try{
     await navigator.clipboard.writeText(ta.value);
     toast('Mensaje copiado — pegalo en el chat con Claude.');
+    marcarCvGenerado(id);
   }catch(e){
     ta.select();
     toast('No se pudo copiar automático — seleccioná el texto y copiá a mano.', 'bad');
   }
+}
+// Marca la fecha de hoy como "último CV pedido" para esta niñera — así la ficha puede avisar
+// más adelante si cumple años y el CV queda desactualizado. Se asume optimista: si pidió el
+// mensaje, es porque va a generar el CV ahora — no hace falta que confirme de vuelta.
+async function marcarCvGenerado(id){
+  await sb.from('ninieras').update({ cv_generado_en: new Date().toISOString().slice(0,10) }).eq('id', id);
+  const n = ninierasItems.find(x=>x.id===id);
+  if(n) n.cv_generado_en = new Date().toISOString().slice(0,10);
 }
 function descargarMensajeCV(id){
   const n = ninierasItems.find(x=>x.id===id);
@@ -534,5 +566,6 @@ function descargarMensajeCV(id){
   const blob = new Blob([ta.value], {type:'text/plain;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download = `pedido_cv_${(n?.nombre||'ninera').replace(/\s+/g,'_')}.txt`; a.click(); URL.revokeObjectURL(url);
+  marcarCvGenerado(id);
 }
 

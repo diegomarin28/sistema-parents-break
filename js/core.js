@@ -136,6 +136,20 @@ function textoCuentasBancarias(cuentas){
   return lista.length ? lista.join(' · ') : '—';
 }
 
+// Calcula la edad a partir de una fecha de nacimiento (YYYY-MM-DD), a una fecha de
+// referencia dada (por default hoy). Reemplaza el viejo criterio de guardar "19 años" como
+// texto fijo, que quedaba vieja apenas la persona cumplía años.
+function calcularEdad(fechaNacISO, fechaRefISO){
+  if(!fechaNacISO) return null;
+  const nac = new Date(fechaNacISO+'T00:00:00');
+  const ref = fechaRefISO ? new Date(fechaRefISO+'T00:00:00') : new Date();
+  if(isNaN(nac)) return null;
+  let edad = ref.getFullYear() - nac.getFullYear();
+  const noLlegoAlCumple = (ref.getMonth() < nac.getMonth()) || (ref.getMonth()===nac.getMonth() && ref.getDate() < nac.getDate());
+  if(noLlegoAlCumple) edad--;
+  return edad;
+}
+
 function toast(msg, type='good'){
   let stack = document.querySelector('.toaststack');
   if(!stack){ stack = document.createElement('div'); stack.className='toaststack'; document.body.appendChild(stack); }
