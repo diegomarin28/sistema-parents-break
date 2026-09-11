@@ -3,7 +3,7 @@
 A staffing operations platform built for a real childcare/transport business, replacing a WhatsApp-and-spreadsheets workflow with a single system: candidate intake → structured interviews → active roster → per-family billing, deployed as an installable PWA with zero infrastructure cost.
 
 **Live:** `https://diegomarin28.github.io/sistema-parents-break/`
-**Stack:** Vanilla JS · Supabase (Postgres, Auth, RLS) · GitHub Pages · PWA
+**Stack:** Vanilla JS (13 modules, no build step) · Supabase (Postgres, Auth, RLS, Realtime) · GitHub Pages · PWA
 
 ---
 
@@ -21,29 +21,50 @@ I designed and shipped a system that collapses that into one source of truth, bu
 - **Family & pricing management** — many-to-many relationships between families and sitters, each with its own hourly billing rate vs. hourly payout; margin is computed automatically rather than tracked by hand.
 - **Installable PWA** — manifest + service worker, so non-technical staff get an app-like icon and standalone window on their phone without any app-store distribution overhead.
 - **Auth-gated by default** — every table sits behind Postgres Row Level Security scoped to authenticated staff accounts; there is no client-side-only access control anywhere in the system.
+- **Incident log & live schedule** — a dedicated incidents table (accidents, complaints, other notable events) linked to a sitter, a family, or a specific job, plus a weekly scheduling view that multiple staff can have open at once thanks to Supabase Realtime.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    U[Staff, mobile or desktop] -->|installs as PWA| A[Static frontend\nHTML / CSS / vanilla JS\nno build step]
-    A -->|supabase-js, publishable key| S[(Supabase\nPostgres + PostgREST)]
-    A -->|email/password| Auth[Supabase Auth]
-    Auth -->|JWT| S
-    S --> RLS{Row Level Security\nauthenticated-only policies}
-    A -->|manifest.json + service worker| PWA[Installable app]
-    A -->|hosted on| GH[GitHub Pages]
+U[Staff, mobile or desktop] -->|installs as PWA| A[index.html shell\n+ 13 vanilla JS modules\nno build step]
+A -->|supabase-js, publishable key| S[(Supabase\nPostgres + PostgREST)]
+A -->|email/password| Auth[Supabase Auth]
+Auth -->|JWT| S
+S --> RLS{Row Level Security\nauthenticated-only policies}
+S -->|Realtime updates| A
+A -->|manifest.json + service worker| PWA[Installable app]
+A -->|hosted on| GH[GitHub Pages]
 ```
 
-The frontend is a single static HTML file with no framework and no build pipeline — deliberately. The end users needed to be able to redeploy updates themselves (drag-and-drop a file into GitHub's UI) without a CI pipeline or a `node_modules` folder to explain. All state and business logic live in Postgres, not in the client.
+The frontend has no framework and no build pipeline — deliberately. `index.html` is just the skeleton now: `<head>`, styles, and 13 `<script>` tags loaded in a fixed order. Each script attaches its functions to the global scope rather than using ES modules, since the UI relies on roughly 170 inline `onclick`/`onchange` handlers that call those functions by name, and module scoping would make them invisible from plain HTML. All state and business logic still live in Postgres, not in the client.
+
+Load order matters — `bootstrap.js` boots the app and has to run last:
+
+1. `core.js` — Supabase client, toasts, modals, shared utilities (validation, duplicate-booking checks)
+2. `auth.js` — login
+3. `app-shell.js` — navigation, the daily dashboard view
+4. `finanzas.js` — finance, expenses, margin by family/zone/type
+5. `juguetes.js` — toy/equipment inventory
+6. `agenda.js` — weekly scheduling view, plus the Realtime subscription layer
+7. `contratos.js` — contracts
+8. `marketing.js` — marketing
+9. `postulantes.js` — candidate/HR pipeline
+10. `ninieras.js` — sitters
+11. `familias.js` — families
+12. `sittings.js` — sittings & transport jobs
+13. `bootstrap.js` — app entry point (`boot()`)
+
+This replaced an earlier single-file version once it outgrew what was comfortable to review inside GitHub's web editor. The non-technical staff redeploy workflow — open a file on github.com, edit, commit — stayed exactly the same; it's just scoped to one smaller file at a time instead of one large one.
 
 ## Stack, and why
 
 | Piece | Choice | Why |
 |---|---|---|
-| Frontend | Vanilla JS, no framework | Zero build step; ships as one static file; trivial to redeploy by non-developers |
+| Frontend | Vanilla JS, split into 13 scripts, no framework | Zero build step; each file stays small enough to review and redeploy straight from GitHub's web UI; global scope keeps ~170 inline `onclick` handlers working without ES module boundaries |
 | Backend | Supabase (Postgres + PostgREST + Auth) | Real relational schema and SQL, instant REST API, managed auth — without hand-rolling a server for a project this size |
 | Access control | Postgres Row Level Security | Enforced at the database layer, not the client — the publishable key is safe to ship in public client code because the database itself refuses reads/writes without a valid authenticated session |
+| Live sync | Supabase Realtime | Two non-technical staff can have the same view open at once without overwriting each other's changes |
 | Hosting | GitHub Pages | Free static hosting straight from the repo; no CI needed at this scale |
 | Distribution | PWA (manifest + minimal service worker) | Installable, app-like UX matching actual usage (opened from a phone home screen) without app-store overhead |
 
@@ -51,10 +72,12 @@ The frontend is a single static HTML file with no framework and no build pipelin
 
 ```
 candidatas ──1:N── entrevistas
-    │
-    ├──1:1 (on hire)── ninieras
-    │
+│
+├──1:1 (on hire)── ninieras
+│
 familias ──M:N (asignaciones, with per-pair rates)── ninieras
+│
+incidentes (optional link to ninieras, familias, and a specific sitting)
 ```
 
 **Worth calling out:** the first pass mirrored how the client had been tracking this manually — a candidate got copied into a new record at each pipeline stage (intake sheet → interview sheet → roster sheet). I refactored that into a single `candidatas` table with a `status` enum (`intake → entrevistada → contratada / descartada`) instead, so a person's identity persists through their whole lifecycle rather than being duplicated across stages and risking drift between copies. Interview specifics (scores, red flags, notes) live in a separate `entrevistas` table in a 1:N relationship — that keeps the option open to re-interview someone later without losing prior history, which a flattened single-record model would have made awkward.
@@ -69,9 +92,8 @@ No `npm install`, no build step.
 2. Create a free [Supabase](https://supabase.com) project.
 3. Run [`supabase/schema.sql`](./supabase/schema.sql) against it (SQL editor, or the Supabase CLI).
 4. In Supabase → Authentication, manually create your staff user(s) — there's no self-serve signup by design.
-5. In `index.html`, swap `SUPABASE_URL` / `SUPABASE_KEY` for your project's values. The publishable/anon key is meant to be public client-side; the security boundary is RLS, not the key.
+5. In `js/core.js`, swap `SUPABASE_URL` / `SUPABASE_KEY` for your project's values. The publishable/anon key is meant to be public client-side; the security boundary is RLS, not the key.
 6. Open `index.html` directly in a browser, or point GitHub Pages at the repo root for a stable URL.
-
 
 ## What I'd change next
 
