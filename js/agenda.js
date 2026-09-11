@@ -116,6 +116,58 @@ async function renderAgenda(cont){
   await Promise.all([cargarAgendaBase(), cargarAgendaSolicitudes()]);
 }
 
+/* Genera de antemano el sitting de cada horario fijo para los próximos 7 días (hoy
+   incluido) si todavía no existe uno — así Sittings & traslados ya los muestra como
+   registrados esta semana, sin tener que entrar a Agenda y tocar "Registrar sitting de
+   hoy" día por día. Si el horario fijo no tiene hora_inicio/hora_fin cargados, se
+   saltea (no hay con qué calcular cobro/pago) — se sigue pudiendo cargar a mano.
+   Corre una vez al boot de la app; es idempotente (chequea por asignacion_id+fecha
+   antes de insertar), así que no importa si se llama más de una vez. */
+async function autogenerarSittingsFijosSemana(){
+  try{
+    const hoy = todayISO();
+    const finD = new Date(); finD.setDate(finD.getDate()+6);
+    const finISO = finD.toISOString().slice(0,10);
+    const [{data:asigs}, {data:existentes}] = await Promise.all([
+      sb.from('asignaciones').select('*, familias(nombre, cobro_hora, pago_hora)'),
+      sb.from('sittings_traslados').select('asignacion_id, fecha').gte('fecha', hoy).lte('fecha', finISO).not('asignacion_id', 'is', null),
+    ]);
+    if(!asigs || !asigs.length) return;
+    const existenteSet = new Set((existentes||[]).map(r=>r.fecha+'|'+r.asignacion_id));
+    const filas = [];
+    for(let i=0;i<7;i++){
+      const d = new Date(); d.setDate(d.getDate()+i);
+      const fechaISO = d.toISOString().slice(0,10);
+      const diaSemana = diaDeFecha(fechaISO);
+      asigs.filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana) && a.hora_inicio && a.hora_fin).forEach(a=>{
+        if(existenteSet.has(fechaISO+'|'+a.id)) return;
+        const mi = agendaMinutos(a.hora_inicio.slice(0,5));
+        const mf = agendaMinutos(a.hora_fin.slice(0,5));
+        if(mi==null || mf==null || mf<=mi) return;
+        const horasFrac = (mf-mi)/60;
+        const cobroHora = Number(a.familias?.cobro_hora)||0;
+        const pagoHora = Number(a.familias?.pago_hora)||0;
+        filas.push({
+          tipo: 'sitting',
+          familia_id: a.familia_id,
+          familia_nombre: a.familias?.nombre || '',
+          ninera_id: a.ninera_id || null,
+          ninera_nombre: a.ninera_nombre,
+          fecha: fechaISO,
+          hora_inicio: a.hora_inicio,
+          hora_fin: a.hora_fin,
+          cobro_familia: Math.round(horasFrac*cobroHora),
+          pago_ninera: Math.round(horasFrac*pagoHora),
+          cobrado: false, pagado: false,
+          asignacion_id: a.id,
+          notas: 'Sitting fijo — generado automáticamente',
+        });
+      });
+    }
+    if(filas.length) await sb.from('sittings_traslados').insert(filas);
+  }catch(e){ /* silencioso: si falla, Agenda sigue ofreciendo "Registrar sitting de hoy" igual */ }
+}
+
 async function cargarAgendaBase(){
   const [{data:fams}, {data:nins}] = await Promise.all([
     sb.from('familias').select('id,nombre,zona,telefono,cobro_hora,pago_hora').order('nombre'),
@@ -197,6 +249,7 @@ async function cargarAgendaSolicitudes(){
     zona: null,
     cobro_familia: r.cobro_familia,
     _cancelado: r.cancelado || false,
+    _asignacionId: r.asignacion_id || null,
     estado: 'confirmada',
     ninieras: [{ id:'regninera:'+r.id, ninera_nombre:r.ninera_nombre, estado:'confirmada' }],
   }));
@@ -514,7 +567,13 @@ async function guardarAsignacionFijaNueva(){
   const dias = [...document.querySelectorAll('#agenda-repetir-dias .daybtn.selected')].map(b=>b.dataset.dia);
   if(!dias.length){ warn.innerHTML = '<div class="warnbox">Elegí al menos un día.</div>'; return; }
   const varia = document.getElementById('agenda-repetir-varia').checked;
-  const fam = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(familiaTxt));
+  let fam = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(familiaTxt));
+  if(!fam){
+    const { data: famNueva, error: famError } = await sb.from('familias').insert({nombre: familiaTxt}).select().single();
+    if(famError){ warn.innerHTML = errBox(famError); return; }
+    fam = famNueva;
+    agendaFamilias.push(fam);
+  }
   let filas = [];
   if(varia){
     for(const d of dias){
@@ -872,9 +931,69 @@ function abrirModalRegistroDesdeAgenda(s){
       ${s.cobro_familia ? `<div class="helper">Cobro a la familia: $${Number(s.cobro_familia).toLocaleString('es-UY')}</div>` : ''}
     </div>
     <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="editarRegistroDesdeAgenda('${s._regId}')">Editar este registro</button>
+    ${s._asignacionId ? `<button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionRegistroFijo('${s.id}')">Este día no fue</button>` : ''}
     <button class="btn danger" style="width:100%;" onclick="eliminarRegistroDesdeAgenda('${s._regId}')">Eliminar este registro</button>
   `;
   abrirModal(cuerpo);
+}
+/* "Este día no fue" para un sitting fijo que ya estaba registrado (por ejemplo,
+   autogenerado para esta semana) — actualiza el registro existente en vez de crear
+   uno nuevo, con las mismas dos opciones que en la asignación sin registrar todavía. */
+function mostrarExcepcionRegistroFijo(id){
+  const s = agendaSolicitudes.find(x=>x.id===id);
+  if(!s) return;
+  const fechaTxt = new Date(s.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
+  const nineraActual = s.ninieras[0]?.ninera_nombre || '';
+  const cuerpo = `
+    <h2 style="margin:0 0 6px;">${nineraActual} no fue el ${fechaTxt} a lo de ${s.familia_nombre}</h2>
+    <div class="helper" style="margin-bottom:16px;">Elegí qué pasó ese día puntual — el resto de los días fijos de esta asignación no se tocan.</div>
+    <button class="btn" style="width:100%;text-align:left;" onclick="cancelarRegistroFijoExistente('${s._regId}')">La madre canceló</button>
+    <div class="helper" style="margin:4px 0 14px;">No se le cobra a la familia ni se le paga a nadie por este día.</div>
+    <button class="btn primary" style="width:100%;text-align:left;" onclick="mostrarReemplazoRegistroFijo('${s._regId}')">Se asignó otra niñera</button>
+    <div class="helper" style="margin:4px 0 0;">Se le cobra a la familia como siempre — se le paga a la niñera nueva, no a ${nineraActual}.</div>
+    <div id="agenda-fija-reemplazo-box"></div>
+  `;
+  abrirModal(cuerpo);
+}
+async function cancelarRegistroFijoExistente(regId){
+  const { error } = await sb.from('sittings_traslados').update({
+    cobro_familia: 0, pago_ninera: 0, cobrado: true, pagado: true, cancelado: true, notas: 'La madre canceló este día',
+  }).eq('id', regId);
+  if(error){ toast('No se pudo cancelar: '+error.message, 'bad'); return; }
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
+  toast('Cancelado: no se cobra ni se paga por este día.');
+}
+function mostrarReemplazoRegistroFijo(regId){
+  const box = document.getElementById('agenda-fija-reemplazo-box');
+  if(!box) return;
+  agendaReemplazoNineraSel = null;
+  box.innerHTML = `
+    <div style="height:1px;background:var(--line);margin:14px 0;"></div>
+    <div class="field" style="position:relative;margin-bottom:8px;"><label>¿Quién vino en su lugar?</label>
+    <input type="text" id="agenda-reg-reemplazo-ninera" autocomplete="off" oninput="agendaReemplazoNineraSel=null;">
+    <div id="agenda-reg-reemplazo-ninera-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
+    </div>
+    <div id="agenda-reg-reemplazo-warn"></div>
+    <button class="btn primary" style="width:100%;" onclick="confirmarReemplazoRegistroFijo('${regId}')">Registrar reemplazo</button>`;
+  setTimeout(()=>attachAutocomplete('agenda-reg-reemplazo-ninera', 'agenda-reg-reemplazo-ninera-dropdown', ()=>agendaNinierasBase, (o)=>{ agendaReemplazoNineraSel = o; }), 20);
+}
+async function confirmarReemplazoRegistroFijo(regId){
+  const warn = document.getElementById('agenda-reg-reemplazo-warn');
+  const nineraTxt = document.getElementById('agenda-reg-reemplazo-ninera')?.value.trim();
+  if(!nineraTxt){ if(warn) warn.innerHTML = '<div class="warnbox">Elegí quién vino en su lugar.</div>'; return; }
+  const nineraSel = agendaReemplazoNineraSel && normaliza(agendaReemplazoNineraSel.nombre)===normaliza(nineraTxt) ? agendaReemplazoNineraSel : null;
+  const { error } = await sb.from('sittings_traslados').update({
+    ninera_id: nineraSel?.id || null,
+    ninera_nombre: nineraTxt,
+    notas: 'Reemplazo',
+  }).eq('id', regId);
+  if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+  actualizarAgendaBadge();
+  toast('Reemplazo registrado.');
 }
 async function eliminarRegistroDesdeAgenda(regId){
   const ok = await confirmarAccion('¿Eliminar este registro? No se puede deshacer.');
