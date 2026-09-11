@@ -77,7 +77,7 @@ let sitHistMostrar = 10; // cuántas filas se ven de una — separado de cuánta
 const SIT_HIST_PAGE = 200;
 async function cargarSitHistorial(){
   const [{data:pagina, count}, {data:resenas}, {data:soloFamilias}] = await Promise.all([
-    sb.from('sittings_traslados').select('*', {count:'exact'}).order('fecha', {ascending:false}).range(0, SIT_HIST_PAGE-1),
+    sb.from('sittings_traslados').select('*', {count:'exact'}).eq('cancelado', false).order('fecha', {ascending:false}).range(0, SIT_HIST_PAGE-1),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
     sb.from('sittings_traslados').select('familia_nombre'), // solo esta columna: liviano aunque la tabla crezca, así el filtro de familia siempre tiene todas las opciones
   ]);
@@ -116,7 +116,7 @@ async function cargarSitHistorialMas(){
   if(sitHistLoadingMore || sitHistItems.length>=sitHistTotal) return;
   sitHistLoadingMore = true;
   renderSitHistorial();
-  const { data } = await sb.from('sittings_traslados').select('*').order('fecha', {ascending:false}).range(sitHistOffset, sitHistOffset+SIT_HIST_PAGE-1);
+  const { data } = await sb.from('sittings_traslados').select('*').eq('cancelado', false).order('fecha', {ascending:false}).range(sitHistOffset, sitHistOffset+SIT_HIST_PAGE-1);
   sitHistItems = sitHistItems.concat(data||[]);
   sitHistOffset = sitHistItems.length;
   sitHistLoadingMore = false;
@@ -157,7 +157,7 @@ async function renderSitHistorialCustom(){
   const tipoF = document.getElementById('sithist-tipo')?.value||'';
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Buscando…</div>';
   const data = await sbLeer(
-    sb.from('sittings_traslados').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
+    sb.from('sittings_traslados').select('*').eq('cancelado', false).gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
     'los registros de ese período', []
   );
   let items = data || [];
@@ -1062,7 +1062,7 @@ async function cargarSitLista(){
   const [y,m] = sitMes.split('-').map(Number);
   const desde = `${sitMes}-01`;
   const hasta = new Date(y, m, 1).toISOString().slice(0,10);
-  const { data, error } = await sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
+  const { data, error } = await sb.from('sittings_traslados').select('*').eq('cancelado', false).gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
   if(error){ wrap.innerHTML = errBox(error); return; }
   sitItems = data || [];
   const cobrado = sitItems.reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
