@@ -601,6 +601,39 @@ async function abrirModalAsignar(solicitudId){
   tier1.sort((a,b)=>b.veces-a.veces);
   tier3.sort((a,b)=>(b.total-a.total) || a.nombre.localeCompare(b.nombre));
 
+  if(s.tipo==='traslado'){
+    // Traslado: ya está decidido quién lo hace (no hace falta invitar a varias y esperar
+    // respuesta) -- se elige directo, se ve/ajusta cuánto le corresponde a ella, y se
+    // guarda con todo asignado de una: familia, niñera y su pago.
+    if(!tarifaTrasladoConfig) await cargarTarifaTrasladoConfig();
+    const margenNinera = Number(tarifaTrasladoConfig?.margen_ninera)||0;
+    const pagoSugerido = s.cobro_familia ? redondearAbajo50(Number(s.cobro_familia) * (1 - margenNinera)) : 0;
+    const filaSel = (n, sub) => `
+      <label class="agenda-ninera-pick">
+        <input type="radio" name="agenda-traslado-ninera" value="${n.id}" data-nombre="${n.nombre}" onchange="onAgendaTrasladoNineraSel(${pagoSugerido})">
+        <div><b>${n.nombre}</b><div class="helper" style="margin:0;">${sub}</div></div>
+      </label>`;
+    const html = `
+      <h2>Asignar niñera al traslado</h2>
+      <div class="helper">${s.familia_nombre} · ${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}${s.zona?' · '+s.zona:''}${s.cobro_familia?` · Cobro a familia $${Number(s.cobro_familia).toLocaleString('es-UY')}`:''}</div>
+      ${tier1.length ? `<div class="agenda-tier-label">Ya trabajaron con esta familia</div>${tier1.map(n=>filaSel(n, `${n.veces} vez${n.veces===1?'':'es'}`)).join('')}` : ''}
+      ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>filaSel(n, 'Cubre la zona')).join('')}` : ''}
+      ${!tier1.length && !tier2.length ? '<div class="helper">Nadie con historial o zona coincidente todavía — mostrando el resto del equipo.</div>' : ''}
+      <button type="button" class="smallbtn" style="margin:6px 0;" onclick="document.getElementById('agenda-tier3').style.display='block';this.style.display='none';">+ Niñeras</button>
+      <div id="agenda-tier3" style="display:${(!tier1.length && !tier2.length) ? 'block' : 'none'};">
+        <div class="agenda-tier-label">Resto del equipo</div>
+        ${tier3.map(n=>filaSel(n, `${n.total} sitting${n.total===1?'':'s'} en total`)).join('')}
+      </div>
+      <div id="agenda-traslado-pago-wrap" style="display:none;margin-top:10px;">
+        <div class="field"><label>Pago a la niñera</label><div class="moneyfield"><input type="number" id="agenda-traslado-pago" oninput="marcarCampoEditadoManual('agenda-traslado-pago')"></div></div>
+        <div id="agenda-asignar-warn"></div>
+        <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarAsignacionTraslado('${s.id}')">Guardar asignación</button>
+      </div>
+    `;
+    abrirModal(html);
+    return;
+  }
+
   const fila = (n, sub) => `
     <label class="agenda-ninera-pick">
       <input type="checkbox" value="${n.id}" data-nombre="${n.nombre}">
@@ -622,6 +655,33 @@ async function abrirModalAsignar(solicitudId){
     <button class="btn primary" style="width:100%;margin-top:10px;" onclick="guardarAsignacion('${s.id}')">Invitar por WhatsApp</button>
   `;
   abrirModal(html);
+}
+function onAgendaTrasladoNineraSel(pagoSugerido){
+  const wrap = document.getElementById('agenda-traslado-pago-wrap');
+  const pagoInput = document.getElementById('agenda-traslado-pago');
+  if(!wrap || !pagoInput) return;
+  wrap.style.display = '';
+  if(!pagoInput.dataset.tocadoManual){ pagoInput.value = pagoSugerido; marcarCampoSugerido('agenda-traslado-pago'); }
+}
+async function guardarAsignacionTraslado(solicitudId){
+  const sel = document.querySelector('input[name="agenda-traslado-ninera"]:checked');
+  const warn = document.getElementById('agenda-asignar-warn');
+  if(!sel){ warn.innerHTML = '<div class="warnbox">Elegí una niñera.</div>'; return; }
+  const s = agendaSolicitudes.find(x=>x.id===solicitudId);
+  const choque = chequearDobleReservaAgenda(sel.dataset.nombre, s?.hora_inicio, s?.hora_fin, solicitudId);
+  if(!(await avisarSiDobleReserva(choque, sel.dataset.nombre, 'Asignar igual'))) return;
+  const pago = Number(document.getElementById('agenda-traslado-pago').value)||0;
+  const { error } = await sb.from('solicitud_ninieras').insert({
+    solicitud_id: solicitudId, ninera_id: sel.value, ninera_nombre: sel.dataset.nombre,
+    estado: 'confirmada', pago_ninera: pago,
+  });
+  if(error){ warn.innerHTML = errBox(error); return; }
+  await sbGuardar(sb.from('solicitudes').update({estado:'pendiente_confirmar'}).eq('id', solicitudId), 'la solicitud');
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+  abrirModalSolicitud(solicitudId);
+  actualizarAgendaBadge();
+  toast('Traslado asignado: familia, niñera y pago quedaron cargados.');
 }
 async function guardarAsignacion(solicitudId){
   const checks = [...document.querySelectorAll('#editmodal input[type=checkbox]:checked')];

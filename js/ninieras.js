@@ -193,13 +193,12 @@ function filtrarNinieras(){
     <div class="person-row">
       <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')"`:''}>${n.foto?`<img src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
-        <div class="name">${n.nombre}</div>
+        <div class="name">${n.nombre}${cvEstaDesactualizado(n) ? ` <span style="color:var(--warn);font-weight:600;font-size:12px;">· Actualizar CV</span>` : ''}</div>
         <div class="meta">${n.zona||'zona s/d'}${(() => { const e = calcularEdad(n.candidatas?.fecha_nacimiento); return e!==null ? ' · '+e+' años' : (n.candidatas?.edad ? ' · '+n.candidatas.edad : ''); })()}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
       </div>
       <div class="badge-slot">
         <span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span>
-        ${!n.candidatas?.fecha_nacimiento ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin fecha de nacimiento</span>` : ''}
-        ${cvEstaDesactualizado(n) ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Actualizar CV</span>` : ''}
+        ${!n.candidatas?.fecha_nacimiento ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin fecha de nac.</span>` : ''}
         ${ninIncidentesCount[normaliza(n.nombre)] ? `<span class="badge bad" style="font-size:10px;padding:2px 8px;">${ninIncidentesCount[normaliza(n.nombre)]} incidente${ninIncidentesCount[normaliza(n.nombre)]===1?'':'s'}</span>` : ''}
       </div>
       <div class="rowbtns">
