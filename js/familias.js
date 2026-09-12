@@ -29,11 +29,12 @@ function abrirModalNuevaFamilia(){
     <div class="grid3">
       <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="fam-cobro"></div>
       <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="fam-pago"></div>
-      <div class="field"><label>Niños (edades)</label><input type="text" id="fam-ninos" placeholder="Ej: 3 y 6 años"></div>
+      <div class="field"><label>Niños (texto libre, opcional si ya cargás hijos abajo)</label><input type="text" id="fam-ninos" placeholder="Ej: 3 y 6 años"></div>
     </div>
     <div class="grid2">
       <div class="field"><label>Dirección</label><input type="text" id="fam-direccion" placeholder="Para sugerir origen en traslados"></div>
     </div>
+    ${htmlHijosFamilia('fam', [])}
     ${htmlCuentasBancarias('fam', [])}
     <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
     <div class="confirmbtns">
@@ -49,8 +50,13 @@ async function addFamilia(){
     cobro_hora:document.getElementById('fam-cobro').value||null, pago_hora:document.getElementById('fam-pago').value||null,
     ninos:document.getElementById('fam-ninos').value, direccion:document.getElementById('fam-direccion').value,
     cuenta_bancaria:leerCuentasBancarias('fam'), notas:document.getElementById('fam-notas').value };
-  const { error } = await sb.from('familias').insert(fam);
+  const { data, error } = await sb.from('familias').insert(fam).select().single();
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  const hijos = leerHijosFamilia('fam');
+  if(hijos.length){
+    const { error: e2 } = await sb.from('hijos_familia').insert(hijos.map((h,i)=>({...h, familia_id:data.id, orden:i})));
+    if(e2) toast('Familia guardada, pero no los hijos: '+e2.message, 'bad');
+  }
   cerrarModal();
   toast('Familia agregada.');
   cargarFamilias();
@@ -69,7 +75,7 @@ async function cargarFamilias(){
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const necesitaNinieras = !ninierasItems.length;
   const [{data:familias, error}, {data:asignaciones}, {data:sittings}, {data:resenas}, ninierasRes] = await Promise.all([
-    sb.from('familias').select('*').order('nombre'),
+    sb.from('familias').select('*, hijos_familia(*)').order('nombre'),
     sb.from('asignaciones').select('*'),
     sb.from('sittings_traslados').select('familia_nombre,ninera_nombre,fecha'),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
@@ -97,7 +103,7 @@ async function cargarFamilias(){
     }
     if(kf && s.fecha && (!famUltimaActividad[kf] || s.fecha > famUltimaActividad[kf])) famUltimaActividad[kf] = s.fecha;
   });
-  familiasItems = familias.map(f => ({...f, asignaciones: (asignaciones||[]).filter(a=>a.familia_id===f.id)}));
+  familiasItems = familias.map(f => ({...f, hijos: (f.hijos_familia||[]).slice().sort((a,b)=>a.orden-b.orden), asignaciones: (asignaciones||[]).filter(a=>a.familia_id===f.id)}));
   renderZonasNuevasPanel();
   // llenar el filtro de zonas agrupando variantes de mayúsculas/tildes/espacios como la misma zona
   const zonaSel = document.getElementById('fam-zonafiltro');
@@ -244,7 +250,7 @@ function renderFamiliasList(){
       <div class="av">${(f.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${f.nombre}</div>
-        <div class="meta">${f.zona||'zona s/d'}${f.ninos?' · niños: '+f.ninos:''}</div>
+        <div class="meta">${f.zona||'zona s/d'}${(() => { const r = resumenHijosFamilia(f.hijos); return r ? ' · niños: '+r : (f.ninos ? ' · niños: '+f.ninos : ''); })()}</div>
       </div>
       <div class="badge-slot">
         ${badge}
@@ -293,10 +299,11 @@ function verFamilia(id){
         <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="editarFamilia('${f.id}')">Editar</button>
       </div>
     </div>
-    <div class="helper">${f.zona||'zona s/d'} ${f.ninos?'· niños: '+f.ninos:''} ${f.telefono?'· '+f.telefono:''}</div>
+    <div class="helper">${f.zona||'zona s/d'} ${f.telefono?'· '+f.telefono:''}</div>
     ${precioHtml}
     ${f.frecuencia_cobro?`<div class="helper">Frecuencia de cobro: ${f.frecuencia_cobro}</div>`:''}
     ${f.direccion?`<div class="helper">Dirección: ${f.direccion}</div>`:''}
+    ${textoHijosFamilia(f.hijos) ? `<div class="helper">Niños:<br>${textoHijosFamilia(f.hijos)}</div>` : (f.ninos ? `<div class="helper">Niños: ${f.ninos}</div>` : '')}
     ${f.cuenta_bancaria && f.cuenta_bancaria.length ? `<div class="helper">Cuenta: ${textoCuentasBancarias(f.cuenta_bancaria)}</div>` : ''}
     ${f.notas?`<div class="helper">${f.notas}</div>`:''}
     ${historialHtml}
@@ -329,7 +336,7 @@ function editarFamilia(id){
     <div class="grid2">
       <div class="field"><label>Nombre</label><input type="text" id="ed-fam-nombre" value="${f.nombre||''}"></div>
       <div class="field"><label>Teléfono</label><input type="tel" id="ed-fam-telefono" value="${f.telefono||''}"></div>
-      <div class="field"><label>Niños (edades)</label><input type="text" id="ed-fam-ninos" value="${f.ninos||''}"></div>
+      <div class="field"><label>Niños (texto viejo, sin fecha exacta)</label><input type="text" id="ed-fam-ninos" value="${f.ninos||''}"></div>
       <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="ed-fam-cobro" value="${f.cobro_hora??''}"></div>
       <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="ed-fam-pago" value="${f.pago_hora??''}"></div>
       <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion" value="${f.direccion||''}"></div>
@@ -339,6 +346,7 @@ function editarFamilia(id){
         <option value="mensual" ${(f.frecuencia_cobro||'mensual')==='mensual'?'selected':''}>Mensual</option>
       </select></div>
     </div>
+    ${htmlHijosFamilia('ed-fam', f.hijos)}
     ${htmlCuentasBancarias('ed-fam', f.cuenta_bancaria)}
     ${checklistZonas('ed-fam', f.zona)}
     <div class="field"><label>Notas</label><textarea id="ed-fam-notas">${f.notas||''}</textarea></div>
@@ -362,6 +370,14 @@ async function guardarEdicionFamilia(id){
   };
   const { error } = await sb.from('familias').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
+  // Hijos: se reemplaza la lista entera (se borran los de antes y se cargan los actuales) --
+  // más simple que ir comparando fila por fila, y el formulario siempre manda la lista completa.
+  await sb.from('hijos_familia').delete().eq('familia_id', id);
+  const hijos = leerHijosFamilia('ed-fam');
+  if(hijos.length){
+    const { error: e2 } = await sb.from('hijos_familia').insert(hijos.map((h,i)=>({...h, familia_id:id, orden:i})));
+    if(e2){ toast('Se guardó lo demás, pero no los hijos: '+e2.message, 'bad'); }
+  }
   cerrarModal();
   toast('Cambios guardados.');
   const scrollF1 = guardarScrollMainarea();

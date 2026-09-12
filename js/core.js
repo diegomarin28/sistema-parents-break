@@ -183,6 +183,81 @@ async function guardarGruposZona(){
   cerrarModal();
   toast('Grupos de zona guardados.');
 }
+/* ============================================================
+   Hijos de una familia (tabla hijos_familia): antes "Niños (edades)" era un
+   solo texto libre que quedaba viejo apenas cumplían años. Ahora cada hijo
+   es su propia fila, con fecha de nacimiento real (la edad se calcula sola,
+   mismo criterio que en niñeras) y colegio.
+   ============================================================ */
+function filaHijoFamilia(hijo){
+  const h = hijo || {};
+  const q = s => String(s||'').replace(/"/g,'&quot;');
+  const edadActual = edadHijo(h);
+  return `<div class="hijofamilia-row" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;" data-edad-declarada="${h.edad_declarada??''}" data-edad-declarada-en="${h.edad_declarada_en||''}">
+    <div class="grid3" style="margin-bottom:0;">
+      <div class="field" style="margin-bottom:0;"><label>Nombre</label><input type="text" class="hf-nombre" value="${q(h.nombre)}" placeholder="opcional"></div>
+      <div class="field" style="margin-bottom:0;"><label>Fecha de nacimiento</label><input type="date" class="hf-fecha-nac" value="${h.fecha_nacimiento||''}" onchange="this.closest('.hijofamilia-row').querySelector('.hf-edad-declarada').disabled = !!this.value;"></div>
+      <div class="field" style="margin-bottom:0;"><label>Colegio</label><input type="text" class="hf-colegio" value="${q(h.colegio)}"></div>
+    </div>
+    <div class="field" style="margin:6px 0 0;">
+      <label>O, si no sabés la fecha exacta: edad ahora mismo${edadActual!==null && !h.fecha_nacimiento ? ` <span class="helper" style="margin:0;">(hoy: ${edadActual} años)</span>` : ''}</label>
+      <input type="number" class="hf-edad-declarada" placeholder="${edadActual!==null && !h.fecha_nacimiento ? 'Cambiar edad a…' : 'Ej: 5'}" min="0" max="30" ${h.fecha_nacimiento ? 'disabled' : ''}>
+      <div class="helper" style="margin:2px 0 0;">Dejalo vacío para no tocarla. Si escribís un número, queda esa edad a partir de hoy y suma un año sola cada 12 meses — como si fuese un reloj.</div>
+    </div>
+    <button type="button" class="smallbtn danger" style="margin-top:6px;" onclick="this.closest('.hijofamilia-row').remove()">Quitar</button>
+  </div>`;
+}
+function htmlHijosFamilia(prefix, hijos){
+  const lista = hijos && hijos.length ? hijos : [];
+  return `<div class="field">
+    <label>Hijos</label>
+    <div id="${prefix}-hijos-list">${lista.map(filaHijoFamilia).join('')}</div>
+    <button class="smallbtn" type="button" onclick="agregarFilaHijoFamilia('${prefix}')" style="margin-top:6px;">+ Agregar hijo</button>
+  </div>`;
+}
+function agregarFilaHijoFamilia(prefix){
+  document.getElementById(prefix+'-hijos-list').insertAdjacentHTML('beforeend', filaHijoFamilia());
+}
+function leerHijosFamilia(prefix){
+  return [...document.querySelectorAll(`#${prefix}-hijos-list .hijofamilia-row`)].map(row=>{
+    const fechaNac = row.querySelector('.hf-fecha-nac').value || null;
+    const edadInput = row.querySelector('.hf-edad-declarada').value;
+    let edad_declarada = row.dataset.edadDeclarada ? Number(row.dataset.edadDeclarada) : null;
+    let edad_declarada_en = row.dataset.edadDeclaradaEn || null;
+    if(fechaNac){
+      // hay fecha real: la edad declarada ya no hace falta, se limpia para que no quede
+      // dando vueltas una edad vieja de respaldo.
+      edad_declarada = null; edad_declarada_en = null;
+    } else if(edadInput !== ''){
+      // escribieron un número nuevo: el reloj arranca de nuevo hoy.
+      edad_declarada = Number(edadInput);
+      edad_declarada_en = todayISO();
+    }
+    return {
+      nombre: row.querySelector('.hf-nombre').value.trim() || null,
+      fecha_nacimiento: fechaNac,
+      colegio: row.querySelector('.hf-colegio').value.trim() || null,
+      edad_declarada, edad_declarada_en,
+    };
+  }).filter(h=>h.nombre || h.fecha_nacimiento || h.colegio || h.edad_declarada!=null);
+}
+// Para mostrar en una ficha (view-only): "Nombre (edad) · Colegio", uno por línea.
+function textoHijosFamilia(hijos){
+  if(!hijos || !hijos.length) return null;
+  return hijos.map(h=>{
+    const edad = edadHijo(h);
+    const partes = [h.nombre || 'Hijo/a', edad!==null ? `${edad} años` : null, h.colegio || null].filter(Boolean);
+    return partes.join(' · ');
+  }).join('<br>');
+}
+// Versión compacta en una sola línea, para la lista (ej. "Juan (5 años), Ana (8 años)").
+function resumenHijosFamilia(hijos){
+  if(!hijos || !hijos.length) return null;
+  return hijos.map(h=>{
+    const edad = edadHijo(h);
+    return edad!==null ? `${h.nombre||'Hijo/a'} (${edad} años)` : (h.nombre||'Hijo/a');
+  }).join(', ');
+}
 function checklistZonas(idPrefix, zonaActual){
   const todas = obtenerTodasLasZonas();
   const actuales = new Set(zonasDe(zonaActual).map(normaliza));
@@ -350,6 +425,31 @@ function calcularEdad(fechaNacISO, fechaRefISO){
   const noLlegoAlCumple = (ref.getMonth() < nac.getMonth()) || (ref.getMonth()===nac.getMonth() && ref.getDate() < nac.getDate());
   if(noLlegoAlCumple) edad--;
   return edad;
+}
+// Cuántos años completos pasaron desde una fecha (mismo criterio que calcularEdad, pero
+// contando años transcurridos en vez de edad respecto a un nacimiento).
+function anosCompletosDesde(fechaISO){
+  if(!fechaISO) return 0;
+  const inicio = new Date(fechaISO+'T00:00:00'), hoy = new Date();
+  if(isNaN(inicio)) return 0;
+  let anos = hoy.getFullYear() - inicio.getFullYear();
+  const noLlegoAlAniversario = (hoy.getMonth() < inicio.getMonth()) || (hoy.getMonth()===inicio.getMonth() && hoy.getDate() < inicio.getDate());
+  if(noLlegoAlAniversario) anos--;
+  return Math.max(0, anos);
+}
+// Edad calculada para alguien de quien no se sabe la fecha de nacimiento, solo la edad que
+// tenía en una fecha conocida (ej. "cuando la cargamos, tenía 5 años") -- le suma los años
+// completos que pasaron desde esa fecha, así se mantiene al día sin saber el cumpleaños real.
+function edadDesdeDeclarada(edadDeclarada, declaradaEnISO){
+  if(edadDeclarada==null || edadDeclarada==='') return null;
+  return Number(edadDeclarada) + anosCompletosDesde(declaradaEnISO);
+}
+// Edad de un hijo: prioriza la fecha de nacimiento real: si no hay, usa la edad declarada
+// (con su fecha de referencia); si no hay ninguna de las dos, no se puede calcular.
+function edadHijo(hijo){
+  const porFecha = calcularEdad(hijo?.fecha_nacimiento);
+  if(porFecha!==null) return porFecha;
+  return edadDesdeDeclarada(hijo?.edad_declarada, hijo?.edad_declarada_en);
 }
 
 function toast(msg, type='good'){
