@@ -208,10 +208,14 @@ function renderFichaOrigen(){
 
 /* ---- Entrevista ---- */
 let entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null };
-function renderEntrevista(body){
+async function renderEntrevista(body){
+  if(!entrevistaPreguntasCache) await cargarEntrevistaPreguntas();
   body.innerHTML = `
     <div class="card">
-      <h2>Datos de la entrevista</h2>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+        <h2 style="margin:0;">Datos de la entrevista</h2>
+        <a href="#" onclick="abrirModalEditarPreguntas();return false;" style="font-size:12.5px;">Editar preguntas de la entrevista</a>
+      </div>
       <div class="grid3">
         <div class="field"><label>Nombre de la candidata</label><input type="text" id="f-nombre"></div>
         <div class="field"><label>Fecha</label><input type="date" id="f-fecha"></div>
@@ -280,23 +284,23 @@ function renderEntrevista(body){
 }
 function renderCompetencias(){
   const cont = document.getElementById('competencias');
-  cont.innerHTML = COMP_PRINCIPALES.map(c => `
-    <div class="card"><h2>${c.titulo}</h2>${c.preguntas.length? c.preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
+  cont.innerHTML = COMP_PRINCIPALES.map(c => { const preguntas = preguntasDe(c.key); return `
+    <div class="card"><h2>${c.titulo}</h2>${preguntas.length? preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
       <textarea placeholder="Notas de la respuesta…" data-notes="${c.key}"></textarea>
       <div class="scorebar" data-scorebar="${c.key}">${[1,2,3,4,5].map(n=>`<div class="scorebtn" data-score="${c.key}:${n}">${n}</div>`).join('')}</div>
       <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div>
-  `).join('');
+  `; }).join('');
   bindCompetenciaHandlers(cont);
 }
 function renderCompetenciasFinales(){
   const cont = document.getElementById('competencias-finales');
   if(!cont) return;
-  cont.innerHTML = COMP_FINALES.map(c => `
-    <div class="card"><h2>${c.titulo}</h2>${c.preguntas.length? c.preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
+  cont.innerHTML = COMP_FINALES.map(c => { const preguntas = preguntasDe(c.key); return `
+    <div class="card"><h2>${c.titulo}</h2>${preguntas.length? preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
       <textarea placeholder="Notas de la respuesta…" data-notes="${c.key}"></textarea>
       <div class="scorebar" data-scorebar="${c.key}">${[1,2,3,4,5].map(n=>`<div class="scorebtn" data-score="${c.key}:${n}">${n}</div>`).join('')}</div>
       <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div>
-  `).join('');
+  `; }).join('');
   bindCompetenciaHandlers(cont);
 }
 function bindCompetenciaHandlers(cont){

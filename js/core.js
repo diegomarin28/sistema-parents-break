@@ -788,6 +788,80 @@ const COMPETENCIAS = [
 const COMP_FINALES_KEYS = ['presentacion','comunicacion'];
 const COMP_PRINCIPALES = COMPETENCIAS.filter(c=>!COMP_FINALES_KEYS.includes(c.key));
 const COMP_FINALES = COMPETENCIAS.filter(c=>COMP_FINALES_KEYS.includes(c.key));
+// Preguntas de cada competencia: antes vivían fijas en COMPETENCIAS.preguntas, ahora se
+// pueden agregar/editar/borrar desde la app (tabla entrevista_preguntas). Si todavía no
+// cargó nada de la base, se usa lo que venía por default en COMPETENCIAS como respaldo.
+let entrevistaPreguntasCache = null;
+async function cargarEntrevistaPreguntas(){
+  const { data } = await sb.from('entrevista_preguntas').select('*').order('orden');
+  entrevistaPreguntasCache = data || [];
+  return entrevistaPreguntasCache;
+}
+function preguntasDe(competenciaKey){
+  if(entrevistaPreguntasCache){
+    return entrevistaPreguntasCache.filter(p=>p.competencia_key===competenciaKey).map(p=>p.texto);
+  }
+  return COMPETENCIAS.find(c=>c.key===competenciaKey)?.preguntas || [];
+}
+function abrirModalEditarPreguntas(){
+  const porCompetencia = key => (entrevistaPreguntasCache||[]).filter(p=>p.competencia_key===key).sort((a,b)=>a.orden-b.orden);
+  const bloque = c => `
+    <div style="margin-bottom:14px;">
+      <div style="font-weight:600;margin-bottom:6px;">${c.titulo}</div>
+      <div class="epregunta-list" data-competencia="${c.key}">
+        ${porCompetencia(c.key).map(p=>`
+          <div class="epregunta-row" data-id="${p.id}" style="display:flex;gap:6px;margin-bottom:6px;">
+            <input type="text" class="ep-texto" value="${(p.texto||'').replace(/"/g,'&quot;')}" style="flex:1;">
+            <button type="button" class="smallbtn danger" onclick="this.closest('.epregunta-row').remove()">Quitar</button>
+          </div>`).join('')}
+      </div>
+      <button type="button" class="smallbtn" onclick="agregarFilaPreguntaEntrevista('${c.key}')">+ Agregar pregunta</button>
+    </div>`;
+  const html = `
+    <h2>Editar preguntas de la entrevista</h2>
+    <div class="helper">Se usan en la ficha de entrevista, agrupadas por competencia. Usá ¿...? en las que sean preguntas de verdad.</div>
+    ${COMPETENCIAS.filter(c=>!COMP_FINALES_KEYS.includes(c.key)).map(bloque).join('')}
+    <div id="epreguntas-warn"></div>
+    <button class="btn primary" style="width:100%;" onclick="guardarPreguntasEntrevista()">Guardar</button>
+  `;
+  abrirModal(html);
+}
+function agregarFilaPreguntaEntrevista(key){
+  const lista = document.querySelector(`.epregunta-list[data-competencia="${key}"]`);
+  lista.insertAdjacentHTML('beforeend', `<div class="epregunta-row" data-id="" style="display:flex;gap:6px;margin-bottom:6px;">
+    <input type="text" class="ep-texto" placeholder="¿...?" style="flex:1;">
+    <button type="button" class="smallbtn danger" onclick="this.closest('.epregunta-row').remove()">Quitar</button>
+  </div>`);
+}
+async function guardarPreguntasEntrevista(){
+  const warn = document.getElementById('epreguntas-warn');
+  const idsVistos = [];
+  for(const lista of document.querySelectorAll('.epregunta-list')){
+    const key = lista.dataset.competencia;
+    const filas = [...lista.querySelectorAll('.epregunta-row')];
+    for(let i=0;i<filas.length;i++){
+      const texto = filas[i].querySelector('.ep-texto').value.trim();
+      if(!texto) continue;
+      const id = filas[i].dataset.id;
+      if(id){
+        const { error } = await sb.from('entrevista_preguntas').update({texto, orden:i}).eq('id', id);
+        if(error){ warn.innerHTML = errBox(error); return; }
+        idsVistos.push(id);
+      } else {
+        const { data, error } = await sb.from('entrevista_preguntas').insert({competencia_key:key, texto, orden:i}).select().single();
+        if(error){ warn.innerHTML = errBox(error); return; }
+        idsVistos.push(data.id);
+      }
+    }
+  }
+  const idsPrevios = (entrevistaPreguntasCache||[]).map(p=>p.id);
+  for(const id of idsPrevios.filter(id=>!idsVistos.includes(id))){ await sb.from('entrevista_preguntas').delete().eq('id', id); }
+  await cargarEntrevistaPreguntas();
+  cerrarModal();
+  if(typeof renderCompetencias==='function' && document.getElementById('competencias')) renderCompetencias();
+  if(typeof renderCompetenciasFinales==='function' && document.getElementById('competencias-finales')) renderCompetenciasFinales();
+  toast('Preguntas guardadas.');
+}
 const REDFLAGS = [
   {key:'tarde', texto:'Llegó tarde a la entrevista sin avisar', critico:false},
   {key:'malhabla', texto:'Habla mal de familias o trabajos anteriores sin matices', critico:false},
