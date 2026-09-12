@@ -276,6 +276,29 @@ async function eliminarGastoFijo(id){
   if(error){ toast('No se pudo eliminar: '+error.message,'bad'); return; }
   cargarFinanzas();
 }
+// Relaciones fijas (esa niñera trabaja fijo para esa familia): por id y por nombre, para no
+// perder casos viejos sin id cargado. Se usa tanto acá como en Por cobrar/Por pagar.
+function construirEsTrabajoFijo(asigs){
+  const fijoSet = new Set();
+  (asigs||[]).forEach(a=>{
+    if(a.ninera_id && a.familia_id) fijoSet.add(a.ninera_id+'|'+a.familia_id);
+    fijoSet.add(normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||''));
+  });
+  return function esTrabajoFijo(r){
+    if(r.ninera_id && r.familia_id && fijoSet.has(r.ninera_id+'|'+r.familia_id)) return true;
+    return fijoSet.has(normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||''));
+  };
+}
+// Un sitting de un fijo (niñera con relación fija con esa familia) recién se cuenta en
+// Finanzas -- ingresos, gastos, ganancia, margen, movimientos -- cuando la semana en la que
+// cayó ya terminó (domingo pasado). Mientras la semana está en curso, ese número todavía
+// puede seguir creciendo (faltan días de esa misma semana), así que mostrarlo antes daría un
+// total a medio armar. Los sittings puntuales (no fijos) siguen contando al toque, como
+// siempre.
+function filtrarFijosSemanaIncompleta(sits, esTrabajoFijo){
+  const hoy = todayISO();
+  return (sits||[]).filter(r => !esTrabajoFijo(r) || finDeSemanaDesde(lunesDeSemana(r.fecha)) < hoy);
+}
 async function cargarFinanzas(){
   const chartReady = asegurarChart(); // en paralelo, no bloquea el resto de Finanzas
   const summary = document.getElementById('fin-summary');
@@ -284,16 +307,18 @@ async function cargarFinanzas(){
   const [y,m] = finMes.split('-').map(Number);
   const desde = `${finMes}-01`;
   const hasta = new Date(y, m, 1).toISOString().slice(0,10);
-  const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}, {data:famsZona}] = await Promise.all([
+  const [{data:sitsRaw, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}, {data:famsZona}, {data:asigs}] = await Promise.all([
     sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('*').order('concepto'),
     sb.from('familias').select('id,nombre,zona'),
+    sb.from('asignaciones').select('familia_id,ninera_id,ninera_nombre,familias(nombre)'),
   ]);
   // Si se navegó a otro módulo mientras esperábamos estos datos, no seguir —
   // evita escribir sobre una pantalla que ya no está (mismo caso que "Hoy").
   if(!document.getElementById('fin-movs')) return;
   if(e1 || e2 || e3){ movsBox.innerHTML = errBox(e1||e2||e3); return; }
+  const sits = filtrarFijosSemanaIncompleta(sitsRaw, construirEsTrabajoFijo(asigs));
   finSitsDelMes = sits || [];
   finZonaPorFamiliaId = {}; finZonaPorFamiliaNombre = {};
   (famsZona||[]).forEach(f=>{
@@ -487,16 +512,7 @@ async function cargarPorCobrarPorPagar(){
   (fams||[]).forEach(f=>{ famFrecPorId[f.id] = f.frecuencia_cobro || 'mensual'; famFrecPorNombre[normaliza(f.nombre)] = f.frecuencia_cobro || 'mensual'; });
   const ninInfoPorId = {}; const ninInfoPorNombre = {};
   (nins||[]).forEach(n=>{ ninInfoPorId[n.id] = n; ninInfoPorNombre[normaliza(n.nombre)] = n; });
-  // Relaciones fijas (esa niñera trabaja fijo para esa familia): niñera+familia por id y por nombre, para no perder casos viejos sin id cargado.
-  const fijoSet = new Set();
-  (asigs||[]).forEach(a=>{
-    if(a.ninera_id && a.familia_id) fijoSet.add(a.ninera_id+'|'+a.familia_id);
-    fijoSet.add(normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||''));
-  });
-  function esTrabajoFijo(r){
-    if(r.ninera_id && r.familia_id && fijoSet.has(r.ninera_id+'|'+r.familia_id)) return true;
-    return fijoSet.has(normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||''));
-  }
+  const esTrabajoFijo = construirEsTrabajoFijo(asigs);
 
   const gruposCobrar = {};
   (pendCobrar||[]).forEach(r=>{
@@ -507,7 +523,11 @@ async function cargarPorCobrarPorPagar(){
     gruposCobrar[key].total += Number(r.cobro_familia)||0;
     gruposCobrar[key].ids.push(r.id);
   });
-  const listaCobrar = Object.values(gruposCobrar).sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
+  const listaCobrar = Object.values(gruposCobrar)
+    // Igual criterio que en Por pagar: un cobro semanal recién se muestra cuando esa
+    // semana ya terminó, para no mostrar un total que todavía le faltan días por sumar.
+    .filter(g => g.frec!=='semanal' || finDeSemanaDesde(g.bucket) < todayISO())
+    .sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
 
   const gruposPagar = {};
   (pendPagar||[]).forEach(r=>{
@@ -520,7 +540,12 @@ async function cargarPorCobrarPorPagar(){
     gruposPagar[key].total += Number(r.pago_ninera)||0;
     gruposPagar[key].ids.push(r.id);
   });
-  const listaPagar = Object.values(gruposPagar).sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
+  const listaPagar = Object.values(gruposPagar)
+    // Un fijo se agrupa por semana completa -- si esa semana todavía no terminó, mostrar
+    // el total ahora sería mostrar un pago a mitad de armar (le falta lo que falta cobrar
+    // esos días). Se muestra recién cuando termina la semana (domingo pasado).
+    .filter(g => g.frec!=='semanal' || finDeSemanaDesde(g.bucket) < todayISO())
+    .sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
 
   renderPorCobrar(listaCobrar);
   renderPorPagar(listaPagar);
