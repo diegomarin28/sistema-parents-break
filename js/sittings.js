@@ -171,7 +171,7 @@ async function renderSitHistorialCustom(){
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
     <tbody>${items.map(r=>{
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 function renderSitHistorial(){
@@ -209,7 +209,7 @@ function renderSitHistorial(){
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
     <tbody>${itemsMostrados.map(r=>{
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
     }).join('')}</tbody></table></div>
     ${botonMostrarMas}${botonMas}`;
 }
@@ -267,6 +267,10 @@ function sitFormHTML(){
         ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" data-dia="${d}" onclick="this.classList.toggle('selected')">${DIAS_CORTO[d]}</button>`).join('')}
       </div>
     </div>
+    <label class="chk" style="margin:0 0 10px;">
+      <input type="checkbox" id="sit-cancelado" onchange="onSitCanceladoChange()" style="width:auto;">
+      Este día no hubo servicio (canceló la familia o faltó la niñera sin reemplazo) — sin cargo
+    </label>
     <div class="grid2">
       <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-cobro')"></div>
       <div class="field"><label>Pago a niñera</label><input type="number" id="sit-pago" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-pago')"></div>
@@ -342,6 +346,8 @@ function abrirModalSitForm(id=null){
       // toca el horario o los km durante la edición (ver actualizarPrecioSugeridoTraslado).
       document.getElementById('sit-cobro').dataset.tocadoManual = '1';
       document.getElementById('sit-pago').dataset.tocadoManual = '1';
+      document.getElementById('sit-cancelado').checked = !!r.cancelado;
+      if(r.cancelado) onSitCanceladoChange();
       document.getElementById('sit-notas').value = r.notas || '';
       if(r.tipo==='sitting'){
         setHoraSelect('sit-horaini', r.hora_inicio);
@@ -927,11 +933,30 @@ function calcSitMargen(){
    (por ejemplo, si se quedó 9 minutos más de lo previsto) y esto ya cobra
    exacto por esos minutos. Si la familia no tiene tarifa cargada, no toca
    nada — queda en carga manual como siempre. */
+function onSitCanceladoChange(){
+  const chk = document.getElementById('sit-cancelado');
+  const cobroInput = document.getElementById('sit-cobro');
+  const pagoInput = document.getElementById('sit-pago');
+  const sinTarifaBox = document.getElementById('sit-sin-tarifa-box');
+  if(!chk || !cobroInput || !pagoInput) return;
+  cobroInput.disabled = chk.checked;
+  pagoInput.disabled = chk.checked;
+  if(chk.checked){
+    cobroInput.value = 0; pagoInput.value = 0;
+    cobroInput.dataset.tocadoManual = '1'; pagoInput.dataset.tocadoManual = '1';
+    if(sinTarifaBox) sinTarifaBox.innerHTML = '';
+  } else {
+    delete cobroInput.dataset.tocadoManual; delete pagoInput.dataset.tocadoManual;
+    actualizarCobroPagoPorHorario();
+  }
+  calcSitMargen();
+}
 function actualizarCobroPagoPorHorario(){
   const cobroInput = document.getElementById('sit-cobro');
   const pagoInput = document.getElementById('sit-pago');
   const sinTarifaBox = document.getElementById('sit-sin-tarifa-box');
   if(!cobroInput || !pagoInput) return;
+  if(document.getElementById('sit-cancelado')?.checked) return; // cancelado manda, no lo pisa el cálculo automático
   if(sitTipo!=='sitting' || !sitFamiliaSel){ if(sinTarifaBox) sinTarifaBox.innerHTML = ''; return; }
   const cobroH = Number(sitFamiliaSel.cobro_hora)||0;
   const pagoH = Number(sitFamiliaSel.pago_hora)||0;
@@ -1004,6 +1029,7 @@ async function guardarSitting(){
     fecha,
     cobro_familia: Number(document.getElementById('sit-cobro').value)||0,
     pago_ninera: Number(document.getElementById('sit-pago').value)||0,
+    cancelado: document.getElementById('sit-cancelado')?.checked || false,
     notas: document.getElementById('sit-notas').value || null,
     hora_inicio: null, hora_fin: null, km: null, origen: null, destino: null,
     termina_dia_siguiente: false,
@@ -1102,7 +1128,7 @@ async function cargarSitLista(){
     <tbody>${sitItems.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${r.familia_nombre}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm('${r.id}')">Editar</button><button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha}).replace(/'/g,"&#39;")})'>Incidente</button><button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></div></td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm('${r.id}')">Editar</button><button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha}).replace(/'/g,"&#39;")})'>Incidente</button><button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></div></td></tr>`;
     }).join('')}</tbody></table></div>
   `;
 }

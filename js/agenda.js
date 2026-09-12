@@ -149,19 +149,24 @@ async function cargarAgendaSolicitudes(){
   const registradosSet = new Set((registros||[]).map(r=>r.fecha+'|'+normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
 
   // Horarios fijos: una instancia por cada día visible cuyo día de semana matchee.
+  // Si ese día+niñera+familia ya tiene un registro real cargado en Sittings & traslados
+  // (registradosSet), NO se agrega la tarjeta del fijo -- si no, queda duplicado: la
+  // tarjeta "pendiente" del fijo Y la tarjeta del registro real, para el mismo día.
   const fijas = [];
   for(let i=0;i<n;i++){
     const d = new Date(d1); d.setDate(d.getDate()+i);
     const fechaISO = d.toISOString().slice(0,10);
     const diaSemana = diaDeFecha(fechaISO);
     (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana)).forEach(a=>{
+      const yaRegistrado = registradosSet.has(fechaISO+'|'+normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||''));
+      if(yaRegistrado) return; // el registro real (en `registrados`, más abajo) ya cubre este día
       fijas.push({
         id: 'asig:'+a.id+'@'+fechaISO,
         fecha: fechaISO,
         _fuente: 'asignacion',
         _raw: a,
         _asigId: a.id,
-        _yaRegistrado: registradosSet.has(fechaISO+'|'+normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||'')),
+        _yaRegistrado: false,
         familia_nombre: a.familias?.nombre || '(familia)',
         tipo: 'sitting',
         hora_inicio: a.hora_inicio,
@@ -188,6 +193,7 @@ async function cargarAgendaSolicitudes(){
     termina_dia_siguiente: r.termina_dia_siguiente || false,
     zona: null,
     cobro_familia: r.cobro_familia,
+    cancelado: r.cancelado || false,
     estado: 'confirmada',
     ninieras: [{ id:'regninera:'+r.id, ninera_nombre:r.ninera_nombre, estado:'confirmada' }],
   }));
@@ -255,7 +261,7 @@ function renderAgendaFilaMobile(s){
   return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;" onclick="abrirModalSolicitud('${s.id}')">
     <div style="color:var(--ink-soft);font-variant-numeric:tabular-nums;width:38px;flex-shrink:0;">${horaTxt}</div>
     <div style="flex:1;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.familia_nombre}</div>
-    <div style="font-size:11px;font-weight:700;color:${sinAsignar?'var(--warn)':'var(--good)'};flex-shrink:0;">${sinAsignar ? 'Sin asignar' : ninTxt}</div>
+    ${s.cancelado ? `<span class="badge warn" style="font-size:10px;padding:2px 7px;flex-shrink:0;">Cancelado</span>` : `<div style="font-size:11px;font-weight:700;color:${sinAsignar?'var(--warn)':'var(--good)'};flex-shrink:0;">${sinAsignar ? 'Sin asignar' : ninTxt}</div>`}
   </div>`;
 }
 function renderAgendaTarjetaDia(s){
@@ -265,7 +271,7 @@ function renderAgendaTarjetaDia(s){
   return `<div style="background:var(--bg);border-radius:8px;padding:7px 8px;margin-bottom:6px;cursor:pointer;font-size:12px;" onclick="abrirModalSolicitud('${s.id}')">
     <div style="font-weight:700;color:var(--ink);margin-bottom:2px;">${s.familia_nombre}</div>
     <div class="helper" style="margin:0 0 4px;">${horaTxt}</div>
-    <span class="badge ${sinAsignar?'warn':'good'}" style="font-size:10.5px;padding:3px 8px;">${sinAsignar ? 'Sin asignar' : ninTxt}</span>
+    ${s.cancelado ? `<span class="badge warn" style="font-size:10.5px;padding:3px 8px;">Cancelado</span>` : `<span class="badge ${sinAsignar?'warn':'good'}" style="font-size:10.5px;padding:3px 8px;">${sinAsignar ? 'Sin asignar' : ninTxt}</span>`}
   </div>`;
 }
 
@@ -834,6 +840,7 @@ async function registrarExcepcionFija(id){
     hora_fin: a.hora_fin || null,
     cobro_familia: 0,
     pago_ninera: 0,
+    cancelado: true,
     cobrado: true,
     pagado: true,
     notas: `${a.ninera_nombre} no fue — sin reemplazo`,
