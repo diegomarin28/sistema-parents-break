@@ -391,6 +391,13 @@ function editarNinera(id){
       agregarCampoExtraNinera(f.key);
     }
   });
+  // Si ya tenía fecha de nacimiento real cargada de antes, la fila de "Edad (texto viejo)"
+  // que se acaba de precargar arriba tampoco hace falta -- se saca también acá, no solo
+  // cuando la fecha se carga recién en este momento (ver ocultarEdadViejaSiHayFecha).
+  if(ninEditCandidataCache.fecha_nacimiento){
+    const filaEdad = document.querySelector('#ed-extra-fields [data-campo="edad"]');
+    if(filaEdad) filaEdad.closest('.field').remove();
+  }
 }
 // Al cargar una fecha de nacimiento real, la fila de "Edad (texto viejo)" ya no aporta nada
 // -- se saca de la vista al toque (el guardado también la limpia en la base, más abajo).
