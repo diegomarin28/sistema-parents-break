@@ -253,7 +253,7 @@ async function loadDashboardData(){
       const filas = sinResolver.map(s=>{
         const esHoy = s.fecha===hoyStr;
         const horario = s.hora_inicio ? `${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}` : 'Sin horario';
-        const estadoTxt = s.estado==='pendiente_confirmar' ? 'Invitación enviada, sin confirmar' : 'Sin niñera invitada';
+        const estadoTxt = s.estado==='pendiente_confirmar' ? 'Invitación enviada, sin confirmar' : 'Sin niñera asignada';
         return `
         <div class="agendarow" style="cursor:pointer;" onclick="setModulo('agenda')">
           <div class="agendatime">${esHoy?'Hoy':'Mañana'} · ${horario}</div>
