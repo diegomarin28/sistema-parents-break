@@ -1,8 +1,24 @@
 /* ---- Niñeras ---- */
 let ninierasItems = [];
 let sitHistResenas = {};
+// CV desactualizado: cumplió años después de la última vez que se generó el CV de Canva.
+// Compartido entre la ficha y el badge de la lista.
+function cvEstaDesactualizado(n){
+  const cd = n.candidatas || {};
+  const edadCalculada = calcularEdad(cd.fecha_nacimiento);
+  if(!n.cv_generado_en || edadCalculada===null) return false;
+  return calcularEdad(cd.fecha_nacimiento, n.cv_generado_en) < edadCalculada;
+}
+// Cumple hoy (mismo día y mes que la fecha de nacimiento, año aparte).
+function esCumpleHoy(n){
+  const fn = n.candidatas?.fecha_nacimiento;
+  if(!fn) return false;
+  const d = new Date(fn+'T00:00:00'), hoy = new Date();
+  return d.getMonth()===hoy.getMonth() && d.getDate()===hoy.getDate();
+}
 function renderNinieras(body){
   body.innerHTML = `
+    <div id="nin-cumpleaneras-wrap"></div>
     <div id="nin-utilizacion-wrap"></div>
     <div class="card" style="padding:14px 18px;"><div class="grid3">
       <div class="field" style="margin:0;"><label>Buscar (nombre, universidad, idioma...)</label><input type="text" id="filt-nombre" placeholder="Escribí para filtrar..." oninput="filtrarNinieras()"></div>
@@ -13,10 +29,23 @@ function renderNinieras(body){
   `;
   cargarNinieras();
 }
+// Mini sección arriba de todo, separada de la lista general -- solo aparece si hay alguna
+// cumpleañera hoy, para no ocupar espacio de más el resto del año.
+function renderCumpleaneras(){
+  const wrap = document.getElementById('nin-cumpleaneras-wrap');
+  if(!wrap) return;
+  const cumpleaneras = ninierasItems.filter(esCumpleHoy);
+  if(!cumpleaneras.length){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `<div class="card" style="padding:12px 18px;border-left:3px solid var(--accent);margin-bottom:10px;">
+    <div style="font-weight:600;margin-bottom:2px;">🎂 Cumpleañera${cumpleaneras.length>1?'s':''} hoy</div>
+    <div class="helper" style="margin:0;">${cumpleaneras.map(n=>n.nombre).join(', ')}</div>
+  </div>`;
+}
 async function cargarNinieras(){
   const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true).order('nombre');
   if(error){ const g = document.getElementById('ninierasgrid'); if(g) g.innerHTML = errBox(error); return; }
   ninierasItems = data;
+  renderCumpleaneras();
   await cargarUtilizacionNinieras();
   await cargarConteoIncidentesNinieras();
   // llenar desplegable de zonas: una niñera puede cubrir varias zonas separadas por "/" —
@@ -165,10 +194,12 @@ function filtrarNinieras(){
       <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')"`:''}>${n.foto?`<img src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${n.nombre}</div>
-        <div class="meta">${n.zona||'zona s/d'}${n.candidatas?.edad?' · '+n.candidatas.edad:''}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
+        <div class="meta">${n.zona||'zona s/d'}${(() => { const e = calcularEdad(n.candidatas?.fecha_nacimiento); return e!==null ? ' · '+e+' años' : (n.candidatas?.edad ? ' · '+n.candidatas.edad : ''); })()}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
       </div>
       <div class="badge-slot">
         <span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span>
+        ${!n.candidatas?.fecha_nacimiento ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin fecha de nacimiento</span>` : ''}
+        ${cvEstaDesactualizado(n) ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Actualizar CV</span>` : ''}
         ${ninIncidentesCount[normaliza(n.nombre)] ? `<span class="badge bad" style="font-size:10px;padding:2px 8px;">${ninIncidentesCount[normaliza(n.nombre)]} incidente${ninIncidentesCount[normaliza(n.nombre)]===1?'':'s'}</span>` : ''}
       </div>
       <div class="rowbtns">
@@ -236,7 +267,7 @@ async function verNinera(id){
   const rows = FICHA_CAMPOS.filter(f=>cd[f.key] && !(f.key==='edad' && edadCalculada!==null)).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
   const edadRow = edadCalculada!==null ? `<div><b>Edad</b>${edadCalculada} años</div>` : '';
   // Aviso si el CV de Canva quedó viejo: cumplió años después de la última vez que se generó.
-  const cvDesactualizado = n.cv_generado_en && edadCalculada!==null && calcularEdad(cd.fecha_nacimiento, n.cv_generado_en) < edadCalculada;
+  const cvDesactualizado = cvEstaDesactualizado(n);
   const fotoHtml = n.foto ? `<img src="${n.foto}" alt="Foto de ${n.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')" onerror="this.style.display='none'">` : '';
   abrirModal(`
     ${fotoHtml}
@@ -342,7 +373,7 @@ function editarNinera(id){
     <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
     <div class="field">
       <label>Fecha de nacimiento</label>
-      <input type="date" id="ed-fecha-nac" value="${(n.candidatas && n.candidatas.fecha_nacimiento) || ''}">
+      <input type="date" id="ed-fecha-nac" value="${(n.candidatas && n.candidatas.fecha_nacimiento) || ''}" onchange="ocultarEdadViejaSiHayFecha(this)">
       <div class="helper" style="margin:4px 0 0;">Con esto cargado, la edad se calcula sola en todos lados (ficha y CV) — no vuelve a quedar vieja.</div>
     </div>
     <div id="ed-extra-fields"></div>
@@ -361,6 +392,13 @@ function editarNinera(id){
     }
   });
 }
+// Al cargar una fecha de nacimiento real, la fila de "Edad (texto viejo)" ya no aporta nada
+// -- se saca de la vista al toque (el guardado también la limpia en la base, más abajo).
+function ocultarEdadViejaSiHayFecha(inputFecha){
+  if(!inputFecha.value) return;
+  const filaEdad = document.querySelector('#ed-extra-fields [data-campo="edad"]');
+  if(filaEdad) filaEdad.closest('.field').remove();
+}
 function quitarFotoNinera(){
   ninFotoUrlPendiente = null;
   document.getElementById('ed-foto-preview').innerHTML = 'sin foto';
@@ -370,7 +408,11 @@ function quitarFotoNinera(){
 let ninEditCandidataCache = {};
 function abrirSelectorCategoriaNinera(){
   const yaAgregadas = new Set([...document.querySelectorAll('#ed-extra-fields [data-campo]')].map(el=>el.dataset.campo));
-  const disponibles = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona'].includes(f.key) && !yaAgregadas.has(f.key));
+  // "edad" no se ofrece más para agregar -- el campo correcto para cargar el cumpleaños es
+  // la fecha de nacimiento (más abajo, con calendario). Si una niñera ya tenía texto viejo
+  // ahí, sigue precargado y editable (ver el forEach de arriba) -- esto solo saca la opción
+  // para las que no tienen nada, así no se vuelve a usar el campo de texto libre.
+  const disponibles = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','edad'].includes(f.key) && !yaAgregadas.has(f.key));
   const seleccionadas = new Set();
   const overlay = document.createElement('div');
   overlay.className = 'confirmoverlay';
@@ -464,6 +506,10 @@ async function guardarEdicionNinera(id){
   const fechaNac = document.getElementById('ed-fecha-nac').value;
   if(fechaNac) extra.fecha_nacimiento = fechaNac;
   else if(ninEditCandidataCache.fecha_nacimiento) extra.fecha_nacimiento = null;
+  // Si queda una fecha de nacimiento real cargada, el texto viejo de "edad" ya no hace
+  // falta -- se borra solo, así no quedan las dos cosas dando vueltas ni hay que acordarse
+  // de sacarlo a mano.
+  if(fechaNac && ninEditCandidataCache.edad) extra.edad = null;
   // campos que tenían dato al abrir la ficha (ver ninEditCandidataCache) y que se
   // borraron con el botón "−" durante esta edición: hay que mandarlos como null
   // explícitamente, si no Supabase nunca los toca y el dato viejo queda pegado en la base
