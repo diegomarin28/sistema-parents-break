@@ -158,14 +158,13 @@ async function loadDashboardData(){
   // Una sola tanda en paralelo con TODAS las consultas independientes del dashboard.
   // Antes eran 4 tandas en serie (4 idas y vueltas a Supabase); ahora es 1.
   // allSettled: si una consulta falla, las demás secciones igual se renderizan.
-  const [pipelineR, ninierasR, familiasR, sitsR, gastosR, asigR, hoyR, solR, solSinResolverR] = await Promise.allSettled([
+  const [pipelineR, ninierasR, familiasR, sitsR, gastosR, hoyR, solR, solSinResolverR] = await Promise.allSettled([
     sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
     sb.from('ninieras').select('nombre,tipo,activa'),
     sb.from('familias').select('cobro_hora'),
     sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', primerDiaMesesAtras(6)),
-    sb.from('asignaciones').select('*, familias(nombre)').order('hora_inicio', {ascending:true, nullsFirst:false}),
-    sb.from('sittings_traslados').select('fecha,familia_nombre,ninera_nombre,asignacion_id').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()),
+    sb.from('sittings_traslados').select('fecha,familia_nombre,ninera_nombre').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()),
     sb.from('solicitudes').select('*').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()).eq('estado','confirmada'),
     sb.from('solicitudes').select('*').gte('fecha', todayISO()).lte('fecha', mananaISO()).in('estado', ['sin_asignar','pendiente_confirmar']).order('fecha', {ascending:true}),
   ]);
@@ -270,23 +269,17 @@ async function loadDashboardData(){
   }catch(e){ if(box) box.innerHTML = errBox(e); }
 
   // ---- Pendiente (sittings/traslados previstos, hasta hoy, sin registrar) ----
-  // Mira hacia atrás PENDIENTE_DIAS_ATRAS días, no solo hoy — si un fijo o un
-  // puntual confirmado de hace unos días quedó sin cargar en Sittings &
-  // traslados, se sigue avisando en vez de perderse apenas pasa el día.
+  // Mira hacia atrás PENDIENTE_DIAS_ATRAS días, no solo hoy — si un puntual confirmado de
+  // hace unos días quedó sin cargar en Sittings & traslados, se sigue avisando en vez de
+  // perderse apenas pasa el día. IMPORTANTE (12/09): los fijos (horarios recurrentes, tabla
+  // asignaciones) NUNCA entran acá — esos se registran por su propio camino semanal aparte;
+  // meterlos en este panel día a día generaba ruido contra ese flujo, no un aviso real.
   try{
     const registros = okData(hoyR);
-    const asigTodas = okData(asigR);
     const solicitudesConfirmadas = okData(solR);
     const registradosSet = new Set((registros||[]).map(r=>r.fecha+'|'+normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
-    const registradosPorAsignacion = new Set((registros||[]).filter(r=>r.asignacion_id).map(r=>r.fecha+'|'+r.asignacion_id));
 
     const previstos = [];
-    rangoFechas(diasAtras(PENDIENTE_DIAS_ATRAS), todayISO()).forEach(fechaISO=>{
-      const diaSemana = diaDeFecha(fechaISO);
-      (asigTodas||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana)).forEach(a=>{
-        previstos.push({ fecha: fechaISO, ninera_nombre: a.ninera_nombre, familia_nombre: a.familias?.nombre||'(familia)', hora_inicio: a.hora_inicio, hora_fin: a.hora_fin, _asigId: a.id });
-      });
-    });
 
     if(solicitudesConfirmadas.length){
       const { data: snRango } = await sb.from('solicitud_ninieras').select('*').in('solicitud_id', solicitudesConfirmadas.map(s=>s.id)).eq('estado','confirmada');
@@ -299,12 +292,7 @@ async function loadDashboardData(){
       });
     }
 
-    // Para horarios fijos, "ya resuelto" se chequea primero por asignacion_id+fecha (no
-    // depende de qué niñera terminó haciéndolo — importa cuando se asignó una niñera
-    // distinta a la original). Los pedidos puntuales (sin _asigId) siguen matcheando por
-    // niñera+familia+fecha como siempre.
     dashPendientesHoy = previstos.filter(p=>{
-      if(p._asigId && registradosPorAsignacion.has(p.fecha+'|'+p._asigId)) return false;
       const key = p.fecha+'|'+normaliza(p.ninera_nombre||'')+'|'+normaliza(p.familia_nombre||'');
       return !registradosSet.has(key);
     }).sort((a,b)=> a.fecha.localeCompare(b.fecha));
@@ -318,7 +306,7 @@ function renderPendHoy(cont){
   cont.innerHTML = `
     <button class="backbtn" onclick="setModulo(null)">← Volver</button>
     <h1 class="modtitle">Sittings/traslados sin registrar</h1>
-    <div class="helper">Comparando lo previsto de los últimos ${PENDIENTE_DIAS_ATRAS} días (horarios fijos + pedidos puntuales confirmados) contra lo que ya cargaste en Sittings &amp; traslados.</div>
+    <div class="helper">Comparando lo previsto de los últimos ${PENDIENTE_DIAS_ATRAS} días (pedidos puntuales confirmados) contra lo que ya cargaste en Sittings &amp; traslados. Los horarios fijos no entran acá — esos se registran aparte.</div>
     <div class="card">
       ${dashPendientesHoy.length ? dashPendientesHoy.map(a=>{
         const fechaFmt = new Date(a.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
