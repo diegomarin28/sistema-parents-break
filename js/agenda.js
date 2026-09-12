@@ -608,102 +608,88 @@ async function abrirModalAsignar(solicitudId){
   tier1.sort((a,b)=>b.veces-a.veces);
   tier3.sort((a,b)=>(b.total-a.total) || a.nombre.localeCompare(b.nombre));
 
+  // Ya no se invita por WhatsApp a varias y se espera respuesta -- se elige la niñera
+  // directo, se ve/ajusta cuánto le corresponde, y se guarda con todo asignado de una:
+  // familia, niñera, pago, Y el registro real en Sittings & traslados (antes esto último
+  // quedaba pendiente de un paso aparte). Mismo criterio para sitting y traslado.
+  let pagoSugerido = 0;
   if(s.tipo==='traslado'){
-    // Traslado: ya está decidido quién lo hace (no hace falta invitar a varias y esperar
-    // respuesta) -- se elige directo, se ve/ajusta cuánto le corresponde a ella, y se
-    // guarda con todo asignado de una: familia, niñera y su pago.
     if(!tarifaTrasladoConfig) await cargarTarifaTrasladoConfig();
     const margenNinera = Number(tarifaTrasladoConfig?.margen_ninera)||0;
-    const pagoSugerido = s.cobro_familia ? redondearAbajo50(Number(s.cobro_familia) * (1 - margenNinera)) : 0;
-    const filaSel = (n, sub) => `
-      <label class="agenda-ninera-pick">
-        <input type="radio" name="agenda-traslado-ninera" value="${n.id}" data-nombre="${n.nombre}" onchange="onAgendaTrasladoNineraSel(${pagoSugerido})">
-        <div><b>${n.nombre}</b><div class="helper" style="margin:0;">${sub}</div></div>
-      </label>`;
-    const html = `
-      <h2>Asignar niñera al traslado</h2>
-      <div class="helper">${s.familia_nombre} · ${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}${s.zona?' · '+s.zona:''}${s.cobro_familia?` · Cobro a familia $${Number(s.cobro_familia).toLocaleString('es-UY')}`:''}</div>
-      ${tier1.length ? `<div class="agenda-tier-label">Ya trabajaron con esta familia</div>${tier1.map(n=>filaSel(n, `${n.veces} vez${n.veces===1?'':'es'}`)).join('')}` : ''}
-      ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>filaSel(n, n.cercana ? 'Cubre zona cercana (mismo grupo)' : 'Cubre la zona')).join('')}` : ''}
-      ${!tier1.length && !tier2.length ? '<div class="helper">Nadie con historial o zona coincidente todavía — mostrando el resto del equipo.</div>' : ''}
-      <button type="button" class="smallbtn" style="margin:6px 0;" onclick="document.getElementById('agenda-tier3').style.display='block';this.style.display='none';">+ Niñeras</button>
-      <div id="agenda-tier3" style="display:${(!tier1.length && !tier2.length) ? 'block' : 'none'};">
-        <div class="agenda-tier-label">Resto del equipo</div>
-        ${tier3.map(n=>filaSel(n, `${n.total} sitting${n.total===1?'':'s'} en total`)).join('')}
-      </div>
-      <div id="agenda-traslado-pago-wrap" style="display:none;margin-top:10px;">
-        <div class="field"><label>Pago a la niñera</label><div class="moneyfield"><input type="number" id="agenda-traslado-pago" oninput="marcarCampoEditadoManual('agenda-traslado-pago')"></div></div>
-        <div id="agenda-asignar-warn"></div>
-        <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarAsignacionTraslado('${s.id}')">Guardar asignación</button>
-      </div>
-    `;
-    abrirModal(html);
-    return;
+    pagoSugerido = s.cobro_familia ? redondearAbajo50(Number(s.cobro_familia) * (1 - margenNinera)) : 0;
+  } else {
+    const familia = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(s.familia_nombre));
+    const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
+    if(pagoHora && s.hora_inicio && s.hora_fin){
+      const mi = agendaMinutos(s.hora_inicio);
+      let mf = agendaMinutos(s.hora_fin);
+      if(s.termina_dia_siguiente) mf += 24*60;
+      const horasFrac = Math.max(0, mf-mi)/60;
+      pagoSugerido = Math.round(horasFrac*pagoHora);
+    }
   }
-
-  const fila = (n, sub) => `
+  const filaSel = (n, sub) => `
     <label class="agenda-ninera-pick">
-      <input type="checkbox" value="${n.id}" data-nombre="${n.nombre}">
+      <input type="radio" name="agenda-asignar-ninera" value="${n.id}" data-nombre="${n.nombre}" onchange="onAgendaNineraSel(${pagoSugerido})">
       <div><b>${n.nombre}</b><div class="helper" style="margin:0;">${sub}</div></div>
     </label>`;
-
   const html = `
-    <h2>Asignar niñera</h2>
-    <div class="helper">${s.familia_nombre} · ${s.tipo==='traslado'?'Traslado':'Sitting'} · ${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}${s.zona?' · '+s.zona:''}</div>
-    ${tier1.length ? `<div class="agenda-tier-label">Ya trabajaron con esta familia</div>${tier1.map(n=>fila(n, `${n.veces} vez${n.veces===1?'':'es'}`)).join('')}` : ''}
-    ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>fila(n, n.cercana ? 'Cubre zona cercana (mismo grupo)' : 'Cubre la zona')).join('')}` : ''}
+    <h2>Asignar niñera${s.tipo==='traslado'?' al traslado':''}</h2>
+    <div class="helper">${s.familia_nombre} · ${s.tipo==='traslado'?'Traslado':'Sitting'} · ${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}${s.zona?' · '+s.zona:''}${s.cobro_familia?` · Cobro a familia $${Number(s.cobro_familia).toLocaleString('es-UY')}`:''}</div>
+    ${tier1.length ? `<div class="agenda-tier-label">Ya trabajaron con esta familia</div>${tier1.map(n=>filaSel(n, `${n.veces} vez${n.veces===1?'':'es'}`)).join('')}` : ''}
+    ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>filaSel(n, n.cercana ? 'Cubre zona cercana (mismo grupo)' : 'Cubre la zona')).join('')}` : ''}
     ${!tier1.length && !tier2.length ? '<div class="helper">Nadie con historial o zona coincidente todavía — mostrando el resto del equipo.</div>' : ''}
     <button type="button" class="smallbtn" style="margin:6px 0;" onclick="document.getElementById('agenda-tier3').style.display='block';this.style.display='none';">+ Niñeras</button>
     <div id="agenda-tier3" style="display:${(!tier1.length && !tier2.length) ? 'block' : 'none'};">
       <div class="agenda-tier-label">Resto del equipo</div>
-      ${tier3.map(n=>fila(n, `${n.total} sitting${n.total===1?'':'s'} en total`)).join('')}
+      ${tier3.map(n=>filaSel(n, `${n.total} sitting${n.total===1?'':'s'} en total`)).join('')}
     </div>
-    <div id="agenda-asignar-warn"></div>
-    <button class="btn primary" style="width:100%;margin-top:10px;" onclick="guardarAsignacion('${s.id}')">Invitar por WhatsApp</button>
+    <div id="agenda-asignar-pago-wrap" style="display:none;margin-top:10px;">
+      <div class="field"><label>Pago a la niñera</label><div class="moneyfield"><input type="number" id="agenda-asignar-pago" oninput="marcarCampoEditadoManual('agenda-asignar-pago')"></div></div>
+      <div id="agenda-asignar-warn"></div>
+      <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarAsignacionDirecta('${s.id}')">Guardar asignación</button>
+    </div>
   `;
   abrirModal(html);
 }
-function onAgendaTrasladoNineraSel(pagoSugerido){
-  const wrap = document.getElementById('agenda-traslado-pago-wrap');
-  const pagoInput = document.getElementById('agenda-traslado-pago');
+function onAgendaNineraSel(pagoSugerido){
+  const wrap = document.getElementById('agenda-asignar-pago-wrap');
+  const pagoInput = document.getElementById('agenda-asignar-pago');
   if(!wrap || !pagoInput) return;
   wrap.style.display = '';
-  if(!pagoInput.dataset.tocadoManual){ pagoInput.value = pagoSugerido; marcarCampoSugerido('agenda-traslado-pago'); }
+  if(!pagoInput.dataset.tocadoManual){ pagoInput.value = pagoSugerido; marcarCampoSugerido('agenda-asignar-pago'); }
 }
-async function guardarAsignacionTraslado(solicitudId){
-  const sel = document.querySelector('input[name="agenda-traslado-ninera"]:checked');
+async function guardarAsignacionDirecta(solicitudId){
+  const sel = document.querySelector('input[name="agenda-asignar-ninera"]:checked');
   const warn = document.getElementById('agenda-asignar-warn');
   if(!sel){ warn.innerHTML = '<div class="warnbox">Elegí una niñera.</div>'; return; }
   const s = agendaSolicitudes.find(x=>x.id===solicitudId);
   const choque = chequearDobleReservaAgenda(sel.dataset.nombre, s?.hora_inicio, s?.hora_fin, solicitudId);
   if(!(await avisarSiDobleReserva(choque, sel.dataset.nombre, 'Asignar igual'))) return;
-  const pago = Number(document.getElementById('agenda-traslado-pago').value)||0;
-  const { error } = await sb.from('solicitud_ninieras').insert({
+  const pago = Number(document.getElementById('agenda-asignar-pago').value)||0;
+  const { error: e1 } = await sb.from('solicitud_ninieras').insert({
     solicitud_id: solicitudId, ninera_id: sel.value, ninera_nombre: sel.dataset.nombre,
     estado: 'confirmada', pago_ninera: pago,
   });
-  if(error){ warn.innerHTML = errBox(error); return; }
-  await sbGuardar(sb.from('solicitudes').update({estado:'pendiente_confirmar'}).eq('id', solicitudId), 'la solicitud');
+  if(e1){ warn.innerHTML = errBox(e1); return; }
+  await sbGuardar(sb.from('solicitudes').update({estado:'confirmada'}).eq('id', solicitudId), 'la solicitud');
+  // Se carga directo el registro real en Sittings & traslados -- ya no hace falta un paso
+  // aparte de "Cargar sitting" después de asignar.
+  const familia = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(s.familia_nombre));
+  const { error: e2 } = await sb.from('sittings_traslados').insert({
+    tipo: s.tipo, registrado_por: registradoPorUsuario(),
+    familia_id: familia?.id || s.familia_id || null, familia_nombre: s.familia_nombre,
+    ninera_id: sel.value, ninera_nombre: sel.dataset.nombre,
+    fecha: s.fecha, hora_inicio: s.hora_inicio, hora_fin: s.hora_fin,
+    termina_dia_siguiente: !!s.termina_dia_siguiente,
+    cobro_familia: Number(s.cobro_familia)||0, pago_ninera: pago,
+    cobrado: false, pagado: false, notas: 'Asignado desde Agenda',
+  });
   cerrarModal();
   await cargarAgendaSolicitudes();
-  abrirModalSolicitud(solicitudId);
   actualizarAgendaBadge();
-  toast('Traslado asignado: familia, niñera y pago quedaron cargados.');
+  toast(e2 ? 'Quedó asignado, pero no se pudo cargar en Sittings & traslados: '+e2.message : 'Asignado — ya quedó cargado en Sittings & traslados.', e2?'bad':'good');
 }
-async function guardarAsignacion(solicitudId){
-  const checks = [...document.querySelectorAll('#editmodal input[type=checkbox]:checked')];
-  const warn = document.getElementById('agenda-asignar-warn');
-  if(!checks.length){ warn.innerHTML = '<div class="warnbox">Elegí al menos una niñera.</div>'; return; }
-  const filas = checks.map(c=>({ solicitud_id: solicitudId, ninera_id: c.value, ninera_nombre: c.dataset.nombre, estado:'invitada' }));
-  const { error } = await sb.from('solicitud_ninieras').insert(filas);
-  if(error){ warn.innerHTML = errBox(error); return; }
-  await sbGuardar(sb.from('solicitudes').update({estado:'pendiente_confirmar'}).eq('id', solicitudId), 'la solicitud');
-  cerrarModal();
-  await cargarAgendaSolicitudes();
-  abrirModalSolicitud(solicitudId);
-  actualizarAgendaBadge();
-}
-
 function abrirModalSolicitud(id){
   const s = agendaSolicitudes.find(x=>x.id===id);
   if(!s) return;
