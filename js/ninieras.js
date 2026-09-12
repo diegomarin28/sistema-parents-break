@@ -21,7 +21,7 @@ function renderNinieras(body){
     <div id="nin-cumpleaneras-wrap"></div>
     <div id="nin-utilizacion-wrap"></div>
     <div class="card" style="padding:14px 18px;"><div class="grid3">
-      <div class="field" style="margin:0;"><label>Buscar (nombre, universidad, idioma...)</label><input type="text" id="filt-nombre" placeholder="Escribí para filtrar..." oninput="filtrarNinieras()"></div>
+      <div class="field" style="margin:0;"><label>Buscar (nombre, universidad, idioma...)</label><input type="text" id="filt-nombre" autocomplete="off" placeholder="Escribí para filtrar..." oninput="filtrarNinieras()"></div>
       <div class="field" style="margin:0;"><label>Zona</label><select id="filt-zona" onchange="filtrarNinieras()"><option value="">Todas las zonas</option></select></div>
       <div class="field" style="margin:0;"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
     </div></div>

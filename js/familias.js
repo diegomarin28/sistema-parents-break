@@ -7,7 +7,7 @@ function renderFamilias(body){
   body.innerHTML = `
     <div id="fam-riesgo-wrap"></div>
     <div class="card" style="padding:14px 18px;"><div class="grid3">
-      <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
+      <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" autocomplete="off" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
       <div class="field" style="margin:0;"><label>Zona</label><select id="fam-zonafiltro" onchange="famZonaFiltro=this.value;renderFamiliasList();"></select></div>
       <div class="field" style="margin:0;"><button class="btn primary" style="width:100%;margin-top:22px;" onclick="abrirModalNuevaFamilia()">+ Agregar familia</button></div>
     </div></div>

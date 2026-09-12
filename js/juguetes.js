@@ -7,7 +7,7 @@ function renderJuguetes(body){
     <div class="card" style="padding:14px 18px;">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
         <div class="grid3" style="flex:1;">
-          <div class="field" style="margin:0;"><label>Buscar (nombre, tipo, notas...)</label><input type="text" id="jug-filt-texto" placeholder="Escribí para filtrar..." oninput="filtrarJuguetes()"></div>
+          <div class="field" style="margin:0;"><label>Buscar (nombre, tipo, notas...)</label><input type="text" id="jug-filt-texto" autocomplete="off" placeholder="Escribí para filtrar..." oninput="filtrarJuguetes()"></div>
           <div class="field" style="margin:0;"><label>Niñera</label><select id="jug-filt-ninera" onchange="filtrarJuguetes()"><option value="">Todas</option></select></div>
           <div class="field" style="margin:0;"><label>Género</label><select id="jug-filt-genero" onchange="filtrarJuguetes()"><option value="">Todos</option><option value="unisex">Unisex</option><option value="ninas">Niñas</option><option value="ninos">Niños</option></select></div>
         </div>
