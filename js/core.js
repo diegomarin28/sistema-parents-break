@@ -106,7 +106,27 @@ function restaurarScrollMainarea(valor){
    UI repetible para poder cargar más de una cuenta por niñera o familia
    (ej. cambió de banco, o cobra/paga por dos cuentas distintas) — antes
    solo se podía guardar una sola.
+   Cada cuenta se sigue guardando como UN string ("Itaú 1234567 (Sucursal
+   Pocitos)") para no tener que migrar la columna — pero ahora se carga con
+   3 campos separados (banco / número / sucursal) en vez de un input libre,
+   mismo criterio que quedó armado en el formulario de postulación.
    ============================================================ */
+const BANCOS_CUENTA = ['Itaú','BROU','Santander','Scotiabank','BBVA','HSBC','Otro'];
+// Separa el string guardado en sus 3 partes, para poder editarlo con los campos separados.
+function parsearCuentaBancaria(valor){
+  const v = String(valor||'').trim();
+  if(!v) return {banco:'', numero:'', sucursal:''};
+  const mSuc = v.match(/^(.*?)\s*\(Sucursal\s+(.+)\)\s*$/i);
+  const sinSucursal = mSuc ? mSuc[1].trim() : v;
+  const sucursal = mSuc ? mSuc[2].trim() : '';
+  const bancoConocido = BANCOS_CUENTA.find(b => b!=='Otro' && sinSucursal.toLowerCase().startsWith(b.toLowerCase()+' '));
+  if(bancoConocido) return {banco:bancoConocido, numero:sinSucursal.slice(bancoConocido.length).trim(), sucursal};
+  // Banco no reconocido en la lista: la última palabra se toma como número, el resto como nombre del banco (va bajo "Otro").
+  const partes = sinSucursal.split(/\s+/);
+  const numero = partes.length>1 ? partes.pop() : '';
+  const banco = partes.join(' ');
+  return {banco, numero: numero || sinSucursal, sucursal};
+}
 function htmlCuentasBancarias(prefix, cuentas){
   const lista = Array.isArray(cuentas) ? cuentas.filter(Boolean) : (cuentas ? [cuentas] : []);
   const filas = lista.length ? lista : [''];
@@ -117,18 +137,39 @@ function htmlCuentasBancarias(prefix, cuentas){
   </div>`;
 }
 function filaCuentaBancaria(valor=''){
-  const v = String(valor||'').replace(/"/g,'&quot;');
-  return `<div class="cuentabancaria-row" style="display:flex;gap:6px;margin-bottom:6px;">
-    <input type="text" class="cuentabancaria-input" placeholder="ej. Itaú 1234567" value="${v}" style="flex:1;">
+  const {banco, numero, sucursal} = parsearCuentaBancaria(valor);
+  const esConocido = BANCOS_CUENTA.includes(banco);
+  const bancoSel = esConocido ? banco : (valor ? 'Otro' : '');
+  const otroVisible = bancoSel==='Otro';
+  const otroValor = (!esConocido && banco) ? banco : '';
+  const q = s => String(s||'').replace(/"/g,'&quot;');
+  return `<div class="cuentabancaria-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
+    <select class="cuentabancaria-banco" onchange="toggleBancoOtro(this)" style="flex:1;min-width:100px;">
+      <option value="">Banco…</option>
+      ${BANCOS_CUENTA.map(b=>`<option value="${b}" ${bancoSel===b?'selected':''}>${b}</option>`).join('')}
+    </select>
+    <input type="text" class="cuentabancaria-otro" placeholder="Nombre del banco" value="${q(otroValor)}" style="flex:1;min-width:100px;${otroVisible?'':'display:none;'}">
+    <input type="text" class="cuentabancaria-numero" placeholder="Número de cuenta" value="${q(numero)}" style="flex:1;min-width:100px;">
+    <input type="text" class="cuentabancaria-sucursal" placeholder="Sucursal (si hace falta)" value="${q(sucursal)}" style="flex:1;min-width:100px;">
     <button class="smallbtn danger" type="button" onclick="this.closest('.cuentabancaria-row').remove()">−</button>
   </div>`;
+}
+function toggleBancoOtro(sel){
+  const otro = sel.closest('.cuentabancaria-row').querySelector('.cuentabancaria-otro');
+  otro.style.display = sel.value==='Otro' ? '' : 'none';
 }
 function agregarFilaCuentaBancaria(prefix){
   document.getElementById(prefix+'-cuentas-list').insertAdjacentHTML('beforeend', filaCuentaBancaria());
 }
 function leerCuentasBancarias(prefix){
-  return [...document.querySelectorAll(`#${prefix}-cuentas-list .cuentabancaria-input`)]
-    .map(el=>el.value.trim()).filter(v=>v);
+  return [...document.querySelectorAll(`#${prefix}-cuentas-list .cuentabancaria-row`)].map(row=>{
+    const sel = row.querySelector('.cuentabancaria-banco').value;
+    const banco = sel==='Otro' ? row.querySelector('.cuentabancaria-otro').value.trim() : sel;
+    const numero = row.querySelector('.cuentabancaria-numero').value.trim();
+    const sucursal = row.querySelector('.cuentabancaria-sucursal').value.trim();
+    if(!banco || !numero) return null;
+    return `${banco} ${numero}${sucursal ? ' (Sucursal '+sucursal+')' : ''}`;
+  }).filter(Boolean);
 }
 // Para mostrar en una ficha (view-only): une las cuentas con · , o '—' si no hay ninguna.
 function textoCuentasBancarias(cuentas){
