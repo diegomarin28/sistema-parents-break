@@ -30,6 +30,100 @@ function asegurarXLSX(){
 
 function normaliza(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
 function zonasDe(zonaStr){ return (zonaStr||'').split('/').map(z=>z.trim()).filter(Boolean); }
+/* ============================================================
+   Grupos de zona: zonas muy puntuales (San Nicolás/Olivos/Carrasco) que en
+   la práctica están a un par de cuadras, pero como texto nunca "matcheaban"
+   entre sí para sugerir niñera↔familia. Los grupos son solo para matching —
+   la zona real de cada niñera/familia nunca se toca ni se le agrega nada.
+   ============================================================ */
+let zonaGruposCache = null;
+async function cargarZonaGrupos(){
+  const { data } = await sb.from('zona_grupos').select('*').order('orden');
+  zonaGruposCache = data || [];
+  return zonaGruposCache;
+}
+// Lista blanca de zonas ya revisadas -- lo que esté en los datos pero no acá es "nuevo, sin revisar".
+let zonasConfirmadasCache = null;
+async function cargarZonasConfirmadas(){
+  const { data } = await sb.from('zonas_confirmadas').select('nombre');
+  zonasConfirmadasCache = new Set((data||[]).map(z=>normaliza(z.nombre)));
+  return zonasConfirmadasCache;
+}
+// Zonas que están en uso (niñeras o familias) pero todavía no pasaron por la lista blanca --
+// ninguna llamada a red, usa lo que ya está cargado en memoria.
+function zonasNuevasSinConfirmar(){
+  if(!zonasConfirmadasCache) return [];
+  return obtenerTodasLasZonas().filter(z=>!zonasConfirmadasCache.has(normaliza(z)));
+}
+// Reemplaza una zona por otra en TODAS las niñeras y familias que la tengan (dentro de su
+// texto separado por "/", sin tocar el resto de las zonas de esa persona). Se usa cuando una
+// zona nueva resulta ser la misma de siempre, solo escrita distinto.
+async function unificarZona(zonaVieja, zonaNueva){
+  const zvNorm = normaliza(zonaVieja);
+  const reemplazar = (zonaStr) => zonasDe(zonaStr).map(z=>normaliza(z)===zvNorm ? zonaNueva : z).join('/');
+  const afectadasNin = (ninierasItems||[]).filter(n=>zonasDe(n.zona).some(z=>normaliza(z)===zvNorm));
+  const afectadasFam = (familiasItems||[]).filter(f=>zonasDe(f.zona).some(z=>normaliza(z)===zvNorm));
+  for(const n of afectadasNin){ await sb.from('ninieras').update({zona: reemplazar(n.zona)}).eq('id', n.id); }
+  for(const f of afectadasFam){ await sb.from('familias').update({zona: reemplazar(f.zona)}).eq('id', f.id); }
+  return afectadasNin.length + afectadasFam.length;
+}
+async function confirmarZonaComoNueva(nombre){
+  return sb.from('zonas_confirmadas').insert({nombre});
+}
+async function accionUnificarZonaNueva(zonaVieja, selectId){
+  const zonaNueva = document.getElementById(selectId).value;
+  if(!zonaNueva) return;
+  const n = await unificarZona(zonaVieja, zonaNueva);
+  await confirmarZonaComoNueva(zonaVieja).catch(()=>{}); // si falla (ya no debería reaparecer igual, quedó unificada), no bloquea
+  toast(`Unificada con "${zonaNueva}" en ${n} ficha${n===1?'':'s'}.`);
+  if(typeof cargarNinieras==='function' && document.getElementById('ninierasgrid')) await cargarNinieras();
+  if(typeof cargarFamilias==='function' && document.getElementById('familiaslist')) await cargarFamilias();
+  await cargarZonasConfirmadas();
+  renderZonasNuevasPanel();
+}
+async function accionConfirmarZonaNueva(zonaNueva){
+  const { error } = await confirmarZonaComoNueva(zonaNueva);
+  if(error){ toast('No se pudo confirmar: '+error.message, 'bad'); return; }
+  await cargarZonasConfirmadas();
+  toast(`"${zonaNueva}" confirmada como zona nueva.`);
+  renderZonasNuevasPanel();
+}
+// Mini panel reusable -- se engancha en el wrap que exista en la pantalla actual (Niñeras o
+// Familias), o no hace nada si no hay ninguno. Solo se ve cuando hay algo para revisar.
+function renderZonasNuevasPanel(){
+  const wrap = document.getElementById('nin-zonasnuevas-wrap') || document.getElementById('fam-zonasnuevas-wrap');
+  if(!wrap) return;
+  const nuevas = zonasNuevasSinConfirmar();
+  if(!nuevas.length){ wrap.innerHTML = ''; return; }
+  const conocidas = [...(zonasConfirmadasCache||[])];
+  const opciones = obtenerTodasLasZonas().filter(z=>zonasConfirmadasCache.has(normaliza(z)));
+  wrap.innerHTML = `<div class="card" style="padding:12px 18px;border-left:3px solid var(--warn);margin-bottom:10px;">
+    <div style="font-weight:600;margin-bottom:6px;">Zonas nuevas sin revisar (${nuevas.length})</div>
+    ${nuevas.map(z=>`
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line);">
+        <b style="min-width:120px;">${z}</b>
+        <select id="zn-sel-${normaliza(z).replace(/\s+/g,'-')}" style="flex:1;min-width:140px;">
+          <option value="">¿Es la misma que...?</option>
+          ${opciones.map(o=>`<option value="${o}">${o}</option>`).join('')}
+        </select>
+        <button class="smallbtn" onclick="accionUnificarZonaNueva('${z.replace(/'/g,"\\'")}','zn-sel-${normaliza(z).replace(/\s+/g,'-')}')">Unificar</button>
+        <button class="smallbtn" onclick="accionConfirmarZonaNueva('${z.replace(/'/g,"\\'")}')">Es zona nueva, confirmar</button>
+      </div>`).join('')}
+  </div>`;
+}
+// Grupo (objeto completo) al que pertenece una zona, o null si no está agrupada.
+function grupoDeZona(zonaStr){
+  if(!zonaGruposCache || !zonaStr) return null;
+  const zn = normaliza(zonaStr);
+  return zonaGruposCache.find(g => (g.zonas||[]).some(z=>normaliza(z)===zn)) || null;
+}
+// Para matching: ¿estas dos zonas cuentan como la misma zona (exacta, o mismo grupo)?
+function mismoGrupoZona(zonaA, zonaB){
+  if(!zonaA || !zonaB) return false;
+  if(normaliza(zonaA)===normaliza(zonaB)) return true;
+  const g = grupoDeZona(zonaA);
+  return !!g && (g.zonas||[]).some(z=>normaliza(z)===normaliza(zonaB));
+}
 /* Checklist de zonas compartido — reemplaza el texto libre de antes (donde
    escribir "Pocitos, Malvín" terminaba pisando otras zonas por error). Junta
    todas las zonas que ya existen entre niñeras y familias, con checkboxes
@@ -44,18 +138,85 @@ function obtenerTodasLasZonas(){
   });
   return [...mapa.values()].sort((a,b)=>a.localeCompare(b));
 }
+function abrirModalGruposZona(){
+  const grupos = zonaGruposCache || [];
+  const fila = (g) => `
+    <div class="zonagrupo-row" data-id="${g?.id||''}" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;">
+      <div class="field" style="margin-bottom:6px;"><label>Nombre del grupo</label><input type="text" class="zg-nombre" value="${(g?.nombre||'').replace(/"/g,'&quot;')}" placeholder="ej. Carrasco / San Nicolás / Olivos"></div>
+      <div class="field" style="margin-bottom:6px;"><label>Zonas (separadas por coma)</label><input type="text" class="zg-zonas" value="${(g?.zonas||[]).join(', ').replace(/"/g,'&quot;')}" placeholder="Carrasco, San Nicolás, Olivos"></div>
+      <button type="button" class="smallbtn danger" onclick="this.closest('.zonagrupo-row').remove()">Eliminar grupo</button>
+    </div>`;
+  const html = `
+    <h2>Grupos de zona</h2>
+    <div class="helper">Zonas del mismo grupo se tratan como equivalentes para sugerir niñera↔familia en Agenda — la zona real de cada una no cambia, solo el matching.</div>
+    <div id="zonagrupos-list" style="margin-top:10px;">${grupos.map(fila).join('') || '<div class="empty">Todavía no hay grupos.</div>'}</div>
+    <button type="button" class="smallbtn" onclick="document.getElementById('zonagrupos-list').insertAdjacentHTML('beforeend', \`${fila(null).replace(/`/g,'\\`')}\`)" style="margin-bottom:10px;">+ Agregar grupo</button>
+    <div id="zonagrupos-warn"></div>
+    <button class="btn primary" style="width:100%;" onclick="guardarGruposZona()">Guardar</button>
+  `;
+  abrirModal(html);
+}
+async function guardarGruposZona(){
+  const warn = document.getElementById('zonagrupos-warn');
+  const filas = [...document.querySelectorAll('.zonagrupo-row')];
+  const idsVistos = [];
+  for(const fila of filas){
+    const nombre = fila.querySelector('.zg-nombre').value.trim();
+    const zonas = fila.querySelector('.zg-zonas').value.split(',').map(z=>z.trim()).filter(Boolean);
+    if(!nombre || !zonas.length) continue;
+    const id = fila.dataset.id;
+    if(id){
+      const { error } = await sb.from('zona_grupos').update({nombre, zonas}).eq('id', id);
+      if(error){ warn.innerHTML = errBox(error); return; }
+      idsVistos.push(id);
+    } else {
+      const { data, error } = await sb.from('zona_grupos').insert({nombre, zonas, orden: (zonaGruposCache||[]).length}).select().single();
+      if(error){ warn.innerHTML = errBox(error); return; }
+      idsVistos.push(data.id);
+    }
+  }
+  // grupos que estaban antes y ya no aparecen en la lista (se borraron con "Eliminar grupo")
+  const idsPrevios = (zonaGruposCache||[]).map(g=>g.id);
+  const aBorrar = idsPrevios.filter(id=>!idsVistos.includes(id));
+  for(const id of aBorrar){ await sb.from('zona_grupos').delete().eq('id', id); }
+  await cargarZonaGrupos();
+  cerrarModal();
+  toast('Grupos de zona guardados.');
+}
 function checklistZonas(idPrefix, zonaActual){
   const todas = obtenerTodasLasZonas();
   const actuales = new Set(zonasDe(zonaActual).map(normaliza));
+  // Ordenadas por grupo (las agrupadas primero, en su bloque, con el nombre del grupo como
+  // encabezado; las que no están en ningún grupo quedan sueltas al final).
+  const chk = z => `<label class="chk" style="margin:0;"><input type="checkbox" value="${z}" ${actuales.has(normaliza(z))?'checked':''}> ${z}</label>`;
+  let cuerpoChecklist;
+  if(!todas.length){
+    cuerpoChecklist = '<span class="helper" style="margin:0;">Todavía no hay zonas cargadas.</span>';
+  } else if(!zonaGruposCache){
+    cuerpoChecklist = todas.map(chk).join(''); // grupos todavía no cargados (ver bootstrap) — se ve sin agrupar, no rompe nada
+  } else {
+    const usadas = new Set();
+    const bloques = [];
+    zonaGruposCache.forEach(g=>{
+      const zonasDelGrupoPresentes = todas.filter(z => (g.zonas||[]).some(gz=>normaliza(gz)===normaliza(z)));
+      if(!zonasDelGrupoPresentes.length) return;
+      zonasDelGrupoPresentes.forEach(z=>usadas.add(normaliza(z)));
+      bloques.push(`<div style="flex-basis:100%;font-size:10.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;margin-top:4px;">${g.nombre}</div>` + zonasDelGrupoPresentes.map(chk).join(''));
+    });
+    const sueltas = todas.filter(z=>!usadas.has(normaliza(z)));
+    if(sueltas.length) bloques.push(`<div style="flex-basis:100%;font-size:10.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;margin-top:4px;">${bloques.length?'Sin grupo':''}</div>` + sueltas.map(chk).join(''));
+    cuerpoChecklist = bloques.join('');
+  }
   return `
     <div class="field"><label>Zonas</label>
-      <div id="${idPrefix}-zonas-checklist" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;max-height:140px;overflow-y:auto;">
-        ${todas.length ? todas.map(z=>`<label class="chk" style="margin:0;"><input type="checkbox" value="${z}" ${actuales.has(normaliza(z))?'checked':''}> ${z}</label>`).join('') : '<span class="helper" style="margin:0;">Todavía no hay zonas cargadas.</span>'}
+      <div id="${idPrefix}-zonas-checklist" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;max-height:180px;overflow-y:auto;">
+        ${cuerpoChecklist}
       </div>
       <div style="display:flex;gap:6px;margin-top:6px;">
         <input type="text" id="${idPrefix}-zona-nueva" placeholder="Agregar zona nueva…" style="flex:1;">
         <button type="button" class="smallbtn" onclick="agregarZonaAlChecklist('${idPrefix}')">+ Agregar</button>
       </div>
+      <div class="helper" style="margin-top:4px;"><a href="#" onclick="abrirModalGruposZona();return false;">Editar grupos de zona</a> — zonas del mismo grupo se sugieren entre sí en Agenda, aunque el texto no sea idéntico.</div>
     </div>`;
 }
 function agregarZonaAlChecklist(idPrefix){

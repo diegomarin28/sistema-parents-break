@@ -19,6 +19,7 @@ function esCumpleHoy(n){
 function renderNinieras(body){
   body.innerHTML = `
     <div id="nin-cumpleaneras-wrap"></div>
+    <div id="nin-zonasnuevas-wrap"></div>
     <div id="nin-utilizacion-wrap"></div>
     <div class="card" style="padding:14px 18px;"><div class="grid3">
       <div class="field" style="margin:0;"><label>Buscar (nombre, universidad, idioma...)</label><input type="text" id="filt-nombre" autocomplete="off" placeholder="Escribí para filtrar..." oninput="filtrarNinieras()"></div>
@@ -42,10 +43,13 @@ function renderCumpleaneras(){
   </div>`;
 }
 async function cargarNinieras(){
+  if(!zonaGruposCache) cargarZonaGrupos(); // para cuando se abra "Editar" y haga falta el checklist agrupado
+  if(!zonasConfirmadasCache) await cargarZonasConfirmadas();
   const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true).order('nombre');
   if(error){ const g = document.getElementById('ninierasgrid'); if(g) g.innerHTML = errBox(error); return; }
   ninierasItems = data;
   renderCumpleaneras();
+  renderZonasNuevasPanel();
   await cargarUtilizacionNinieras();
   await cargarConteoIncidentesNinieras();
   // llenar desplegable de zonas: una niñera puede cubrir varias zonas separadas por "/" —

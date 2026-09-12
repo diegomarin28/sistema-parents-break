@@ -574,6 +574,7 @@ async function abrirModalAsignar(solicitudId){
   const s = agendaSolicitudes.find(x=>x.id===solicitudId);
   if(!s) return;
   abrirModal('<div class="empty"><span class="spinner dark"></span> Buscando niñeras recomendadas…</div>');
+  if(!zonaGruposCache) await cargarZonaGrupos();
   const [{data:histFam}, {data:histTotal}, {data:sitTotal}] = await Promise.all([
     sb.from('solicitud_ninieras').select('ninera_nombre, solicitudes!inner(familia_nombre)').eq('estado','confirmada').eq('solicitudes.familia_nombre', s.familia_nombre),
     sb.from('solicitud_ninieras').select('ninera_nombre').eq('estado','confirmada'),
@@ -594,8 +595,14 @@ async function abrirModalAsignar(solicitudId){
   candidatas.forEach(n=>{
     const key = normaliza(n.nombre);
     if(conteoFamilia[key]>0){ tier1.push({...n, veces:conteoFamilia[key]}); return; }
-    const zonas = (n.zona||'').split('/').map(z=>normaliza(z));
-    if(zonaNorm && zonas.includes(zonaNorm)){ tier2.push(n); return; }
+    // Zona propia o del mismo grupo (San Nicolás/Olivos/Carrasco cuentan como una sola
+    // zona para esto, aunque el texto sea distinto) -- antes solo entraba el texto exacto.
+    const zonas = (n.zona||'').split('/').map(z=>z.trim()).filter(Boolean);
+    if(s.zona && zonas.some(z => mismoGrupoZona(z, s.zona))){
+      const exacta = zonas.some(z=>normaliza(z)===normaliza(s.zona));
+      tier2.push({...n, cercana: !exacta});
+      return;
+    }
     tier3.push({...n, total:conteoTotal[key]||0});
   });
   tier1.sort((a,b)=>b.veces-a.veces);
@@ -617,7 +624,7 @@ async function abrirModalAsignar(solicitudId){
       <h2>Asignar niñera al traslado</h2>
       <div class="helper">${s.familia_nombre} · ${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}${s.zona?' · '+s.zona:''}${s.cobro_familia?` · Cobro a familia $${Number(s.cobro_familia).toLocaleString('es-UY')}`:''}</div>
       ${tier1.length ? `<div class="agenda-tier-label">Ya trabajaron con esta familia</div>${tier1.map(n=>filaSel(n, `${n.veces} vez${n.veces===1?'':'es'}`)).join('')}` : ''}
-      ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>filaSel(n, 'Cubre la zona')).join('')}` : ''}
+      ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>filaSel(n, n.cercana ? 'Cubre zona cercana (mismo grupo)' : 'Cubre la zona')).join('')}` : ''}
       ${!tier1.length && !tier2.length ? '<div class="helper">Nadie con historial o zona coincidente todavía — mostrando el resto del equipo.</div>' : ''}
       <button type="button" class="smallbtn" style="margin:6px 0;" onclick="document.getElementById('agenda-tier3').style.display='block';this.style.display='none';">+ Niñeras</button>
       <div id="agenda-tier3" style="display:${(!tier1.length && !tier2.length) ? 'block' : 'none'};">
@@ -644,7 +651,7 @@ async function abrirModalAsignar(solicitudId){
     <h2>Asignar niñera</h2>
     <div class="helper">${s.familia_nombre} · ${s.tipo==='traslado'?'Traslado':'Sitting'} · ${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}${s.zona?' · '+s.zona:''}</div>
     ${tier1.length ? `<div class="agenda-tier-label">Ya trabajaron con esta familia</div>${tier1.map(n=>fila(n, `${n.veces} vez${n.veces===1?'':'es'}`)).join('')}` : ''}
-    ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>fila(n, 'Cubre la zona')).join('')}` : ''}
+    ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>fila(n, n.cercana ? 'Cubre zona cercana (mismo grupo)' : 'Cubre la zona')).join('')}` : ''}
     ${!tier1.length && !tier2.length ? '<div class="helper">Nadie con historial o zona coincidente todavía — mostrando el resto del equipo.</div>' : ''}
     <button type="button" class="smallbtn" style="margin:6px 0;" onclick="document.getElementById('agenda-tier3').style.display='block';this.style.display='none';">+ Niñeras</button>
     <div id="agenda-tier3" style="display:${(!tier1.length && !tier2.length) ? 'block' : 'none'};">

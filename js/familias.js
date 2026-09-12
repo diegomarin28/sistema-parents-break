@@ -6,6 +6,7 @@ let famDetalleAbierta = null;
 function renderFamilias(body){
   body.innerHTML = `
     <div id="fam-riesgo-wrap"></div>
+    <div id="fam-zonasnuevas-wrap"></div>
     <div class="card" style="padding:14px 18px;"><div class="grid3">
       <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" autocomplete="off" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
       <div class="field" style="margin:0;"><label>Zona</label><select id="fam-zonafiltro" onchange="famZonaFiltro=this.value;renderFamiliasList();"></select></div>
@@ -61,6 +62,8 @@ const FAM_RIESGO_SEMANAS = 6;      // sin sittings hace más de esto = "en riesg
 const FAM_RIESGO_SNOOZE_DIAS = 30; // al marcar "ya la contacté", no volver a avisar por este tiempo
 let famRiesgoAbierto = false;      // arranca cerrado — antes mostraba todas de una, "cartel inmenso"
 async function cargarFamilias(){
+  if(!zonaGruposCache) cargarZonaGrupos(); // para cuando se abra "Editar" y haga falta el checklist agrupado
+  if(!zonasConfirmadasCache) await cargarZonasConfirmadas();
   const cont = document.getElementById('familiaslist');
   if(!cont) return; // se puede llamar desde otra pantalla (ej. al quitar una asignación fija desde Agenda) — sin esto, rompía ahí.
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
@@ -95,6 +98,7 @@ async function cargarFamilias(){
     if(kf && s.fecha && (!famUltimaActividad[kf] || s.fecha > famUltimaActividad[kf])) famUltimaActividad[kf] = s.fecha;
   });
   familiasItems = familias.map(f => ({...f, asignaciones: (asignaciones||[]).filter(a=>a.familia_id===f.id)}));
+  renderZonasNuevasPanel();
   // llenar el filtro de zonas agrupando variantes de mayúsculas/tildes/espacios como la misma zona
   const zonaSel = document.getElementById('fam-zonafiltro');
   if(zonaSel){
