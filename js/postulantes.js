@@ -471,6 +471,9 @@ async function contratar(candidataId){
     candidata_id: candidataId, nombre:cd.nombre, telefono:cd.telefono, tipo:cd.tipo||'Niñera',
     zona: document.getElementById('hire-zona').value, foto: document.getElementById('hire-foto').value, notas: c.notas,
   };
+  // Si la candidata puso cuenta bancaria en el formulario, se copia sola a la ficha de
+  // niñera (ahí es donde vive de verdad, como una cuenta más dentro del array).
+  if(cd.cuenta_bancaria) ninera.cuenta_bancaria = [cd.cuenta_bancaria];
   const { error: e1 } = await sb.from('ninieras').insert(ninera);
   if(e1){ toast('No se pudo contratar: '+e1.message,'bad'); return; }
   const { error: e2 } = await sb.from('candidatas').update({ estado:'contratada' }).eq('id', candidataId);
