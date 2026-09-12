@@ -11,7 +11,6 @@ let sitOrigenAuto = true;
 let sitOrigenCoord = null;
 let sitDestinoCoord = null;
 let sitMes = null;
-let sitSemana = null; // lunes de la semana visible en "Registros de..." (el bloque de arriba, separado del historial con filtros)
 
 function currentMonthStr(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function shiftMes(mesStr, delta){ const [y,m] = mesStr.split('-').map(Number); const d = new Date(y, m-1+delta, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
@@ -27,36 +26,11 @@ function monthLabel(mesStr){
   const f = new Intl.DateTimeFormat('es-UY', {month:'long', year:'numeric'}).format(new Date(y, m-1, 1));
   return f.charAt(0).toUpperCase() + f.slice(1);
 }
-/* Semana calendario (lunes a domingo) para el bloque "Registros de..." — separado del mes
-   que sigue usando el resto de la pantalla (Historial con filtros, Finanzas). Con los
-   sittings fijos generándose solos, una vista mensual completa se hacía interminable. */
-const SIT_MESES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-function primerDiaSemana(fechaISO){
-  const d = new Date(fechaISO+'T00:00:00');
-  const dow = d.getDay(); // 0=domingo … 6=sábado
-  const diff = dow===0 ? -6 : 1-dow;
-  d.setDate(d.getDate()+diff);
-  return d.toISOString().slice(0,10);
-}
-function shiftSemana(semanaStr, delta){
-  const d = new Date(semanaStr+'T00:00:00');
-  d.setDate(d.getDate()+delta*7);
-  return d.toISOString().slice(0,10);
-}
-function weekLabel(semanaStr){
-  const d1 = new Date(semanaStr+'T00:00:00');
-  const d2 = new Date(d1); d2.setDate(d2.getDate()+6);
-  const mismoMes = d1.getMonth()===d2.getMonth();
-  return mismoMes
-    ? `${d1.getDate()}–${d2.getDate()} ${SIT_MESES_CORTO[d1.getMonth()]}`
-    : `${d1.getDate()} ${SIT_MESES_CORTO[d1.getMonth()]} – ${d2.getDate()} ${SIT_MESES_CORTO[d2.getMonth()]}`;
-}
 function findFamilia(nombre){ const n = normaliza(nombre); return sitFamilias.find(f=>normaliza(f.nombre)===n) || null; }
 function findNinera(nombre){ const n = normaliza(nombre); return sitNinieras.find(x=>normaliza(x.nombre)===n) || null; }
 
 async function renderSittings(body){
   sitMes = sitMes || currentMonthStr();
-  sitSemana = sitSemana || primerDiaSemana(todayISO());
   sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
   body.innerHTML = `
     <div style="display:flex;justify-content:center;margin-bottom:16px;">
@@ -64,9 +38,9 @@ async function renderSittings(body){
     </div>
     <div class="mesbar">
       <div class="mesnav">
-        <button onclick="cambiarSitSemanaRel(-1)" aria-label="Semana anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
-        <div class="mesnav-label" id="sit-semana-label">${weekLabel(sitSemana)}</div>
-        <button onclick="cambiarSitSemanaRel(1)" aria-label="Semana siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
+        <button onclick="cambiarSitMesRel(-1)" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="mesnav-label" id="sit-mes-label">${monthLabel(sitMes)}</div>
+        <button onclick="cambiarSitMesRel(1)" aria-label="Mes siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></button>
       </div>
       <button class="smallbtn" onclick="exportarSitCSV()">Exportar CSV</button>
     </div>
@@ -103,7 +77,7 @@ let sitHistMostrar = 10; // cuántas filas se ven de una — separado de cuánta
 const SIT_HIST_PAGE = 200;
 async function cargarSitHistorial(){
   const [{data:pagina, count}, {data:resenas}, {data:soloFamilias}] = await Promise.all([
-    sb.from('sittings_traslados').select('*', {count:'exact'}).eq('cancelado', false).order('fecha', {ascending:false}).range(0, SIT_HIST_PAGE-1),
+    sb.from('sittings_traslados').select('*', {count:'exact'}).order('fecha', {ascending:false}).range(0, SIT_HIST_PAGE-1),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
     sb.from('sittings_traslados').select('familia_nombre'), // solo esta columna: liviano aunque la tabla crezca, así el filtro de familia siempre tiene todas las opciones
   ]);
@@ -142,7 +116,7 @@ async function cargarSitHistorialMas(){
   if(sitHistLoadingMore || sitHistItems.length>=sitHistTotal) return;
   sitHistLoadingMore = true;
   renderSitHistorial();
-  const { data } = await sb.from('sittings_traslados').select('*').eq('cancelado', false).order('fecha', {ascending:false}).range(sitHistOffset, sitHistOffset+SIT_HIST_PAGE-1);
+  const { data } = await sb.from('sittings_traslados').select('*').order('fecha', {ascending:false}).range(sitHistOffset, sitHistOffset+SIT_HIST_PAGE-1);
   sitHistItems = sitHistItems.concat(data||[]);
   sitHistOffset = sitHistItems.length;
   sitHistLoadingMore = false;
@@ -183,7 +157,7 @@ async function renderSitHistorialCustom(){
   const tipoF = document.getElementById('sithist-tipo')?.value||'';
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Buscando…</div>';
   const data = await sbLeer(
-    sb.from('sittings_traslados').select('*').eq('cancelado', false).gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
+    sb.from('sittings_traslados').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
     'los registros de ese período', []
   );
   let items = data || [];
@@ -294,8 +268,8 @@ function sitFormHTML(){
       </div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen()"></div>
-      <div class="field"><label>Pago a niñera</label><input type="number" id="sit-pago" value="0" oninput="calcSitMargen()"></div>
+      <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-cobro')"></div>
+      <div class="field"><label>Pago a niñera</label><input type="number" id="sit-pago" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-pago')"></div>
     </div>
     <div id="sit-sin-tarifa-box"></div>
     <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="sit-notas"></textarea></div>
@@ -364,6 +338,10 @@ function abrirModalSitForm(id=null){
       document.getElementById('sit-fecha').value = r.fecha || '';
       document.getElementById('sit-cobro').value = r.cobro_familia || 0;
       document.getElementById('sit-pago').value = r.pago_ninera || 0;
+      // Ya tienen un precio real guardado -- que no se los pise una sugerencia nueva si se
+      // toca el horario o los km durante la edición (ver actualizarPrecioSugeridoTraslado).
+      document.getElementById('sit-cobro').dataset.tocadoManual = '1';
+      document.getElementById('sit-pago').dataset.tocadoManual = '1';
       document.getElementById('sit-notas').value = r.notas || '';
       if(r.tipo==='sitting'){
         setHoraSelect('sit-horaini', r.hora_inicio);
@@ -835,6 +813,28 @@ function multiplicadorHorarioTraslado(horaHHMM){
   if(enRango(cfg.rec2_desde, cfg.rec2_hasta)) return Number(cfg.rec2_mult)||1;
   return 1;
 }
+// Marca visualmente un campo como "esto es un precio sugerido, no definitivo" -- borde
+// punteado + fondo tenue. Se saca solo apenas la persona lo toca a mano (ver
+// marcarCampoEditadoManual), para que quede claro que dejó de ser el sugerido.
+function marcarCampoSugerido(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.style.border = '2px dashed var(--accent)';
+  el.style.background = 'var(--clay-soft)';
+  el.title = 'Precio sugerido — se puede editar';
+}
+function marcarCampoEditadoManual(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.dataset.tocadoManual = '1';
+  el.style.border = '';
+  el.style.background = '';
+  el.title = '';
+}
+// Redondea a un número "lindo" (terminado en 50 o en 00) -- para arriba (precio a la
+// familia) o para abajo (precio a la niñera), nunca al revés.
+function redondearArriba50(v){ return Math.ceil(v/50)*50; }
+function redondearAbajo50(v){ return Math.floor(v/50)*50; }
 function actualizarPrecioSugeridoTraslado(){
   const box = document.getElementById('sit-precio-sugerido-box');
   if(!box) return;
@@ -847,24 +847,19 @@ function actualizarPrecioSugeridoTraslado(){
   const porKm = Number(cfg.precio_km)||0;
   const mult = multiplicadorHorarioTraslado(hora);
   const premium = Number(cfg.margen_premium)||1;
-  const precio = Math.round((base + km*porKm) * mult * premium);
+  const margenNinera = Number(cfg.margen_ninera)||0;
+  const crudo = (base + km*porKm) * mult * premium;
+  const cobro = redondearArriba50(crudo);
+  const pago = redondearAbajo50(crudo * (1 - margenNinera));
+  // Se precarga directo en los campos de arriba (Cobro a familia / Pago a niñera) -- son
+  // los mismos campos que se guardan, no hace falta un botón aparte para "usarlos". Si la
+  // persona ya los había tocado a mano, no se pisa: se respeta lo que puso.
+  const cobroInput = document.getElementById('sit-cobro'), pagoInput = document.getElementById('sit-pago');
+  if(cobroInput && !cobroInput.dataset.tocadoManual){ cobroInput.value = cobro; marcarCampoSugerido('sit-cobro'); }
+  if(pagoInput && !pagoInput.dataset.tocadoManual){ pagoInput.value = pago; marcarCampoSugerido('sit-pago'); }
+  calcSitMargen();
   const detalles = mult>1 ? ` · recargo horario ×${mult}` : '';
-  box.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-      <div>
-        <div style="font-size:12px;color:var(--ink-soft);">Precio sugerido${detalles} · premium ×${premium}</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:700;color:var(--accent);">$${precio.toLocaleString('es-UY')}</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button type="button" class="smallbtn" onclick="usarPrecioSugeridoTraslado(${precio})">Usar este precio</button>
-        <a href="#" style="font-size:12px;" onclick="abrirModalTarifaTraslado();return false;">Ajustar</a>
-      </div>
-    </div>`;
-}
-function usarPrecioSugeridoTraslado(precio){
-  const cobro = document.getElementById('sit-cobro');
-  if(cobro){ cobro.value = precio; calcSitMargen(); }
-  toast('Precio sugerido cargado — lo podés ajustar antes de guardar.');
+  box.innerHTML = `<div class="helper" style="margin:0;">Precio sugerido según los km${detalles} (margen ${Math.round(margenNinera*100)}% para Parents Break) — ya está cargado arriba, en los campos con el borde punteado. Lo podés editar antes de guardar. <a href="#" onclick="abrirModalTarifaTraslado();return false;">Ajustar tarifa</a></div>`;
 }
 function abrirModalTarifaTraslado(){
   const cfg = tarifaTrasladoConfig || {};
@@ -890,6 +885,7 @@ function abrirModalTarifaTraslado(){
       <div class="field"><label>Multiplicador</label><input type="number" step="0.01" id="tar-rec2-mult" value="${cfg.rec2_mult??1}"></div>
     </div>
     <div class="field" style="margin-top:6px;"><label>Margen premium (multiplicador fijo)</label><input type="number" step="0.01" id="tar-premium" value="${cfg.margen_premium??1}"></div>
+    <div class="field" style="margin-top:6px;"><label>Margen para Parents Break (% que se descuenta al precio de la niñera)</label><input type="number" step="1" id="tar-margen-ninera" value="${Math.round((cfg.margen_ninera??0.15)*100)}"></div>
     <div id="tar-warn"></div>
     <button class="btn primary" style="width:100%;margin-top:8px;" onclick="guardarTarifaTraslado()">Guardar tarifa</button>
   `;
@@ -907,6 +903,7 @@ async function guardarTarifaTraslado(){
     rec2_hasta: leerHora('tar-rec2-hasta')||null,
     rec2_mult: Number(document.getElementById('tar-rec2-mult').value)||1,
     margen_premium: Number(document.getElementById('tar-premium').value)||1,
+    margen_ninera: (Number(document.getElementById('tar-margen-ninera').value)||0) / 100,
   };
   if(!tarifaTrasladoConfig){ warn.innerHTML = '<div class="warnbox">No se encontró la fila de configuración base.</div>'; return; }
   const { error } = await sb.from('tarifas_traslado_config').update(payload).eq('id', tarifaTrasladoConfig.id);
@@ -1075,11 +1072,6 @@ async function eliminarSitting(id){
 }
 
 /* ---- lista del mes / resumen / export ---- */
-function cambiarSitSemanaRel(delta){
-  sitSemana = shiftSemana(sitSemana, delta);
-  const lbl = document.getElementById('sit-semana-label'); if(lbl) lbl.textContent = weekLabel(sitSemana);
-  cargarSitLista();
-}
 function cambiarSitMesRel(delta){
   sitMes = shiftMes(sitMes, delta);
   const lbl = document.getElementById('sit-mes-label'); if(lbl) lbl.textContent = monthLabel(sitMes);
@@ -1090,22 +1082,22 @@ async function cargarSitLista(){
   const summary = document.getElementById('sit-summary');
   if(!wrap) return;
   wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
-  const desde = sitSemana;
-  const finD = new Date(sitSemana+'T00:00:00'); finD.setDate(finD.getDate()+7);
-  const hasta = finD.toISOString().slice(0,10);
-  const { data, error } = await sb.from('sittings_traslados').select('*').eq('cancelado', false).gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
+  const [y,m] = sitMes.split('-').map(Number);
+  const desde = `${sitMes}-01`;
+  const hasta = new Date(y, m, 1).toISOString().slice(0,10);
+  const { data, error } = await sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
   if(error){ wrap.innerHTML = errBox(error); return; }
   sitItems = data || [];
   const cobrado = sitItems.reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
   const pagado = sitItems.reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
   summary.innerHTML = `
-    <div class="summarycard"><div class="statlabel">Cobrado esta semana</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${cobrado}</div></div>
-    <div class="summarycard"><div class="statlabel">Pagado esta semana</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${pagado}</div></div>
+    <div class="summarycard"><div class="statlabel">Cobrado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${cobrado}</div></div>
+    <div class="summarycard"><div class="statlabel">Pagado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${pagado}</div></div>
     <div class="summarycard" style="border-left:3px solid var(--good);"><div class="statlabel">Margen</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${cobrado-pagado}</div></div>
   `;
-  if(!sitItems.length){ wrap.innerHTML = `<div class="empty">No hay registros cargados en la semana del ${weekLabel(sitSemana)} todavía.</div>`; return; }
+  if(!sitItems.length){ wrap.innerHTML = `<div class="empty">No hay registros cargados en ${monthLabel(sitMes)} todavía.</div>`; return; }
   wrap.innerHTML = `
-    <h2>Registros de la semana del ${weekLabel(sitSemana)}</h2>
+    <h2>Registros de ${monthLabel(sitMes)}</h2>
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Tipo</th><th>Familia</th><th>Niñera</th><th>Cobro</th><th>Pago</th><th>Margen</th><th></th></tr></thead>
     <tbody>${sitItems.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
@@ -1115,9 +1107,9 @@ async function cargarSitLista(){
   `;
 }
 function exportarSitCSV(){
-  if(!sitItems.length){ toast('No hay registros para exportar en esta semana.', 'bad'); return; }
+  if(!sitItems.length){ toast('No hay registros para exportar en este mes.', 'bad'); return; }
   const headers = ['Fecha','Tipo','Registró','Familia','Niñera','Hora inicio','Hora fin','Km','Origen','Destino','Cobro familia','Pago niñera','Margen','Notas'];
   const rows = sitItems.map(r=>[r.fecha, r.tipo, r.registrado_por, r.familia_nombre, r.ninera_nombre, r.hora_inicio||'', r.hora_fin||'', r.km||'', r.origen||'', r.destino||'', r.cobro_familia||0, r.pago_ninera||0, (Number(r.cobro_familia)||0)-(Number(r.pago_ninera)||0), (r.notas||'').replace(/\n/g,' ')]);
-  descargarCSV(headers, rows, `sittings_traslados_semana_${sitSemana}.csv`);
+  descargarCSV(headers, rows, `sittings_traslados_${sitMes}.csv`);
 }
 
