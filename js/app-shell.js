@@ -383,10 +383,10 @@ function notifUsuario(){ return session?.user?.email || 'desconocida'; }
    propia copia en Deno, ver enviar-push-urgentes) para saber qué mandar por push y con qué
    default cuando el usuario nunca tocó el switch. */
 const TIPOS_NOTIF = [
-  {tipo:'sin_asignar', label:'Sitting sin asignar (hoy)', defaultPush:true},
-  {tipo:'sin_registrar', label:'Sitting sin registrar (hoy)', defaultPush:false},
-  {tipo:'cv_desactualizado', label:'CV de niñera desactualizado', defaultPush:true},
-  {tipo:'extracto', label:'Falta subir extracto Itaú', defaultPush:true},
+  {tipo:'sin_asignar', label:'Sitting sin asignar', sub:'Hoy, sin niñera confirmada', icono:'agenda', defaultPush:true},
+  {tipo:'sin_registrar', label:'Sitting sin registrar', sub:'Ya pasó y falta cargarlo en el sistema', icono:'sittings', defaultPush:false},
+  {tipo:'cv_desactualizado', label:'CV de niñera desactualizado', sub:'Cumplió años después de generarlo', icono:'ninieras', defaultPush:true},
+  {tipo:'extracto', label:'Falta subir extracto Itaú', sub:'Hace más de 15 días que no se sube uno nuevo', icono:'finanzas', defaultPush:true},
 ];
 
 async function cargarNotificaciones(){
@@ -593,12 +593,17 @@ async function activarPushNotificaciones(){
   actualizarBotonPush();
 }
 async function actualizarBotonPush(){
-  const btn = document.getElementById('push-toggle-btn');
-  if(!btn) return;
-  if(!pushSoportado()){ btn.style.display = 'none'; return; }
+  const wrap = document.getElementById('push-device-status');
+  if(!wrap) return;
+  if(!pushSoportado()){
+    wrap.innerHTML = `<p class="helper">Este dispositivo no soporta notificaciones push.</p>`;
+    return;
+  }
   const activo = await pushYaActivado();
-  btn.textContent = activo ? 'Notificaciones push activadas en este dispositivo' : 'Activar notificaciones push';
-  btn.disabled = activo;
+  wrap.innerHTML = activo
+    ? `<div class="pushok"><div class="pushok-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12.5 9.5 18 20 6"/></svg></div><span>Este dispositivo ya recibe notificaciones push.</span></div>`
+    : `<p class="helper" style="margin-bottom:12px;">Activalo una vez por dispositivo (celular, tablet) para recibir avisos aunque tengas la app cerrada. En iPhone hay que agregarlo antes a la pantalla de inicio (compartir → Agregar a inicio).</p>
+       <button class="btn" onclick="activarPushNotificaciones()">Activar notificaciones push</button>`;
 }
 
 /* ---- Pantalla "Notificaciones" (sidebar) ----
@@ -611,20 +616,31 @@ async function renderNotifConfig(cont){
   const { data: prefs } = await sb.from('notif_push_preferencias').select('tipo,activado').eq('usuario', notifUsuario());
   const prefMap = {};
   (prefs||[]).forEach(p=>{ prefMap[p.tipo] = p.activado; });
-  const activo = await pushYaActivado();
   cont.innerHTML = `
     <div class="card">
       <h2>Este dispositivo</h2>
-      <p class="helper" style="margin-bottom:12px;">${activo ? 'Este dispositivo ya recibe notificaciones push.' : 'Activalo una vez por dispositivo (celular, tablet) para empezar a recibir avisos aunque tengas la app cerrada. En iPhone hay que agregarlo antes a la pantalla de inicio (compartir → Agregar a inicio).'}</p>
-      <button id="push-toggle-btn" class="btn" onclick="activarPushNotificaciones()">Activar notificaciones push</button>
+      <div id="push-device-status"></div>
     </div>
     <div class="card">
       <h2>Qué te llega como push</h2>
-      <p class="helper" style="margin-bottom:12px;">La campanita siempre muestra todo. Esto es solo para elegir cuáles además te avisan directo al celular.</p>
-      ${TIPOS_NOTIF.map(t=>{
-        const checked = prefMap[t.tipo] !== undefined ? prefMap[t.tipo] : t.defaultPush;
-        return `<label class="chk" style="display:block;margin-bottom:10px;"><input type="checkbox" ${checked?'checked':''} onchange="guardarPrefNotif('${t.tipo}', this.checked)"> ${t.label}</label>`;
-      }).join('')}
+      <p class="helper" style="margin-bottom:4px;">La campanita siempre muestra todo. Esto es solo para elegir cuáles además te avisan directo al celular.</p>
+      <div class="notifcfg-list">
+        ${TIPOS_NOTIF.map(t=>{
+          const checked = prefMap[t.tipo] !== undefined ? prefMap[t.tipo] : t.defaultPush;
+          return `
+          <div class="notifcfg-row">
+            <div class="notifcfg-row-ic">${ICONS[t.icono]||ICONS.bell}</div>
+            <div class="notifcfg-row-body">
+              <div class="notifcfg-row-title">${t.label}</div>
+              <div class="notifcfg-row-sub">${t.sub}</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" ${checked?'checked':''} onchange="guardarPrefNotif('${t.tipo}', this.checked)">
+              <span class="track"></span>
+            </label>
+          </div>`;
+        }).join('')}
+      </div>
     </div>
   `;
   actualizarBotonPush();
