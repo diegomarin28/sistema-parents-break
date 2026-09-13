@@ -486,7 +486,7 @@ function renderNotifBell(){
   });
   const panel = document.getElementById('notif-panel');
   if(!panel) return;
-  panel.innerHTML = notifItems.length ? notifItems.map(i=>`
+  const cuerpo = notifItems.length ? notifItems.map(i=>`
     <div class="notif-item ${notifLeidas.has(i.id)?'':'unread'}" onclick="irANotificacion('${i.id}')">
       <div class="notif-item-ic">${ICONS.alert}</div>
       <div class="notif-item-body">
@@ -494,6 +494,7 @@ function renderNotifBell(){
         <div class="notif-item-msg">${i.mensaje}</div>
       </div>
     </div>`).join('') : '<div class="notif-empty">No hay avisos urgentes por ahora.</div>';
+  panel.innerHTML = `<div class="notif-panel-head">Notificaciones</div>${cuerpo}`;
 }
 
 async function irANotificacion(id){
