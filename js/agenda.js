@@ -769,16 +769,19 @@ function abrirModalAsignacionFija(s){
     <button class="btn primary" id="agenda-fija-guardar-${asigId}" style="width:100%;margin-bottom:8px;display:none;" onclick="cambiarNineraAsignacionFija('${asigId}')">Guardar niñera nueva para este horario fijo</button>
 
     <div style="height:1px;background:var(--line);margin:14px 0;"></div>
-    <div class="helper" style="margin-bottom:8px;">Corregir el horario o los días del fijo — aplica desde ahora para todos los próximos días, no toca lo que ya está registrado:</div>
-    <div class="grid2" style="margin-bottom:8px;">
-      <div class="field"><label>Hora inicio</label>${selectHora('agenda-fija-edit-hi')}</div>
-      <div class="field"><label>Hora fin</label>${selectHora('agenda-fija-edit-hf')}</div>
+    <button type="button" class="btn" id="agenda-fija-edit-toggle" style="width:100%;" onclick="document.getElementById('agenda-fija-edit-box').style.display='block';this.style.display='none';">Editar horarios futuros</button>
+    <div id="agenda-fija-edit-box" style="display:none;">
+      <div class="helper" style="margin:10px 0 8px;">Aplica desde ahora para todos los próximos días, no toca lo que ya está registrado:</div>
+      <div class="grid2" style="margin-bottom:8px;">
+        <div class="field"><label>Hora inicio</label>${selectHora('agenda-fija-edit-hi')}</div>
+        <div class="field"><label>Hora fin</label>${selectHora('agenda-fija-edit-hf')}</div>
+      </div>
+      <div class="dayrow" id="agenda-fija-edit-dias" style="margin-bottom:8px;">
+        ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn ${(a.dias||[]).includes(d)?'selected':''}" data-dia="${d}" onclick="this.classList.toggle('selected')">${DIAS_CORTO[d]}</button>`).join('')}
+      </div>
+      <div id="agenda-fija-edit-warn"></div>
+      <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="guardarHorarioAsignacionFija('${asigId}')">Guardar horario/días para todos los próximos</button>
     </div>
-    <div class="dayrow" id="agenda-fija-edit-dias" style="margin-bottom:8px;">
-      ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn ${(a.dias||[]).includes(d)?'selected':''}" data-dia="${d}" onclick="this.classList.toggle('selected')">${DIAS_CORTO[d]}</button>`).join('')}
-    </div>
-    <div id="agenda-fija-edit-warn"></div>
-    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="guardarHorarioAsignacionFija('${asigId}')">Guardar horario/días para todos los próximos</button>
 
     <div style="height:1px;background:var(--line);margin:14px 0;"></div>
     <div class="helper" style="margin-bottom:8px;">Corregir solo el día de hoy (${s.fecha}), sin tocar el fijo:</div>
