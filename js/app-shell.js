@@ -22,11 +22,11 @@ const MODULOS = [
   {key:'ninieras', label:'Niñeras', desc:'Tu equipo activo, con filtro por nombre y zona.'},
   {key:'familias', label:'Familias', desc:'Familias, tarifas por niñera y márgenes.'},
   {key:'sittings', label:'Sittings & traslados', desc:'Registro diario de sittings y traslados.'},
+  {key:'intermediaciones', label:'Intermediaciones', desc:'Colocaciones vía Agencia Enrique y eventos empresariales.'},
   {key:'finanzas', label:'Finanzas', desc:'Ingresos, pagos a niñeras y gastos generales — con datos reales.'},
   {key:'marketing', label:'Marketing', desc:'Calendario de fechas especiales y contenido.'},
   {key:'legal', label:'Contratos', desc:'Contratos de niñeras y traslados.'},
   {key:'juguetes', label:'Juguetes', desc:'Inventario de juguetes y en qué casa está cada uno.'},
-  {key:'intermediaciones', label:'Intermediaciones', desc:'Colocaciones vía Agencia Enrique y eventos empresariales.'},
 ];
 let moduloActivo = null;
 let rrhhTab = 'intake';
