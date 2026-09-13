@@ -29,7 +29,6 @@ function abrirModalNuevaFamilia(){
     <div class="grid3">
       <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="fam-cobro"></div>
       <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="fam-pago"></div>
-      <div class="field"><label>Niños (texto libre, opcional si ya cargás hijos abajo)</label><input type="text" id="fam-ninos" placeholder="Ej: 3 y 6 años"></div>
     </div>
     <div class="grid2">
       <div class="field"><label>Dirección</label><input type="text" id="fam-direccion" placeholder="Para sugerir origen en traslados"></div>
@@ -48,7 +47,7 @@ async function addFamilia(){
   if(!(await confirmarNombreNuevo(nombre, familiasItems, 'familia'))) return;
   const fam = { nombre, zona:document.getElementById('fam-zona').value, telefono:document.getElementById('fam-telefono').value,
     cobro_hora:document.getElementById('fam-cobro').value||null, pago_hora:document.getElementById('fam-pago').value||null,
-    ninos:document.getElementById('fam-ninos').value, direccion:document.getElementById('fam-direccion').value,
+    direccion:document.getElementById('fam-direccion').value,
     cuenta_bancaria:leerCuentasBancarias('fam'), notas:document.getElementById('fam-notas').value };
   const { data, error } = await sb.from('familias').insert(fam).select().single();
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
@@ -336,7 +335,6 @@ function editarFamilia(id){
     <div class="grid2">
       <div class="field"><label>Nombre</label><input type="text" id="ed-fam-nombre" value="${f.nombre||''}"></div>
       <div class="field"><label>Teléfono</label><input type="tel" id="ed-fam-telefono" value="${f.telefono||''}"></div>
-      <div class="field"><label>Niños (texto viejo, sin fecha exacta)</label><input type="text" id="ed-fam-ninos" value="${f.ninos||''}"></div>
       <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="ed-fam-cobro" value="${f.cobro_hora??''}"></div>
       <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="ed-fam-pago" value="${f.pago_hora??''}"></div>
       <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion" value="${f.direccion||''}"></div>
@@ -362,7 +360,6 @@ async function guardarEdicionFamilia(id){
     telefono: document.getElementById('ed-fam-telefono').value,
     cobro_hora: document.getElementById('ed-fam-cobro').value||null,
     pago_hora: document.getElementById('ed-fam-pago').value||null,
-    ninos: document.getElementById('ed-fam-ninos').value,
     direccion: document.getElementById('ed-fam-direccion').value,
     cuenta_bancaria: leerCuentasBancarias('ed-fam'),
     frecuencia_cobro: document.getElementById('ed-fam-frecuencia').value,

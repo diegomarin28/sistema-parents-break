@@ -189,34 +189,70 @@ async function guardarGruposZona(){
    es su propia fila, con fecha de nacimiento real (la edad se calcula sola,
    mismo criterio que en niñeras) y colegio.
    ============================================================ */
-function filaHijoFamilia(hijo){
+function filaHijoFamilia(hijo, abierta){
   const h = hijo || {};
   const q = s => String(s||'').replace(/"/g,'&quot;');
   const edadActual = edadHijo(h);
-  return `<div class="hijofamilia-row" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;" data-edad-declarada="${h.edad_declarada??''}" data-edad-declarada-en="${h.edad_declarada_en||''}">
-    <div class="grid3" style="margin-bottom:0;">
-      <div class="field" style="margin-bottom:0;"><label>Nombre</label><input type="text" class="hf-nombre" value="${q(h.nombre)}" placeholder="opcional"></div>
-      <div class="field" style="margin-bottom:0;"><label>Fecha de nacimiento</label><input type="date" class="hf-fecha-nac" value="${h.fecha_nacimiento||''}" onchange="this.closest('.hijofamilia-row').querySelector('.hf-edad-declarada').disabled = !!this.value;"></div>
-      <div class="field" style="margin-bottom:0;"><label>Colegio</label><input type="text" class="hf-colegio" value="${q(h.colegio)}"></div>
+  const faltaInfo = edadActual===null || !h.colegio;
+  const resumen = resumenUnHijo(h);
+  return `<div class="hijofamilia-row" style="border:1px solid var(--line);border-radius:8px;margin-bottom:8px;overflow:hidden;" data-edad-declarada="${h.edad_declarada??''}" data-edad-declarada-en="${h.edad_declarada_en||''}">
+    <div class="hijofamilia-summary" onclick="toggleHijoFamiliaRow(this)" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer;${faltaInfo?'color:var(--warn);':''}">
+      <span class="hf-summary-text" style="font-weight:600;">${resumen}${faltaInfo?' — Falta info':''}</span>
+      <span class="hf-summary-arrow">${abierta?'▴':'▾'}</span>
     </div>
-    <div class="field" style="margin:6px 0 0;">
-      <label>O, si no sabés la fecha exacta: edad ahora mismo${edadActual!==null && !h.fecha_nacimiento ? ` <span class="helper" style="margin:0;">(hoy: ${edadActual} años)</span>` : ''}</label>
-      <input type="number" class="hf-edad-declarada" placeholder="${edadActual!==null && !h.fecha_nacimiento ? 'Cambiar edad a…' : 'Ej: 5'}" min="0" max="30" ${h.fecha_nacimiento ? 'disabled' : ''}>
-      <div class="helper" style="margin:2px 0 0;">Dejalo vacío para no tocarla. Si escribís un número, queda esa edad a partir de hoy y suma un año sola cada 12 meses — como si fuese un reloj.</div>
+    <div class="hijofamilia-detail" style="display:${abierta?'block':'none'};padding:0 12px 12px;">
+      <div class="grid3" style="margin-bottom:0;">
+        <div class="field" style="margin-bottom:0;"><label>Nombre</label><input type="text" class="hf-nombre" value="${q(h.nombre)}" placeholder="opcional" oninput="actualizarResumenHijoFamilia(this)"></div>
+        <div class="field" style="margin-bottom:0;"><label>Fecha de nacimiento</label><input type="date" class="hf-fecha-nac" value="${h.fecha_nacimiento||''}" onchange="this.closest('.hijofamilia-row').querySelector('.hf-edad-declarada').disabled = !!this.value; actualizarResumenHijoFamilia(this);"></div>
+        <div class="field" style="margin-bottom:0;"><label>Colegio</label><input type="text" class="hf-colegio" value="${q(h.colegio)}" oninput="actualizarResumenHijoFamilia(this)"></div>
+      </div>
+      <div class="field" style="margin:6px 0 0;">
+        <label>O, si no sabés la fecha exacta: edad ahora mismo${edadActual!==null && !h.fecha_nacimiento ? ` <span class="helper" style="margin:0;">(hoy: ${edadActual} años)</span>` : ''}</label>
+        <input type="number" class="hf-edad-declarada" placeholder="${edadActual!==null && !h.fecha_nacimiento ? 'Cambiar edad a…' : 'Ej: 5'}" min="0" max="30" ${h.fecha_nacimiento ? 'disabled' : ''} onchange="actualizarResumenHijoFamilia(this)">
+        <div class="helper" style="margin:2px 0 0;">Dejalo vacío para no tocarla. Si escribís un número, queda esa edad a partir de hoy y suma un año sola cada 12 meses — como si fuese un reloj.</div>
+      </div>
+      <button type="button" class="smallbtn danger" style="margin-top:6px;" onclick="this.closest('.hijofamilia-row').remove()">Quitar</button>
     </div>
-    <button type="button" class="smallbtn danger" style="margin-top:6px;" onclick="this.closest('.hijofamilia-row').remove()">Quitar</button>
   </div>`;
+}
+// Texto compacto de la fila cerrada: nombre (o "Hijo N"), y lo que ya se sabe.
+function resumenUnHijo(h, posicion){
+  const nombre = h.nombre || `Hijo ${posicion||''}`.trim();
+  const edad = edadHijo(h);
+  const partes = [edad!==null ? `${edad} años` : null, h.colegio || null].filter(Boolean);
+  return partes.length ? `${nombre} — ${partes.join(' · ')}` : nombre;
+}
+function actualizarResumenHijoFamilia(inputEl){
+  const row = inputEl.closest('.hijofamilia-row');
+  const h = {
+    nombre: row.querySelector('.hf-nombre').value.trim(),
+    colegio: row.querySelector('.hf-colegio').value.trim(),
+    fecha_nacimiento: row.querySelector('.hf-fecha-nac').value || null,
+    edad_declarada: row.querySelector('.hf-edad-declarada').value || row.dataset.edadDeclarada || null,
+    edad_declarada_en: row.dataset.edadDeclaradaEn || todayISO(),
+  };
+  const faltaInfo = edadHijo(h)===null || !h.colegio;
+  const span = row.querySelector('.hf-summary-text');
+  const idx = [...row.parentElement.children].indexOf(row) + 1;
+  span.textContent = resumenUnHijo(h, idx) + (faltaInfo ? ' — Falta info' : '');
+  row.querySelector('.hijofamilia-summary').style.color = faltaInfo ? 'var(--warn)' : '';
+}
+function toggleHijoFamiliaRow(summaryEl){
+  const detail = summaryEl.nextElementSibling;
+  const abrir = detail.style.display==='none';
+  detail.style.display = abrir ? 'block' : 'none';
+  summaryEl.querySelector('.hf-summary-arrow').textContent = abrir ? '▴' : '▾';
 }
 function htmlHijosFamilia(prefix, hijos){
   const lista = hijos && hijos.length ? hijos : [];
   return `<div class="field">
     <label>Hijos</label>
-    <div id="${prefix}-hijos-list">${lista.map(filaHijoFamilia).join('')}</div>
+    <div id="${prefix}-hijos-list">${lista.map((h,i)=>filaHijoFamilia(h, edadHijo(h)===null || !h.colegio)).join('')}</div>
     <button class="smallbtn" type="button" onclick="agregarFilaHijoFamilia('${prefix}')" style="margin-top:6px;">+ Agregar hijo</button>
   </div>`;
 }
 function agregarFilaHijoFamilia(prefix){
-  document.getElementById(prefix+'-hijos-list').insertAdjacentHTML('beforeend', filaHijoFamilia());
+  document.getElementById(prefix+'-hijos-list').insertAdjacentHTML('beforeend', filaHijoFamilia(null, true));
 }
 function leerHijosFamilia(prefix){
   return [...document.querySelectorAll(`#${prefix}-hijos-list .hijofamilia-row`)].map(row=>{
