@@ -211,7 +211,7 @@ function filaHijoFamilia(hijo, abierta){
         <input type="number" class="hf-edad-declarada" placeholder="${edadActual!==null && !h.fecha_nacimiento ? 'Cambiar edad a…' : 'Ej: 5'}" min="0" max="30" ${h.fecha_nacimiento ? 'disabled' : ''} onchange="actualizarResumenHijoFamilia(this)">
         <div class="helper" style="margin:2px 0 0;">Dejalo vacío para no tocarla. Si escribís un número, queda esa edad a partir de hoy y suma un año sola cada 12 meses — como si fuese un reloj.</div>
       </div>
-      <button type="button" class="smallbtn danger" style="margin-top:6px;" onclick="this.closest('.hijofamilia-row').remove()">Quitar</button>
+      <button type="button" class="smallbtn danger" style="margin-top:6px;" onclick="confirmarQuitarHijoFamilia(this)">Quitar</button>
     </div>
   </div>`;
 }
@@ -243,11 +243,16 @@ function toggleHijoFamiliaRow(summaryEl){
   detail.style.display = abrir ? 'block' : 'none';
   summaryEl.querySelector('.hf-summary-arrow').textContent = abrir ? '▴' : '▾';
 }
+function confirmarQuitarHijoFamilia(btn){
+  const row = btn.closest('.hijofamilia-row');
+  const nombre = row.querySelector('.hf-summary-text').textContent;
+  if(confirm(`¿Quitar a ${nombre}? Se va a borrar al guardar.`)) row.remove();
+}
 function htmlHijosFamilia(prefix, hijos){
   const lista = hijos && hijos.length ? hijos : [];
   return `<div class="field">
     <label>Hijos</label>
-    <div id="${prefix}-hijos-list">${lista.map((h,i)=>filaHijoFamilia(h, edadHijo(h)===null || !h.colegio)).join('')}</div>
+    <div id="${prefix}-hijos-list">${lista.map((h,i)=>filaHijoFamilia(h, false)).join('')}</div>
     <button class="smallbtn" type="button" onclick="agregarFilaHijoFamilia('${prefix}')" style="margin-top:6px;">+ Agregar hijo</button>
   </div>`;
 }
@@ -383,7 +388,7 @@ function restaurarScrollMainarea(valor){
    3 campos separados (banco / número / sucursal) en vez de un input libre,
    mismo criterio que quedó armado en el formulario de postulación.
    ============================================================ */
-const BANCOS_CUENTA = ['Itaú','BROU','Santander','Scotiabank','BBVA','HSBC','Otro'];
+const BANCOS_CUENTA = ['Itaú','BROU','Santander','Scotiabank','Prex','BBVA','Mercado Pago','HSBC','Otro'];
 // Separa el string guardado en sus 3 partes, para poder editarlo con los campos separados.
 function parsearCuentaBancaria(valor){
   const v = String(valor||'').trim();
@@ -416,7 +421,7 @@ function filaCuentaBancaria(valor=''){
   const otroValor = (!esConocido && banco) ? banco : '';
   const q = s => String(s||'').replace(/"/g,'&quot;');
   return `<div class="cuentabancaria-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
-    <select class="cuentabancaria-banco" onchange="toggleBancoOtro(this)" style="flex:1;min-width:100px;">
+    <select class="cuentabancaria-banco" data-banco-actual="${bancoSel}" onchange="toggleBancoOtro(this)" style="flex:1;min-width:100px;">
       <option value="">Banco…</option>
       ${BANCOS_CUENTA.map(b=>`<option value="${b}" ${bancoSel===b?'selected':''}>${b}</option>`).join('')}
     </select>
@@ -427,8 +432,17 @@ function filaCuentaBancaria(valor=''){
   </div>`;
 }
 function toggleBancoOtro(sel){
-  const otro = sel.closest('.cuentabancaria-row').querySelector('.cuentabancaria-otro');
+  const row = sel.closest('.cuentabancaria-row');
+  const otro = row.querySelector('.cuentabancaria-otro');
   otro.style.display = sel.value==='Otro' ? '' : 'none';
+  // Cambiar de banco es cambiar de cuenta -- el número y la sucursal que había cargados
+  // eran del banco anterior, no tiene sentido que se queden pegados al banco nuevo (eso
+  // daba a entender que dos bancos distintos comparten el mismo número de cuenta).
+  if(sel.dataset.bancoActual && sel.dataset.bancoActual !== sel.value){
+    row.querySelector('.cuentabancaria-numero').value = '';
+    row.querySelector('.cuentabancaria-sucursal').value = '';
+  }
+  sel.dataset.bancoActual = sel.value;
 }
 function agregarFilaCuentaBancaria(prefix){
   document.getElementById(prefix+'-cuentas-list').insertAdjacentHTML('beforeend', filaCuentaBancaria());
