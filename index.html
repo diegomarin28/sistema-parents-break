@@ -251,8 +251,24 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .notif-item-title{font-weight:700;font-size:13px;color:var(--ink);}
 .notif-item-msg{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
 .notif-empty{padding:20px 14px;text-align:center;color:var(--ink-soft);font-size:13px;}
-#push-toggle-btn{display:block;text-align:left;padding:2px 0;}
-#push-toggle-btn:disabled{color:rgba(255,255,255,.55);cursor:default;}
+.pushok{display:flex;align-items:center;gap:10px;color:var(--ink);font-size:14px;}
+.pushok-ic{width:28px;height:28px;border-radius:50%;background:var(--good-soft);color:var(--good);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.pushok-ic svg{width:16px;height:16px;}
+.notifcfg-list{margin-top:8px;}
+.notifcfg-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line);}
+.notifcfg-row:last-child{border-bottom:none;}
+.notifcfg-row-ic{width:34px;height:34px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.notifcfg-row-ic svg{width:17px;height:17px;}
+.notifcfg-row-body{flex:1;min-width:0;}
+.notifcfg-row-title{font-weight:700;font-size:14px;color:var(--ink);}
+.notifcfg-row-sub{font-size:12.5px;color:var(--ink-soft);margin-top:1px;}
+.toggle{position:relative;display:inline-block;width:42px;height:25px;flex-shrink:0;}
+.toggle input{position:absolute;opacity:0;width:0;height:0;}
+.toggle .track{position:absolute;inset:0;background:#D8D6E8;border-radius:100px;cursor:pointer;transition:background var(--ease);}
+.toggle .track::before{content:'';position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.22);transition:transform var(--ease);}
+.toggle input:checked+.track{background:var(--accent);}
+.toggle input:checked+.track::before{transform:translateX(17px);}
+.toggle input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px;}
 .mainarea{flex:1;min-width:0;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 #modcontent{max-width:960px;margin:0 auto;padding:26px 32px 100px;}
 .navitem{display:flex;align-items:center;gap:10px;background:none;border:none;border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;transition:background var(--ease);font-family:'Inter',sans-serif;width:100%;}
