@@ -1162,5 +1162,6 @@ function renderModulo(){
   if(moduloActivo==='legal'){ renderLegal(cont); return; }
   if(moduloActivo==='juguetes'){ cont.innerHTML = moduloHeader(m.label) + '<div id="jug-body"></div>'; renderJuguetes(document.getElementById('jug-body')); return; }
   if(moduloActivo==='intermediaciones'){ renderIntermediaciones(cont); return; }
+  if(moduloActivo==='notificaciones'){ cont.innerHTML = moduloHeader(m.label) + '<div id="notifcfg-body"></div>'; renderNotifConfig(document.getElementById('notifcfg-body')); return; }
 }
 

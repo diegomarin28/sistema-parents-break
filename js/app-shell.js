@@ -18,6 +18,7 @@ const ICONS = {
   bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>`,
   alert: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 4 2 20h20L12 4Z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>`,
 };
+ICONS.notificaciones = ICONS.bell;
 const MODULOS = [
   {key:'agenda', label:'Agenda', desc:'Solicitudes de familias, asignación de niñeras y calendario del día.'},
   {key:'rrhh', label:'Postulantes', desc:'Candidatas y entrevistas — el pipeline completo, de punta a punta.'},
@@ -29,6 +30,7 @@ const MODULOS = [
   {key:'marketing', label:'Marketing', desc:'Calendario de fechas especiales y contenido.'},
   {key:'legal', label:'Contratos', desc:'Contratos de niñeras y traslados.'},
   {key:'juguetes', label:'Juguetes', desc:'Inventario de juguetes y en qué casa está cada uno.'},
+  {key:'notificaciones', label:'Notificaciones', desc:'Elegí qué avisos te llegan como push al celular, además de la campanita.'},
 ];
 let moduloActivo = null;
 let rrhhTab = 'intake';
@@ -109,13 +111,12 @@ function renderSidebar(){
     <div class="sidebar-foot">
       ${nombreUsuario()}<br>
       ${PASSKEY_SOPORTADO ? `<button onclick="gestionarPasskeys()">Face ID / Touch ID</button> · ` : ''}<button onclick="logout()">Cerrar sesión</button>
-      <div style="margin-top:6px;"><button id="push-toggle-btn" onclick="activarPushNotificaciones()">Activar notificaciones push</button></div>
     </div>
   `;
   actualizarAgendaBadge();
   actualizarFinanzasBadge();
   renderNotifBell();
-  actualizarBotonPush();
+  ajustarSidebarNav();
 }
 async function actualizarFinanzasBadge(){
   const dot = document.getElementById('finanzas-navdot');
@@ -377,6 +378,17 @@ let notifRefrescarTimer = null;
 
 function notifUsuario(){ return session?.user?.email || 'desconocida'; }
 
+/* Catálogo único de tipos de notificación — lo usa tanto cargarNotificaciones() (bell) como
+   renderNotifConfig() (la pantalla de ajustes) y, en paralelo, la Edge Function (con su
+   propia copia en Deno, ver enviar-push-urgentes) para saber qué mandar por push y con qué
+   default cuando el usuario nunca tocó el switch. */
+const TIPOS_NOTIF = [
+  {tipo:'sin_asignar', label:'Sitting sin asignar (hoy)', defaultPush:true},
+  {tipo:'sin_registrar', label:'Sitting sin registrar (hoy)', defaultPush:false},
+  {tipo:'cv_desactualizado', label:'CV de niñera desactualizado', defaultPush:true},
+  {tipo:'extracto', label:'Falta subir extracto Itaú', defaultPush:true},
+];
+
 async function cargarNotificaciones(){
   if(!session) return;
   const hoyStr = todayISO();
@@ -389,6 +401,7 @@ async function cargarNotificaciones(){
   (sinAsignar||[]).forEach(s=>{
     items.push({
       id: 'sol:'+s.id,
+      tipo: 'sin_asignar',
       titulo: 'Sitting sin asignar',
       mensaje: `${s.familia_nombre||'Familia sin nombre'}, hoy${s.hora_inicio?' '+s.hora_inicio.slice(0,5):''} — sin niñera confirmada`,
       destino: 'agenda',
@@ -404,6 +417,7 @@ async function cargarNotificaciones(){
       (porSol[s.id]||[]).forEach(n=>{
         items.push({
           id: 'sn:'+n.id,
+          tipo: 'sin_registrar',
           titulo: 'Sitting sin registrar',
           mensaje: `${n.ninera_nombre} → ${s.familia_nombre||'familia sin nombre'}, hoy${s.hora_inicio?' '+s.hora_inicio.slice(0,5):''} — todavía no se cargó`,
           destino: 'pend-hoy',
@@ -420,6 +434,7 @@ async function cargarNotificaciones(){
       if(typeof cvEstaDesactualizado === 'function' && cvEstaDesactualizado(n)){
         items.push({
           id: 'cv:'+n.id,
+          tipo: 'cv_desactualizado',
           titulo: 'CV desactualizado',
           mensaje: `${n.nombre} cumplió años después de generarle el CV — convendría regenerarlo`,
           destino: 'ninieras',
@@ -441,6 +456,7 @@ async function cargarNotificaciones(){
       if(limite.getTime() <= Date.now()){
         items.push({
           id: 'extracto:'+limite.toISOString().slice(0,10),
+          tipo: 'extracto',
           titulo: 'Falta subir el extracto de Itaú',
           mensaje: `Hace más de 15 días que no se sube un extracto nuevo para conciliar.`,
           destino: 'finanzas',
@@ -583,5 +599,60 @@ async function actualizarBotonPush(){
   const activo = await pushYaActivado();
   btn.textContent = activo ? 'Notificaciones push activadas en este dispositivo' : 'Activar notificaciones push';
   btn.disabled = activo;
+}
+
+/* ---- Pantalla "Notificaciones" (sidebar) ----
+   Acá vive todo lo de push en un solo lugar: activar el dispositivo, y elegir tipo por tipo
+   cuáles mandan push al celular (la campanita siempre muestra todo, esto solo filtra el push).
+   Preferencia por usuaria (notif_push_preferencias): si no hay fila guardada, se usa el
+   default de TIPOS_NOTIF — mismo criterio que aplica la Edge Function del lado del servidor. */
+async function renderNotifConfig(cont){
+  cont.innerHTML = '<div class="empty">Cargando…</div>';
+  const { data: prefs } = await sb.from('notif_push_preferencias').select('tipo,activado').eq('usuario', notifUsuario());
+  const prefMap = {};
+  (prefs||[]).forEach(p=>{ prefMap[p.tipo] = p.activado; });
+  const activo = await pushYaActivado();
+  cont.innerHTML = `
+    <div class="card">
+      <h2>Este dispositivo</h2>
+      <p class="helper" style="margin-bottom:12px;">${activo ? 'Este dispositivo ya recibe notificaciones push.' : 'Activalo una vez por dispositivo (celular, tablet) para empezar a recibir avisos aunque tengas la app cerrada. En iPhone hay que agregarlo antes a la pantalla de inicio (compartir → Agregar a inicio).'}</p>
+      <button id="push-toggle-btn" class="btn" onclick="activarPushNotificaciones()">Activar notificaciones push</button>
+    </div>
+    <div class="card">
+      <h2>Qué te llega como push</h2>
+      <p class="helper" style="margin-bottom:12px;">La campanita siempre muestra todo. Esto es solo para elegir cuáles además te avisan directo al celular.</p>
+      ${TIPOS_NOTIF.map(t=>{
+        const checked = prefMap[t.tipo] !== undefined ? prefMap[t.tipo] : t.defaultPush;
+        return `<label class="chk" style="display:block;margin-bottom:10px;"><input type="checkbox" ${checked?'checked':''} onchange="guardarPrefNotif('${t.tipo}', this.checked)"> ${t.label}</label>`;
+      }).join('')}
+    </div>
+  `;
+  actualizarBotonPush();
+}
+async function guardarPrefNotif(tipo, activado){
+  await sb.from('notif_push_preferencias').upsert({usuario: notifUsuario(), tipo, activado}, {onConflict:'usuario,tipo'});
+  toast('Guardado.');
+}
+
+/* ---- Sidebar: nunca scrollea, se achica solo si hace falta ----
+   Si al agregar módulos nuevos el menú deja de entrar en la altura del dispositivo, se aplica
+   la clase .snug (menos padding/gap/tamaño de letra) en vez de dejar que aparezca un scroll
+   interno. Se revisa cada vez que se repinta el sidebar. */
+function ajustarSidebarNav(){
+  const nav = document.querySelector('.sidebar-nav');
+  const sidebar = document.getElementById('sidebar');
+  if(!nav || !sidebar) return;
+  nav.classList.remove('snug');
+  sidebar.classList.remove('snug-logo');
+  requestAnimationFrame(()=>{
+    if(sidebar.scrollHeight > sidebar.clientHeight + 1){
+      nav.classList.add('snug');
+    }
+    requestAnimationFrame(()=>{
+      if(sidebar.scrollHeight > sidebar.clientHeight + 1){
+        sidebar.classList.add('snug-logo');
+      }
+    });
+  });
 }
 
