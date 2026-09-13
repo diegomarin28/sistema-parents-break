@@ -283,6 +283,7 @@ async function verNinera(id){
     <div id="vn-carsitting"></div>
     <div id="vn-juguetes"></div>
     <div id="vn-incidentes" style="margin-top:18px;"></div>
+    <div id="vn-intermediaciones" style="margin-top:18px;"></div>
     <div style="margin-top:18px;">
       <h2 class="card-section-title" style="margin-top:0;">Sittings y traslados de ${n.nombre.split(' ')[0]}</h2>
       <div class="grid2">
@@ -296,6 +297,7 @@ async function verNinera(id){
   cargarCarsittingSeccion(n.nombre, 'vn-carsitting', n.tipo, cd.mail);
   cargarJuguetesDeNinera(n.nombre);
   renderIncidentesEnFicha('vn-incidentes', 'ninera', n.id, n.nombre);
+  renderIntermediacionesEnFicha('vn-intermediaciones', n.id);
   // cargar los sittings de esta niñera y sus reseñas (si no están cargadas ya globalmente) en paralelo
   const necesitaResenas = !Object.keys(sitHistResenas).length;
   const [{data}, resenasRes] = await Promise.all([

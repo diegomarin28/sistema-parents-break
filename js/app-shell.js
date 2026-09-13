@@ -14,6 +14,7 @@ const ICONS = {
   moneyOut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7l5 5 4-4 7 8"/><path d="M15 16h5v-5"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg>`,
   juguetes: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="10" width="7" height="7" rx="1.2"/><circle cx="16.5" cy="13.5" r="3.5"/><path d="M9 10V7a2 2 0 1 1 2 2H9z"/></svg>`,
+  intermediaciones: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16M4 12h10M4 17h16"/><circle cx="18" cy="12" r="2.2"/></svg>`,
 };
 const MODULOS = [
   {key:'agenda', label:'Agenda', desc:'Solicitudes de familias, asignación de niñeras y calendario del día.'},
@@ -25,6 +26,7 @@ const MODULOS = [
   {key:'marketing', label:'Marketing', desc:'Calendario de fechas especiales y contenido.'},
   {key:'legal', label:'Contratos', desc:'Contratos de niñeras y traslados.'},
   {key:'juguetes', label:'Juguetes', desc:'Inventario de juguetes y en qué casa está cada uno.'},
+  {key:'intermediaciones', label:'Intermediaciones', desc:'Colocaciones vía Agencia Enrique y eventos empresariales.'},
 ];
 let moduloActivo = null;
 let rrhhTab = 'intake';

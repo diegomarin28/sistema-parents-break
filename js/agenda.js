@@ -1086,6 +1086,7 @@ const RT_TABLAS_POR_MODULO = {
   marketing: ['fechas_marketing'],
   legal: ['contratos','ninieras','familias'],
   juguetes: ['juguetes','juguetes_movimientos','ninieras'],
+  intermediaciones: ['intermediaciones_enrique','intermediaciones_eventos','intermediaciones_eventos_ninieras'],
 };
 let rtChannel = null;
 let rtRefrescarTimer = null;
@@ -1139,5 +1140,6 @@ function renderModulo(){
   if(moduloActivo==='marketing'){ renderMarketing(cont); return; }
   if(moduloActivo==='legal'){ renderLegal(cont); return; }
   if(moduloActivo==='juguetes'){ cont.innerHTML = moduloHeader(m.label) + '<div id="jug-body"></div>'; renderJuguetes(document.getElementById('jug-body')); return; }
+  if(moduloActivo==='intermediaciones'){ renderIntermediaciones(cont); return; }
 }
 
