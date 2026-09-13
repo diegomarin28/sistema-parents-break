@@ -437,9 +437,10 @@ function htmlCuentasBancarias(prefix, cuentas){
       <select id="${prefix}-cb-banco" data-banco-previo="${bancoInicial}" onchange="cambiarBancoCuenta('${prefix}')" style="flex:1;min-width:100px;" ${bancos.length?'':'disabled'}>
         ${bancos.length ? bancos.map(b=>`<option value="${b}" ${b===bancoInicial?'selected':''}>${b}</option>`).join('') : `<option value="">Sin cuentas cargadas</option>`}
       </select>
-      <input type="text" id="${prefix}-cb-numero" placeholder="Número de cuenta" value="${q(actual.numero)}" style="flex:1;min-width:100px;" oninput="guardarCuentaActualEnMapa('${prefix}')">
-      <input type="text" id="${prefix}-cb-sucursal" placeholder="Sucursal (si hace falta)" value="${q(actual.sucursal)}" style="flex:1;min-width:100px;" oninput="guardarCuentaActualEnMapa('${prefix}')">
+      <input type="text" id="${prefix}-cb-numero" placeholder="Número de cuenta" value="${q(actual.numero)}" style="flex:1;min-width:100px;" oninput="guardarCuentaActualEnMapa('${prefix}')" ${bancos.length?'':'disabled'}>
+      <input type="text" id="${prefix}-cb-sucursal" placeholder="Sucursal (si hace falta)" value="${q(actual.sucursal)}" style="flex:1;min-width:100px;" oninput="guardarCuentaActualEnMapa('${prefix}')" ${bancos.length?'':'disabled'}>
     </div>
+    <div class="helper" id="${prefix}-cb-sinbanco" style="${bancos.length?'display:none;':''}">Elegí o agregá un banco antes de cargar el número.</div>
     <div style="display:flex;gap:8px;margin-top:8px;align-items:center;" id="${prefix}-cb-acciones">
       <button class="smallbtn" type="button" id="${prefix}-cb-addbtn" onclick="agregarBancoNuevoACuenta('${prefix}')">+ Agregar otro banco</button>
       <button class="smallbtn danger" type="button" id="${prefix}-cb-eliminar" onclick="confirmarQuitarBancoActual('${prefix}')" style="${bancos.length?'':'display:none;'}">Eliminar esta cuenta bancaria</button>
@@ -461,9 +462,20 @@ function guardarCuentaActualEnMapa(prefix){
 // Cambiar de banco en el desplegable: guarda lo que había del banco anterior, y carga lo
 // que ya estaba guardado para el banco nuevo (o vacío si es la primera vez que se lo elige).
 function cambiarBancoCuenta(prefix){
-  guardarCuentaActualEnMapa(prefix); // con el banco TODAVÍA en el valor anterior, si aplica
+  // OJO: en el momento en que dispara "onchange", sel.value YA es el banco nuevo -- por eso
+  // no se puede usar guardarCuentaActualEnMapa acá (guardaría lo tipeado bajo la clave
+  // equivocada). Hay que guardar explícitamente bajo el banco ANTERIOR (guardado en
+  // data-banco-previo antes de este cambio).
   const sel = document.getElementById(prefix+'-cb-banco');
+  const bancoAnterior = sel.dataset.bancoPrevio;
   const mapa = leerMapaCuentas(prefix);
+  if(bancoAnterior){
+    mapa[bancoAnterior] = {
+      numero: document.getElementById(prefix+'-cb-numero').value.trim(),
+      sucursal: document.getElementById(prefix+'-cb-sucursal').value.trim(),
+    };
+    guardarMapaCuentas(prefix, mapa);
+  }
   const actual = mapa[sel.value] || {numero:'', sucursal:''};
   document.getElementById(prefix+'-cb-numero').value = actual.numero||'';
   document.getElementById(prefix+'-cb-sucursal').value = actual.sucursal||'';
@@ -503,9 +515,13 @@ function agregarBancoAlMapa(prefix, banco){
   bancoSel.insertAdjacentHTML('beforeend', `<option value="${banco}">${banco}</option>`);
   bancoSel.value = banco;
   bancoSel.dataset.bancoPrevio = banco;
-  document.getElementById(prefix+'-cb-numero').value = mapa[banco].numero;
-  document.getElementById(prefix+'-cb-sucursal').value = mapa[banco].sucursal;
+  const numeroInput = document.getElementById(prefix+'-cb-numero'), sucursalInput = document.getElementById(prefix+'-cb-sucursal');
+  numeroInput.disabled = false; sucursalInput.disabled = false;
+  numeroInput.value = mapa[banco].numero;
+  sucursalInput.value = mapa[banco].sucursal;
+  document.getElementById(prefix+'-cb-sinbanco').style.display = 'none';
   document.getElementById(prefix+'-cb-eliminar').style.display = '';
+  numeroInput.focus();
   // volver a poner el botón de "+ Agregar otro banco" (saca el selector/input temporal)
   const addsel = document.getElementById(prefix+'-cb-addsel'), addotro = document.getElementById(prefix+'-cb-addotro');
   (addsel||addotro).outerHTML = `<button class="smallbtn" type="button" id="${prefix}-cb-addbtn" onclick="agregarBancoNuevoACuenta('${prefix}')">+ Agregar otro banco</button>`;
@@ -531,8 +547,10 @@ function confirmarQuitarBancoActual(prefix){
       sel.innerHTML = `<option value="">Sin cuentas cargadas</option>`;
       sel.disabled = true;
       sel.dataset.bancoPrevio = '';
-      document.getElementById(prefix+'-cb-numero').value = '';
-      document.getElementById(prefix+'-cb-sucursal').value = '';
+      const numeroInput = document.getElementById(prefix+'-cb-numero'), sucursalInput = document.getElementById(prefix+'-cb-sucursal');
+      numeroInput.value = ''; numeroInput.disabled = true;
+      sucursalInput.value = ''; sucursalInput.disabled = true;
+      document.getElementById(prefix+'-cb-sinbanco').style.display = '';
       document.getElementById(prefix+'-cb-eliminar').style.display = 'none';
     }
   });
