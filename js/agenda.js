@@ -146,10 +146,19 @@ async function cargarAgendaSolicitudes(){
     sb.from('sittings_traslados').select('*').gte('fecha', desde).lte('fecha', hasta),
   ]);
   if(error){ if(wrap) wrap.innerHTML = errBox(error); return; }
-  const puntuales = (sols||[]).map(s=>({...s, ninieras: s.solicitud_ninieras||[], _fuente:'solicitud'}));
-
   // Ya registrado en Sittings, por día+niñera+familia (antes era solo niñera+familia, sin día).
   const registradosSet = new Set((registros||[]).map(r=>r.fecha+'|'+normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
+
+  // Solicitudes puntuales: al confirmar una niñera (guardarAsignacionDirecta) se crea de una
+  // el registro real en Sittings & traslados -- si no se filtra acá, la solicitud confirmada
+  // queda como tarjeta aparte, duplicada con el registro real del mismo día.
+  const puntuales = (sols||[]).map(s=>({...s, ninieras: s.solicitud_ninieras||[], _fuente:'solicitud'}))
+    .filter(s=>{
+      const nineraConfirmada = (s.solicitud_ninieras||[]).find(x=>x.estado==='confirmada');
+      if(!nineraConfirmada) return true; // sin niñera confirmada todavía, no puede tener registro real
+      const yaRegistrado = registradosSet.has(s.fecha+'|'+normaliza(nineraConfirmada.ninera_nombre||'')+'|'+normaliza(s.familia_nombre||''));
+      return !yaRegistrado;
+    });
 
   // Horarios fijos: una instancia por cada día visible cuyo día de semana matchee.
   // Si ese día+niñera+familia ya tiene un registro real cargado en Sittings & traslados
