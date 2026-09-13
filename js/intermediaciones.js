@@ -1,6 +1,7 @@
 /* ================= INTERMEDIACIONES ================= */
 let interTab = 'historial';
 let interNinieras = [];
+let interNinierasPool = []; // niñeras del pool Enrique con estado 'disponible' (se sugieren primero)
 let interEmpresas = [];
 let interEnriqueSel = null;
 let interEventoFilas = [];
@@ -14,19 +15,62 @@ async function renderIntermediaciones(cont){
       <button class="subtab ${interTab==='historial'?'active':''}" onclick="setInterTab('historial')">Historial</button>
       <button class="subtab ${interTab==='enrique'?'active':''}" onclick="setInterTab('enrique')">+ Colocación Enrique</button>
       <button class="subtab ${interTab==='evento'?'active':''}" onclick="setInterTab('evento')">+ Evento</button>
+      <button class="subtab ${interTab==='pool'?'active':''}" onclick="setInterTab('pool')">Niñeras Enrique</button>
     </div>
     <div id="inter-body"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
   `;
-  const [{data:nin}, {data:emp}] = await Promise.all([
+  const [{data:nin}, {data:emp}, {data:pool}] = await Promise.all([
     sb.from('ninieras').select('id,nombre').eq('activa', true).order('nombre'),
     sb.from('intermediaciones_eventos').select('empresa'),
+    sb.from('intermediaciones_enrique_pool').select('*').order('ninera_nombre'),
   ]);
-  interNinieras = nin || [];
+  const disponibles = (pool||[]).filter(p=>p.estado==='disponible').map(p=>({id:p.ninera_id, nombre:p.ninera_nombre}));
+  // Las disponibles (ya pasaron por Enrique y quedaron libres) van primero en el autocompletar
+  // de la próxima colocación -- de ahí para abajo, el resto de niñeras activas normales.
+  const idsDisponibles = new Set(disponibles.map(d=>d.id));
+  interNinieras = [...disponibles, ...(nin||[]).filter(n=>!idsDisponibles.has(n.id))];
+  interNinierasPool = pool || [];
   const empresasUnicas = [...new Set((emp||[]).map(e=>(e.empresa||'').trim()).filter(Boolean))].sort();
   interEmpresas = empresasUnicas.map(nombre=>({nombre}));
   if(interTab==='historial') renderInterHistorial();
   else if(interTab==='enrique') renderInterFormEnrique();
-  else renderInterFormEvento();
+  else if(interTab==='evento') renderInterFormEvento();
+  else renderInterPool();
+}
+
+/* ---- Niñeras Enrique: registro propio, separado de la lista general de Niñeras ---- */
+function renderInterPool(){
+  const body = document.getElementById('inter-body');
+  if(!body) return;
+  if(!interNinierasPool.length){ body.innerHTML = '<div class="empty">Todavía no hay niñeras colocadas vía Agencia Enrique.</div>'; return; }
+  body.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">${interNinierasPool.map(p=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterPoolNinera('${p.id}')">
+      <span class="badge ${p.estado==='activa'?'brand':'good'}">${p.estado==='activa'?'Activa':'Disponible'}</span>
+      <div style="flex:1;min-width:0;font-weight:700;color:var(--ink);">${p.ninera_nombre}</div>
+      <div class="helper" style="margin:0;">${p.estado==='activa'?'Colocada, trabajando':'Libre para una nueva colocación'}</div>
+    </div>`).join('')}</div>`;
+}
+async function abrirModalInterPoolNinera(poolId){
+  const p = interNinierasPool.find(x=>x.id===poolId);
+  if(!p) return;
+  const { data: colocaciones } = await sb.from('intermediaciones_enrique').select('*').eq('ninera_id', p.ninera_id).order('fecha', {ascending:false});
+  const historialHtml = (colocaciones||[]).map(c=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
+    <span>${new Date(c.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'})}</span>
+    <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${Number(c.monto||0).toLocaleString('es-UY')}</span>
+  </div>`).join('') || '<div class="helper">Sin colocaciones registradas.</div>';
+  abrirModal(`
+    <h2>${p.ninera_nombre}</h2>
+    <div class="helper">Estado actual: ${p.estado==='activa'?'Activa (colocada, trabajando)':'Disponible (libre para una nueva colocación)'}</div>
+    <div style="margin-top:14px;">${historialHtml}</div>
+    <button class="btn primary" style="width:100%;margin-top:16px;" onclick="cambiarEstadoPoolEnrique('${p.id}', '${p.estado==='activa'?'disponible':'activa'}')">Marcar como ${p.estado==='activa'?'disponible':'activa'}</button>
+  `);
+}
+async function cambiarEstadoPoolEnrique(poolId, nuevoEstado){
+  const { error } = await sb.from('intermediaciones_enrique_pool').update({estado:nuevoEstado, updated_at:new Date().toISOString()}).eq('id', poolId);
+  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+  toast(`Marcada como ${nuevoEstado}.`);
+  cerrarModal();
+  renderIntermediaciones(document.getElementById('modcontent'));
 }
 
 /* ---- historial combinado (colocaciones Enrique + eventos) ---- */
@@ -104,7 +148,14 @@ async function guardarIntermediacionEnrique(){
     registrado_por: registradoPorUsuario(),
   });
   if(error){ warn.innerHTML = errBox(error); return; }
-  toast('Colocación registrada.');
+  // Colocada por Enrique: sale de la lista general de Niñeras (ya no se le asignan sittings)
+  // y queda registrada en el pool propio de Intermediaciones como "activa".
+  await sb.from('ninieras').update({activa:false}).eq('id', interEnriqueSel.id);
+  await sb.from('intermediaciones_enrique_pool').upsert(
+    {ninera_id: interEnriqueSel.id, ninera_nombre: interEnriqueSel.nombre, estado:'activa', updated_at:new Date().toISOString()},
+    {onConflict:'ninera_id'}
+  );
+  toast('Colocación registrada — la niñera ya no aparece en Niñeras.');
   interTab = 'historial';
   renderModulo();
 }
