@@ -411,6 +411,44 @@ async function cargarNotificaciones(){
       });
     });
   }
+
+  // CV desactualizado: misma condición que ya usa el badge de la lista de Niñeras
+  // (cvEstaDesactualizado, en ninieras.js) — la reusamos tal cual, no se duplica la regla.
+  try{
+    const { data: ninierasActivas } = await sb.from('ninieras').select('id,nombre,cv_generado_en,candidatas(fecha_nacimiento)').eq('activa', true);
+    (ninierasActivas||[]).forEach(n=>{
+      if(typeof cvEstaDesactualizado === 'function' && cvEstaDesactualizado(n)){
+        items.push({
+          id: 'cv:'+n.id,
+          titulo: 'CV desactualizado',
+          mensaje: `${n.nombre} cumplió años después de generarle el CV — convendría regenerarlo`,
+          destino: 'ninieras',
+          abrirId: n.id,
+        });
+      }
+    });
+  }catch(e){}
+
+  // Extracto Itaú sin subir hace más de 15 días. El id incluye la fecha límite: mientras
+  // no se suba un extracto nuevo, la fecha límite no cambia, así que esto avisa una sola
+  // vez por período atrasado (no se repite cada 10 minutos) — recién vuelve a avisar si
+  // pasan otros 15 días desde la próxima vez que se suba.
+  try{
+    const { data: cfg } = await sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle();
+    if(cfg?.actualizado_at){
+      const limite = new Date(cfg.actualizado_at);
+      limite.setDate(limite.getDate()+15);
+      if(limite.getTime() <= Date.now()){
+        items.push({
+          id: 'extracto:'+limite.toISOString().slice(0,10),
+          titulo: 'Falta subir el extracto de Itaú',
+          mensaje: `Hace más de 15 días que no se sube un extracto nuevo para conciliar.`,
+          destino: 'finanzas',
+        });
+      }
+    }
+  }catch(e){}
+
   notifItems = items;
   await cargarNotifLeidas();
   renderNotifBell();
@@ -444,7 +482,11 @@ async function irANotificacion(id){
   const item = notifItems.find(i=>i.id===id);
   await marcarNotifLeida(id);
   toggleNotifPanel(false);
-  if(item) setModulo(item.destino);
+  if(!item) return;
+  setModulo(item.destino);
+  if(item.abrirId && item.destino==='ninieras' && typeof verNinera==='function'){
+    setTimeout(()=>verNinera(item.abrirId), 500);
+  }
 }
 
 async function marcarNotifLeida(id){
