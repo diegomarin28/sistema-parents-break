@@ -113,7 +113,10 @@ async function renderAgenda(cont){
     </div>
     <div id="agenda-grid-wrap"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
   `;
-  await Promise.all([cargarAgendaBase(), cargarAgendaSolicitudes()]);
+  // cargarAgendaBase va primero (no en paralelo): cargarAgendaSolicitudes ahora
+  // necesita agendaFamilias ya cargada para resolver la zona de cada registro.
+  await cargarAgendaBase();
+  await cargarAgendaSolicitudes();
 }
 
 async function cargarAgendaBase(){
@@ -191,8 +194,9 @@ async function cargarAgendaSolicitudes(){
     hora_inicio: r.hora_inicio,
     hora_fin: r.hora_fin,
     termina_dia_siguiente: r.termina_dia_siguiente || false,
-    zona: null,
+    zona: agendaFamilias.find(f=>f.id===r.familia_id)?.zona || null,
     cobro_familia: r.cobro_familia,
+    pago_ninera: r.pago_ninera,
     cancelado: r.cancelado || false,
     estado: 'confirmada',
     ninieras: [{ id:'regninera:'+r.id, ninera_nombre:r.ninera_nombre, estado:'confirmada' }],
@@ -258,20 +262,38 @@ function renderAgendaFilaMobile(s){
   const sinAsignar = !s.ninieras.length || s.ninieras.every(x=>x.estado!=='confirmada');
   const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : '--:--';
   const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
-  return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;" onclick="abrirModalSolicitud('${s.id}')">
-    <div style="color:var(--ink-soft);font-variant-numeric:tabular-nums;width:38px;flex-shrink:0;">${horaTxt}</div>
-    <div style="flex:1;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.familia_nombre}</div>
-    ${s.cancelado ? `<span class="badge warn" style="font-size:10px;padding:2px 7px;flex-shrink:0;">Cancelado</span>` : `<div style="font-size:11px;font-weight:700;color:${sinAsignar?'var(--warn)':'var(--good)'};flex-shrink:0;">${sinAsignar ? 'Sin asignar' : ninTxt}</div>`}
+  const esRegistro = s._fuente==='registro' && !s.cancelado;
+  return `<div style="padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;" onclick="abrirModalSolicitud('${s.id}')">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="color:var(--ink-soft);font-variant-numeric:tabular-nums;width:38px;flex-shrink:0;">${horaTxt}</div>
+      <div style="flex:1;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.familia_nombre}</div>
+      ${s.cancelado
+        ? `<span class="badge warn" style="font-size:10px;padding:2px 7px;flex-shrink:0;">Cancelado</span>`
+        : esRegistro
+          ? (s.zona ? `<span class="badge accent" style="font-size:10px;padding:2px 7px;flex-shrink:0;">${s.zona}</span>` : '')
+          : `<div style="font-size:11px;font-weight:700;color:${sinAsignar?'var(--warn)':'var(--good)'};flex-shrink:0;">${sinAsignar ? 'Sin asignar' : ninTxt}</div>`}
+    </div>
+    ${esRegistro ? `<div style="display:flex;gap:14px;margin-top:4px;padding-left:46px;font-size:11px;color:var(--ink-soft);">
+      <span>Cobro <b style="color:var(--ink);font-family:'IBM Plex Mono',monospace;">$${Number(s.cobro_familia||0).toLocaleString('es-UY')}</b></span>
+      <span>Pago <b style="color:var(--ink);font-family:'IBM Plex Mono',monospace;">$${Number(s.pago_ninera||0).toLocaleString('es-UY')}</b></span>
+    </div>` : ''}
   </div>`;
 }
 function renderAgendaTarjetaDia(s){
   const sinAsignar = !s.ninieras.length || s.ninieras.every(x=>x.estado!=='confirmada');
   const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : 'Sin hora';
   const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
+  const esRegistro = s._fuente==='registro' && !s.cancelado;
   return `<div style="background:var(--bg);border-radius:8px;padding:7px 8px;margin-bottom:6px;cursor:pointer;font-size:12px;" onclick="abrirModalSolicitud('${s.id}')">
     <div style="font-weight:700;color:var(--ink);margin-bottom:2px;">${s.familia_nombre}</div>
     <div class="helper" style="margin:0 0 4px;">${horaTxt}</div>
-    ${s.cancelado ? `<span class="badge warn" style="font-size:10.5px;padding:3px 8px;">Cancelado</span>` : `<span class="badge ${sinAsignar?'warn':'good'}" style="font-size:10.5px;padding:3px 8px;">${sinAsignar ? 'Sin asignar' : ninTxt}</span>`}
+    ${s.cancelado
+      ? `<span class="badge warn" style="font-size:10.5px;padding:3px 8px;">Cancelado</span>`
+      : esRegistro
+        ? `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft);margin-bottom:1px;"><span>Cobro</span><span style="font-family:'IBM Plex Mono',monospace;color:var(--ink);font-weight:600;">$${Number(s.cobro_familia||0).toLocaleString('es-UY')}</span></div>
+           <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft);margin-bottom:${s.zona?'6px':'0'};"><span>Pago</span><span style="font-family:'IBM Plex Mono',monospace;color:var(--ink);font-weight:600;">$${Number(s.pago_ninera||0).toLocaleString('es-UY')}</span></div>
+           ${s.zona ? `<span class="badge accent" style="font-size:10.5px;padding:3px 8px;">${s.zona}</span>` : ''}`
+        : `<span class="badge ${sinAsignar?'warn':'good'}" style="font-size:10.5px;padding:3px 8px;">${sinAsignar ? 'Sin asignar' : ninTxt}</span>`}
   </div>`;
 }
 
