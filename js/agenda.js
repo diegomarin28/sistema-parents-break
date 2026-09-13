@@ -745,6 +745,21 @@ function abrirModalAsignacionFija(s){
     </div>
     <div id="agenda-fija-warn"></div>
     <button class="btn primary" id="agenda-fija-guardar-${asigId}" style="width:100%;margin-bottom:8px;display:none;" onclick="cambiarNineraAsignacionFija('${asigId}')">Guardar niñera nueva para este horario fijo</button>
+
+    <div style="height:1px;background:var(--line);margin:14px 0;"></div>
+    <div class="helper" style="margin-bottom:8px;">Corregir el horario o los días del fijo — aplica desde ahora para todos los próximos días, no toca lo que ya está registrado:</div>
+    <div class="grid2" style="margin-bottom:8px;">
+      <div class="field"><label>Hora inicio</label>${selectHora('agenda-fija-edit-hi')}</div>
+      <div class="field"><label>Hora fin</label>${selectHora('agenda-fija-edit-hf')}</div>
+    </div>
+    <div class="dayrow" id="agenda-fija-edit-dias" style="margin-bottom:8px;">
+      ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn ${(a.dias||[]).includes(d)?'selected':''}" data-dia="${d}" onclick="this.classList.toggle('selected')">${DIAS_CORTO[d]}</button>`).join('')}
+    </div>
+    <div id="agenda-fija-edit-warn"></div>
+    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="guardarHorarioAsignacionFija('${asigId}')">Guardar horario/días para todos los próximos</button>
+
+    <div style="height:1px;background:var(--line);margin:14px 0;"></div>
+    <div class="helper" style="margin-bottom:8px;">Corregir solo el día de hoy (${s.fecha}), sin tocar el fijo:</div>
     ${s._yaRegistrado
       ? `<div class="helper" style="margin-bottom:8px;">Ya hay un registro cargado para ${a.ninera_nombre} este día en Sittings.</div>`
       : `<div class="grid2" style="margin-bottom:8px;">
@@ -758,11 +773,31 @@ function abrirModalAsignacionFija(s){
     <button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda('${asigId}')">Quitar esta asignación fija</button>
   `;
   abrirModal(cuerpo);
+  setHoraSelect('agenda-fija-edit-hi', a.hora_inicio||'');
+  setHoraSelect('agenda-fija-edit-hf', a.hora_fin||'');
   if(!s._yaRegistrado){
     setHoraSelect('agenda-fija-hi', a.hora_inicio||'');
     setHoraSelect('agenda-fija-hf', a.hora_fin||'');
   }
   setTimeout(()=>attachAutocomplete('agenda-fija-ninera-'+asigId, 'agenda-fija-ninera-'+asigId+'-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
+}
+/* Edita la asignación fija en sí (hora_inicio/hora_fin/dias en `asignaciones`) --
+   a diferencia de "Registrar sitting de hoy", esto no crea un registro real,
+   solo corrige la plantilla recurrente para que los próximos días salgan bien
+   desde el vamos, sin tener que repetir la corrección día a día. */
+async function guardarHorarioAsignacionFija(asigId){
+  const warn = document.getElementById('agenda-fija-edit-warn');
+  const horaIni = leerHora('agenda-fija-edit-hi');
+  const horaFin = leerHora('agenda-fija-edit-hf');
+  const dias = [...document.querySelectorAll('#agenda-fija-edit-dias .daybtn.selected')].map(b=>b.dataset.dia);
+  if(!horaIni || !horaFin){ if(warn) warn.innerHTML = '<div class="warnbox">Completá las dos horas.</div>'; return; }
+  if(horaFin<=horaIni){ if(warn) warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio.</div>'; return; }
+  if(!dias.length){ if(warn) warn.innerHTML = '<div class="warnbox">Elegí al menos un día.</div>'; return; }
+  const { error } = await sb.from('asignaciones').update({hora_inicio: horaIni, hora_fin: horaFin, dias}).eq('id', asigId);
+  if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  await cargarAgendaSolicitudes();
+  toast('Horario fijo actualizado — aplica desde ahora para los próximos días.');
 }
 /* Un solo flujo para registrar el sitting de hoy: el horario sale precargado
    con el habitual de la asignación, pero siempre queda editable ahí mismo —
