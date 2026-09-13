@@ -15,6 +15,8 @@ const ICONS = {
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/></svg>`,
   juguetes: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="10" width="7" height="7" rx="1.2"/><circle cx="16.5" cy="13.5" r="3.5"/><path d="M9 10V7a2 2 0 1 1 2 2H9z"/></svg>`,
   intermediaciones: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16M4 12h10M4 17h16"/><circle cx="18" cy="12" r="2.2"/></svg>`,
+  bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>`,
+  alert: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 4 2 20h20L12 4Z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>`,
 };
 const MODULOS = [
   {key:'agenda', label:'Agenda', desc:'Solicitudes de familias, asignación de niñeras y calendario del día.'},
@@ -53,6 +55,9 @@ function renderApp(){
       <div class="mobile-topbar-user">
         <span class="mobile-topbar-name">${nombreUsuario()}</span>
       </div>
+      <button class="notif-btn" onclick="event.stopPropagation();toggleNotifPanel()" aria-label="Notificaciones" title="Notificaciones">
+        ${ICONS.bell}<span class="notif-badge">0</span>
+      </button>
     </div>
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebarMobile(false)"></div>
     <div class="appshell">
@@ -60,8 +65,11 @@ function renderApp(){
       <main id="modcontent" class="mainarea"></main>
     </div>
     <div id="modfooter"></div>
+    <div class="notif-panel" id="notif-panel"></div>
   `;
   renderModulo();
+  cargarNotificaciones();
+  suscribirNotifRealtime();
 }
 function toggleSidebarMobile(force){
   const sb = document.getElementById('sidebar');
@@ -74,7 +82,12 @@ function setModulo(k){ moduloActivo=k; renderModulo(); toggleSidebarMobile(false
 function renderSidebar(){
   const activeTop = (moduloActivo===null || moduloActivo==='hoy') ? 'hoy' : (MODULOS.some(m=>m.key===moduloActivo) ? moduloActivo : null);
   document.getElementById('sidebar').innerHTML = `
-    <div class="sidebar-logo-wrap"><img src="logo.png" alt="Parents Break — ir a Hoy" class="sidebar-logo" role="button" tabindex="0" style="cursor:pointer;" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}"></div>
+    <div class="sidebar-logo-wrap">
+      <img src="logo.png" alt="Parents Break — ir a Hoy" class="sidebar-logo" role="button" tabindex="0" style="cursor:pointer;" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}">
+      <button class="notif-btn desktop" onclick="event.stopPropagation();toggleNotifPanel()" aria-label="Notificaciones" title="Notificaciones">
+        ${ICONS.bell}<span class="notif-badge">0</span>
+      </button>
+    </div>
     <nav class="sidebar-nav">
       <button class="navitem ${activeTop==='hoy'?'active':''}" onclick="setModulo(null)" title="Hoy">
         <div class="navitem-ic">${ICONS.hoy}</div><div class="navitem-label">Hoy</div>
@@ -93,6 +106,7 @@ function renderSidebar(){
   `;
   actualizarAgendaBadge();
   actualizarFinanzasBadge();
+  renderNotifBell();
 }
 async function actualizarFinanzasBadge(){
   const dot = document.getElementById('finanzas-navdot');
@@ -337,5 +351,119 @@ function cargarSittingDesdePendiente(item){
   };
   setModulo('sittings');
   setTimeout(()=>abrirModalSitForm(), 500);
+}
+
+/* ================= NOTIFICACIONES (campanita) =================
+   V1: solo los "urgentes" — sittings de HOY sin asignar y sittings de HOY sin registrar
+   (misma lógica que ya usan el panel "Sin resolver · hoy y mañana" y el banner de Hoy,
+   pero acotada a hoy). "Leído" es individual por usuaria (tabla notificaciones_leidas).
+   "Resuelto" no se marca a mano: si el sitting ya tiene niñera o ya se cargó, deja de
+   aparecer en la consulta sola y por lo tanto desaparece de la campanita para las dos.
+   El push real al celu (VAPID) queda para una próxima etapa — esto es solo la campanita. */
+let notifItems = [];
+let notifLeidas = new Set();
+let notifPanelAbierto = false;
+let notifChannel = null;
+let notifRefrescarTimer = null;
+
+function notifUsuario(){ return session?.user?.email || 'desconocida'; }
+
+async function cargarNotificaciones(){
+  if(!session) return;
+  const hoyStr = todayISO();
+  const [{data:sinAsignar}, {data:sitsHoy}, {data:solConfHoy}] = await Promise.all([
+    sb.from('solicitudes').select('id,familia_nombre,hora_inicio,tipo').eq('fecha', hoyStr).in('estado', ['sin_asignar','pendiente_confirmar']),
+    sb.from('sittings_traslados').select('familia_nombre').eq('fecha', hoyStr),
+    sb.from('solicitudes').select('id,familia_nombre,hora_inicio').eq('fecha', hoyStr).eq('estado','confirmada'),
+  ]);
+  const items = [];
+  (sinAsignar||[]).forEach(s=>{
+    items.push({
+      id: 'sol:'+s.id,
+      titulo: 'Sitting sin asignar',
+      mensaje: `${s.familia_nombre||'Familia sin nombre'}, hoy${s.hora_inicio?' '+s.hora_inicio.slice(0,5):''} — sin niñera confirmada`,
+      destino: 'agenda',
+    });
+  });
+  if(solConfHoy && solConfHoy.length){
+    const registradas = new Set((sitsHoy||[]).map(r=>normaliza(r.familia_nombre||'')));
+    const { data: snHoy } = await sb.from('solicitud_ninieras').select('id,ninera_nombre,solicitud_id').in('solicitud_id', solConfHoy.map(s=>s.id)).eq('estado','confirmada');
+    const porSol = {};
+    (snHoy||[]).forEach(r=>{ (porSol[r.solicitud_id] ||= []).push(r); });
+    solConfHoy.forEach(s=>{
+      if(registradas.has(normaliza(s.familia_nombre||''))) return;
+      (porSol[s.id]||[]).forEach(n=>{
+        items.push({
+          id: 'sn:'+n.id,
+          titulo: 'Sitting sin registrar',
+          mensaje: `${n.ninera_nombre} → ${s.familia_nombre||'familia sin nombre'}, hoy${s.hora_inicio?' '+s.hora_inicio.slice(0,5):''} — todavía no se cargó`,
+          destino: 'pend-hoy',
+        });
+      });
+    });
+  }
+  notifItems = items;
+  await cargarNotifLeidas();
+  renderNotifBell();
+}
+
+async function cargarNotifLeidas(){
+  if(!notifItems.length){ notifLeidas = new Set(); return; }
+  const { data } = await sb.from('notificaciones_leidas').select('notif_id').eq('usuario', notifUsuario()).in('notif_id', notifItems.map(i=>i.id));
+  notifLeidas = new Set((data||[]).map(r=>r.notif_id));
+}
+
+function renderNotifBell(){
+  const sinLeer = notifItems.filter(i=>!notifLeidas.has(i.id)).length;
+  document.querySelectorAll('.notif-badge').forEach(b=>{
+    b.textContent = sinLeer;
+    b.style.display = sinLeer ? 'flex' : 'none';
+  });
+  const panel = document.getElementById('notif-panel');
+  if(!panel) return;
+  panel.innerHTML = notifItems.length ? notifItems.map(i=>`
+    <div class="notif-item ${notifLeidas.has(i.id)?'':'unread'}" onclick="irANotificacion('${i.id}')">
+      <div class="notif-item-ic">${ICONS.alert}</div>
+      <div class="notif-item-body">
+        <div class="notif-item-title">${i.titulo}</div>
+        <div class="notif-item-msg">${i.mensaje}</div>
+      </div>
+    </div>`).join('') : '<div class="notif-empty">No hay avisos urgentes por ahora.</div>';
+}
+
+async function irANotificacion(id){
+  const item = notifItems.find(i=>i.id===id);
+  await marcarNotifLeida(id);
+  toggleNotifPanel(false);
+  if(item) setModulo(item.destino);
+}
+
+async function marcarNotifLeida(id){
+  if(notifLeidas.has(id)) return;
+  notifLeidas.add(id);
+  renderNotifBell();
+  await sb.from('notificaciones_leidas').upsert({notif_id:id, usuario:notifUsuario(), leido_en:new Date().toISOString()});
+}
+
+function toggleNotifPanel(force){
+  notifPanelAbierto = typeof force==='boolean' ? force : !notifPanelAbierto;
+  document.getElementById('notif-panel')?.classList.toggle('show', notifPanelAbierto);
+}
+document.addEventListener('click', (e)=>{
+  if(!notifPanelAbierto) return;
+  const panel = document.getElementById('notif-panel');
+  if(panel && !panel.contains(e.target) && !e.target.closest('.notif-btn')) toggleNotifPanel(false);
+});
+
+function suscribirNotifRealtime(){
+  if(notifChannel){ sb.removeChannel(notifChannel); notifChannel = null; }
+  notifChannel = sb.channel('rt-notif-'+Date.now());
+  ['solicitudes','solicitud_ninieras','sittings_traslados'].forEach(t=>{
+    notifChannel.on('postgres_changes', {event:'*', schema:'public', table:t}, ()=>{
+      clearTimeout(notifRefrescarTimer);
+      notifRefrescarTimer = setTimeout(cargarNotificaciones, 600);
+    });
+  });
+  notifChannel.subscribe();
 }
 
