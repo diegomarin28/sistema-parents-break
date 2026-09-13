@@ -67,6 +67,13 @@ function renderApp(){
     <div id="modfooter"></div>
     <div class="notif-panel" id="notif-panel"></div>
   `;
+  // Si venimos de tocar una notificación push (sw.js abre "/?ir=agenda"), arrancamos
+  // directo en ese módulo en vez de Hoy, y limpiamos el parámetro de la URL.
+  const irParam = new URLSearchParams(window.location.search).get('ir');
+  if(irParam){
+    window.history.replaceState({}, '', window.location.pathname);
+    moduloActivo = irParam;
+  }
   renderModulo();
   cargarNotificaciones();
   suscribirNotifRealtime();
@@ -102,11 +109,13 @@ function renderSidebar(){
     <div class="sidebar-foot">
       ${nombreUsuario()}<br>
       ${PASSKEY_SOPORTADO ? `<button onclick="gestionarPasskeys()">Face ID / Touch ID</button> · ` : ''}<button onclick="logout()">Cerrar sesión</button>
+      <div style="margin-top:6px;"><button id="push-toggle-btn" onclick="activarPushNotificaciones()">Activar notificaciones push</button></div>
     </div>
   `;
   actualizarAgendaBadge();
   actualizarFinanzasBadge();
   renderNotifBell();
+  actualizarBotonPush();
 }
 async function actualizarFinanzasBadge(){
   const dot = document.getElementById('finanzas-navdot');
@@ -465,5 +474,72 @@ function suscribirNotifRealtime(){
     });
   });
   notifChannel.subscribe();
+}
+
+/* ---- Push real al celular (Web Push + VAPID) ----
+   Solo para lo urgente: sittings de hoy sin asignar. La clave privada VAPID vive en la
+   tabla app_secrets (sin ninguna policy — solo la Edge Function, con la service role key,
+   puede leerla). El envío real lo hace la Edge Function "enviar-push-urgentes", disparada
+   por un cron de Supabase cada 10 minutos — no depende de que este chat ni el navegador
+   estén abiertos. Acá solo pedimos permiso, nos suscribimos, y guardamos la suscripción. */
+const VAPID_PUBLIC_KEY = 'BPfb5Yy4XNWZVci1Cq7fnwxS-pVApiKii_QOTeRwUEzJMy1D9K1e8RMef4Lp8TBmXX1jhYTRHL9A5318e0ikHkc';
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for(let i=0;i<rawData.length;++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+function pushSoportado(){
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+async function pushYaActivado(){
+  if(!pushSoportado()) return false;
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    return !!sub;
+  }catch(e){ return false; }
+}
+async function activarPushNotificaciones(){
+  if(!pushSoportado()){
+    toast('Este dispositivo no soporta notificaciones push. En iPhone: agregá la app a la pantalla de inicio primero (compartir → Agregar a inicio) y probá de nuevo desde ahí.');
+    return;
+  }
+  try{
+    const permiso = await Notification.requestPermission();
+    if(permiso !== 'granted'){
+      toast('No se activó — hace falta dar permiso de notificaciones cuando el navegador lo pide.');
+      return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const json = sub.toJSON();
+    await sb.from('push_subscriptions').upsert({
+      usuario: notifUsuario(),
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth_key: json.keys.auth,
+    }, {onConflict:'endpoint'});
+    toast('Notificaciones push activadas en este dispositivo.');
+  }catch(e){
+    toast('No se pudo activar el push: '+(e.message||e));
+  }
+  actualizarBotonPush();
+}
+async function actualizarBotonPush(){
+  const btn = document.getElementById('push-toggle-btn');
+  if(!btn) return;
+  if(!pushSoportado()){ btn.style.display = 'none'; return; }
+  const activo = await pushYaActivado();
+  btn.textContent = activo ? 'Notificaciones push activadas en este dispositivo' : 'Activar notificaciones push';
+  btn.disabled = activo;
 }
 
