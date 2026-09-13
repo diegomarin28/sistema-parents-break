@@ -106,6 +106,7 @@ function renderSidebar(){
           <div class="navitem-ic">${ICONS[m.key]}</div><div class="navitem-label">${m.label}</div>
           ${m.key==='agenda' ? `<span id="agenda-navdot"></span>` : ''}
           ${m.key==='finanzas' ? `<span id="finanzas-navdot"></span>` : ''}
+          ${m.key==='notificaciones' ? `<span id="notif-navdot"></span>` : ''}
         </button>`).join('')}
     </nav>
     <div class="sidebar-foot">
@@ -116,6 +117,7 @@ function renderSidebar(){
   actualizarAgendaBadge();
   actualizarFinanzasBadge();
   renderNotifBell();
+  actualizarNotifNavdot();
   ajustarSidebarNav();
 }
 async function actualizarFinanzasBadge(){
@@ -590,37 +592,46 @@ async function activarPushNotificaciones(){
   }catch(e){
     toast('No se pudo activar el push: '+(e.message||e));
   }
-  actualizarBotonPush();
+  // Una vez activado ya no tiene sentido mostrar la tarjeta "Este dispositivo" (era solo para
+  // llegar a este punto) — se vuelve a pintar toda la pantalla para que desaparezca sola.
+  if(notifCfgCont) renderNotifConfig(notifCfgCont);
+  actualizarNotifNavdot();
 }
-async function actualizarBotonPush(){
-  const wrap = document.getElementById('push-device-status');
-  if(!wrap) return;
-  if(!pushSoportado()){
-    wrap.innerHTML = `<p class="helper">Este dispositivo no soporta notificaciones push.</p>`;
-    return;
-  }
+async function actualizarNotifNavdot(){
+  const dot = document.getElementById('notif-navdot');
+  if(!dot) return;
   const activo = await pushYaActivado();
-  wrap.innerHTML = activo
-    ? `<div class="pushok"><div class="pushok-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12.5 9.5 18 20 6"/></svg></div><span>Este dispositivo ya recibe notificaciones push.</span></div>`
-    : `<p class="helper" style="margin-bottom:12px;">Activalo una vez por dispositivo (celular, tablet) para recibir avisos aunque tengas la app cerrada. En iPhone hay que agregarlo antes a la pantalla de inicio (compartir → Agregar a inicio).</p>
-       <button class="btn" onclick="activarPushNotificaciones()">Activar notificaciones push</button>`;
+  dot.innerHTML = (pushSoportado() && !activo) ? '<span class="navdot"></span>' : '';
 }
 
 /* ---- Pantalla "Notificaciones" (sidebar) ----
    Acá vive todo lo de push en un solo lugar: activar el dispositivo, y elegir tipo por tipo
    cuáles mandan push al celular (la campanita siempre muestra todo, esto solo filtra el push).
    Preferencia por usuaria (notif_push_preferencias): si no hay fila guardada, se usa el
-   default de TIPOS_NOTIF — mismo criterio que aplica la Edge Function del lado del servidor. */
+   default de TIPOS_NOTIF — mismo criterio que aplica la Edge Function del lado del servidor.
+   El mismo puntito rojo que ya usan Agenda y Finanzas (navdot) se prende en este ítem del
+   menú mientras ESTE dispositivo no tenga el push activado — así avisa solo, sin que haga
+   falta entrar a mirar. Una vez activado, ni el punto ni la tarjeta de "Este dispositivo"
+   se muestran más: si ya lo hiciste, confirmarlo cada vez no aporta nada. */
+let notifCfgCont = null;
 async function renderNotifConfig(cont){
+  notifCfgCont = cont;
   cont.innerHTML = '<div class="empty">Cargando…</div>';
-  const { data: prefs } = await sb.from('notif_push_preferencias').select('tipo,activado').eq('usuario', notifUsuario());
+  const [{data:prefs}, activo] = await Promise.all([
+    sb.from('notif_push_preferencias').select('tipo,activado').eq('usuario', notifUsuario()),
+    pushYaActivado(),
+  ]);
   const prefMap = {};
   (prefs||[]).forEach(p=>{ prefMap[p.tipo] = p.activado; });
   cont.innerHTML = `
+    ${activo ? '' : `
     <div class="card">
       <h2>Este dispositivo</h2>
-      <div id="push-device-status"></div>
-    </div>
+      ${!pushSoportado()
+        ? `<p class="helper">Este dispositivo no soporta notificaciones push.</p>`
+        : `<p class="helper" style="margin-bottom:12px;">Activalo una vez por dispositivo (celular, tablet) para recibir avisos aunque tengas la app cerrada. En iPhone hay que agregarlo antes a la pantalla de inicio (compartir → Agregar a inicio).</p>
+           <button class="btn" onclick="activarPushNotificaciones()">Activar notificaciones push</button>`}
+    </div>`}
     <div class="card">
       <h2>Qué te llega como push</h2>
       <p class="helper" style="margin-bottom:4px;">La campanita siempre muestra todo. Esto es solo para elegir cuáles además te avisan directo al celular.</p>
@@ -643,7 +654,7 @@ async function renderNotifConfig(cont){
       </div>
     </div>
   `;
-  actualizarBotonPush();
+  actualizarNotifNavdot();
 }
 async function guardarPrefNotif(tipo, activado){
   await sb.from('notif_push_preferencias').upsert({usuario: notifUsuario(), tipo, activado}, {onConflict:'usuario,tipo'});
