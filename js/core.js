@@ -246,7 +246,7 @@ function toggleHijoFamiliaRow(summaryEl){
 function confirmarQuitarHijoFamilia(btn){
   const row = btn.closest('.hijofamilia-row');
   const nombre = row.querySelector('.hf-summary-text').textContent;
-  if(confirm(`¿Quitar a ${nombre}? Se va a borrar al guardar.`)) row.remove();
+  confirmarAccion(`¿Quitar a ${nombre}? Se va a borrar al guardar.`, 'Quitar').then(ok=>{ if(ok) row.remove(); });
 }
 function htmlHijosFamilia(prefix, hijos){
   const lista = hijos && hijos.length ? hijos : [];
@@ -406,49 +406,63 @@ function parsearCuentaBancaria(valor){
 }
 function htmlCuentasBancarias(prefix, cuentas){
   const lista = Array.isArray(cuentas) ? cuentas.filter(Boolean) : (cuentas ? [cuentas] : []);
-  const filas = lista.length ? lista : [''];
+  // Bancos que ya están registrados en ESTA lista -- son las únicas opciones que tiene
+  // sentido mostrar en el desplegable de una cuenta ya cargada. Si no hay ninguna cuenta
+  // todavía, esa primera fila se trata como "nueva" (ve la lista completa de bancos).
+  const bancosUsados = new Set(lista.map(c=>parsearCuentaBancaria(c).banco).filter(Boolean));
+  const filas = lista.length ? lista.map(c=>({valor:c, esNueva:false})) : [{valor:'', esNueva:true}];
   return `<div class="field">
     <label>Cuenta(s) bancaria(s)</label>
-    <div id="${prefix}-cuentas-list">${filas.map(c=>filaCuentaBancaria(c)).join('')}</div>
+    <div id="${prefix}-cuentas-list">${filas.map(f=>filaCuentaBancaria(f.valor, f.esNueva, bancosUsados)).join('')}</div>
     <button class="smallbtn" type="button" onclick="agregarFilaCuentaBancaria('${prefix}')" style="margin-top:6px;">+ Agregar otra cuenta</button>
   </div>`;
 }
-// El banco de una cuenta ya cargada NO se muestra como desplegable con los 9 bancos
-// (confundía: parecía que esa persona tenía cuenta en todos esos bancos). Se ve fijo, como
-// texto, con un link para cambiarlo solo si hace falta -- recién ahí aparece el desplegable.
-function filaCuentaBancaria(valor=''){
+// esNueva=true (una cuenta recién agregada en esta misma edición, todavía sin guardar) ve
+// SIEMPRE la lista completa de bancos, porque ahí es donde se elige un banco que la familia
+// o niñera todavía no tenía. Las cuentas ya cargadas (esNueva=false) solo ven, en su
+// desplegable, los bancos que YA están en uso en esta misma lista -- no tiene sentido
+// mostrar los otros 8 si esta persona no tiene ninguna cuenta ahí.
+function filaCuentaBancaria(valor='', esNueva=false, bancosUsados=null){
   const {banco, numero, sucursal} = parsearCuentaBancaria(valor);
   const esConocido = BANCOS_CUENTA.includes(banco);
   const bancoSel = esConocido ? banco : (valor ? 'Otro' : '');
   const otroVisible = bancoSel==='Otro';
   const otroValor = (!esConocido && banco) ? banco : '';
-  const yaTieneBanco = !!bancoSel;
+  const opciones = esNueva ? BANCOS_CUENTA : BANCOS_CUENTA.filter(b => (bancosUsados && bancosUsados.has(b)) || b===bancoSel);
   const q = s => String(s||'').replace(/"/g,'&quot;');
-  return `<div class="cuentabancaria-row" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;">
+  return `<div class="cuentabancaria-row" data-nueva="${esNueva?'1':''}" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;">
     <div style="display:flex;flex-wrap:wrap;gap:6px;">
-      <div class="cuentabancaria-banco-wrap" style="flex:1;min-width:100px;">
-        <div class="cuentabancaria-banco-locked" style="display:${yaTieneBanco?'flex':'none'};align-items:center;gap:8px;height:38px;">
-          <b>${bancoSel||'—'}</b>
-          <a href="#" onclick="revelarCambiarBanco(this);return false;" style="font-size:12px;">Cambiar banco</a>
-        </div>
-        <select class="cuentabancaria-banco" data-banco-actual="${bancoSel}" onchange="toggleBancoOtro(this)" style="width:100%;${yaTieneBanco?'display:none;':''}">
-          <option value="">Banco…</option>
-          ${BANCOS_CUENTA.map(b=>`<option value="${b}" ${bancoSel===b?'selected':''}>${b}</option>`).join('')}
-        </select>
-      </div>
-      <input type="text" class="cuentabancaria-otro" placeholder="Nombre del banco" value="${q(otroValor)}" style="flex:1;min-width:100px;${otroVisible?'':'display:none;'}">
+      <select class="cuentabancaria-banco" data-banco-actual="${bancoSel}" onchange="toggleBancoOtro(this)" style="flex:1;min-width:100px;">
+        <option value="">Banco…</option>
+        ${opciones.map(b=>`<option value="${b}" ${bancoSel===b?'selected':''}>${b}</option>`).join('')}
+      </select>
+      <input type="text" class="cuentabancaria-otro" placeholder="Nombre del banco" value="${q(otroValor)}" style="flex:1;min-width:100px;${otroVisible?'':'display:none;'}" oninput="recalcularOpcionesCuentasBancarias(this)">
       <input type="text" class="cuentabancaria-numero" placeholder="Número de cuenta" value="${q(numero)}" style="flex:1;min-width:100px;">
       <input type="text" class="cuentabancaria-sucursal" placeholder="Sucursal (si hace falta)" value="${q(sucursal)}" style="flex:1;min-width:100px;">
     </div>
     <button class="smallbtn danger" type="button" style="margin-top:8px;" onclick="confirmarQuitarCuentaBancaria(this)">Eliminar cuenta bancaria</button>
   </div>`;
 }
-function revelarCambiarBanco(link){
-  const wrap = link.closest('.cuentabancaria-banco-wrap');
-  wrap.querySelector('.cuentabancaria-banco-locked').style.display = 'none';
-  const sel = wrap.querySelector('.cuentabancaria-banco');
-  sel.style.display = '';
-  sel.focus();
+// Recalcula, para cada fila YA cargada (no nueva) de esta misma lista, qué bancos mostrar en
+// su desplegable -- el propio banco de esa fila, más cualquier otro banco que haya quedado
+// registrado en OTRA fila de la misma lista (ej. si se agrega una cuenta en Scotiabank,
+// la fila de Itaú pasa a poder elegir también Scotiabank la próxima vez).
+function recalcularOpcionesCuentasBancarias(elDentroDeLaLista){
+  const lista = elDentroDeLaLista.closest('[id$="-cuentas-list"]');
+  if(!lista) return;
+  const usados = new Set();
+  [...lista.querySelectorAll('.cuentabancaria-row')].forEach(r=>{
+    const sel = r.querySelector('.cuentabancaria-banco').value;
+    const val = sel==='Otro' ? r.querySelector('.cuentabancaria-otro').value.trim() : sel;
+    if(val) usados.add(val);
+  });
+  [...lista.querySelectorAll('.cuentabancaria-row')].forEach(r=>{
+    if(r.dataset.nueva==='1') return; // las cuentas nuevas siempre ven la lista completa
+    const sel = r.querySelector('.cuentabancaria-banco');
+    const actual = sel.value;
+    const opciones = BANCOS_CUENTA.filter(b => usados.has(b) || b===actual);
+    sel.innerHTML = `<option value="">Banco…</option>` + opciones.map(b=>`<option value="${b}" ${actual===b?'selected':''}>${b}</option>`).join('');
+  });
 }
 function toggleBancoOtro(sel){
   const row = sel.closest('.cuentabancaria-row');
@@ -462,24 +476,21 @@ function toggleBancoOtro(sel){
     row.querySelector('.cuentabancaria-sucursal').value = '';
   }
   sel.dataset.bancoActual = sel.value;
-  // Se vuelve a "fijar" mostrando el banco elegido como texto, en vez de dejar el
-  // desplegable abierto con los 9 bancos a la vista todo el tiempo.
-  if(sel.value){
-    const wrap = sel.closest('.cuentabancaria-banco-wrap');
-    const locked = wrap.querySelector('.cuentabancaria-banco-locked');
-    locked.querySelector('b').textContent = sel.value;
-    locked.style.display = 'flex';
-    sel.style.display = 'none';
-  }
+  recalcularOpcionesCuentasBancarias(sel);
 }
 function agregarFilaCuentaBancaria(prefix){
-  document.getElementById(prefix+'-cuentas-list').insertAdjacentHTML('beforeend', filaCuentaBancaria());
+  document.getElementById(prefix+'-cuentas-list').insertAdjacentHTML('beforeend', filaCuentaBancaria('', true));
 }
 function confirmarQuitarCuentaBancaria(btn){
   const row = btn.closest('.cuentabancaria-row');
-  const banco = row.querySelector('.cuentabancaria-banco-locked b')?.textContent || row.querySelector('.cuentabancaria-banco')?.value || 'esta cuenta';
+  const banco = row.querySelector('.cuentabancaria-banco').value || 'esta cuenta';
   const numero = row.querySelector('.cuentabancaria-numero').value;
-  if(confirm(`¿Eliminar la cuenta ${banco}${numero?' '+numero:''}? Se va a borrar al guardar.`)) row.remove();
+  confirmarAccion(`¿Eliminar la cuenta ${banco}${numero?' '+numero:''}? Se va a borrar al guardar.`, 'Eliminar').then(ok=>{
+    if(!ok) return;
+    const lista = row.closest('[id$="-cuentas-list"]');
+    row.remove();
+    if(lista) recalcularOpcionesCuentasBancarias(lista);
+  });
 }
 function leerCuentasBancarias(prefix){
   return [...document.querySelectorAll(`#${prefix}-cuentas-list .cuentabancaria-row`)].map(row=>{
