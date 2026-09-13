@@ -818,6 +818,12 @@ async function guardarHorarioAsignacionFija(asigId){
   if(!horaIni || !horaFin){ if(warn) warn.innerHTML = '<div class="warnbox">Completá las dos horas.</div>'; return; }
   if(horaFin<=horaIni){ if(warn) warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio.</div>'; return; }
   if(!dias.length){ if(warn) warn.innerHTML = '<div class="warnbox">Elegí al menos un día.</div>'; return; }
+  const item = agendaSolicitudes.find(s=>s._asigId===asigId);
+  const nineraNombre = item?._raw?.ninera_nombre;
+  if(nineraNombre){
+    const choque = await chequearFijoNuevoContraTodo(nineraNombre, dias, horaIni, horaFin, asigId);
+    if(!(await avisarSiDobleReserva(choque, nineraNombre, 'Guardar igual'))) return;
+  }
   const { error } = await sb.from('asignaciones').update({hora_inicio: horaIni, hora_fin: horaFin, dias}).eq('id', asigId);
   if(error){ if(warn) warn.innerHTML = errBox(error); return; }
   cerrarModal();
@@ -986,6 +992,12 @@ async function cambiarNineraAsignacionFija(asigId){
   const nueva = document.getElementById('agenda-fija-ninera-'+asigId).value.trim();
   const warn = document.getElementById('agenda-fija-warn');
   if(!nueva) return;
+  const item = agendaSolicitudes.find(s=>s._asigId===asigId);
+  const a = item?._raw;
+  if(a?.hora_inicio && Array.isArray(a.dias)){
+    const choque = await chequearFijoNuevoContraTodo(nueva, a.dias, a.hora_inicio, a.hora_fin, asigId);
+    if(!(await avisarSiDobleReserva(choque, nueva, 'Asignar igual'))) return;
+  }
   const { error } = await sb.from('asignaciones').update({ninera_nombre: nueva}).eq('id', asigId);
   if(error){ warn.innerHTML = errBox(error); return; }
   cerrarModal();

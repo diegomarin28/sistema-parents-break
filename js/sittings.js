@@ -1052,9 +1052,27 @@ async function guardarSitting(){
     registro.origen = document.getElementById('sit-origen').value || null;
     registro.destino = document.getElementById('sit-destino').value || null;
   }
-  if(!sitEditId && registro.hora_inicio){
+  let yaAvisadoDuplicado = false;
+  if(!sitEditId){
+    const existentes = await chequearRegistroExistenteMismoDia(nineraNombre, registro.familia_id, fecha, sitEditId);
+    if(existentes.length){
+      yaAvisadoDuplicado = true;
+      const primero = existentes[0];
+      const mensaje = existentes.length===1
+        ? `Ya hay un ${primero.hora_inicio?'sitting':'registro'} cargado para ${familiaNombre} con ${nineraNombre} el ${fecha}${primero.hora_inicio?` (${horaTxt(primero.hora_inicio)}–${horaTxt(primero.hora_fin)}, cobro $${Number(primero.cobro_familia||0).toLocaleString('es-UY')}, pago $${Number(primero.pago_ninera||0).toLocaleString('es-UY')})`:''}. ¿Es este mismo sitting (capaz alguien ya lo cargó) o es otro turno distinto?`
+        : `Ya hay ${existentes.length} registros cargados para ${familiaNombre} con ${nineraNombre} el ${fecha}. ¿Es otro turno distinto, o querés revisarlos primero en Sittings & traslados?`;
+      const resultado = await confirmarAccionTresVias(mensaje, existentes.length===1 ? 'Ver ese sitting' : null, 'Es otro, continuar');
+      if(resultado==='cancelar') return;
+      if(resultado==='ver'){ abrirModalSitForm(primero.id); return; }
+    }
+  }
+  if(!sitEditId && registro.hora_inicio && !yaAvisadoDuplicado){
     const choque = await chequearDobleReservaDB(nineraNombre, fecha, registro.hora_inicio, registro.hora_fin);
     if(!(await avisarSiDobleReserva(choque, nineraNombre, 'Guardar igual'))) return;
+  }
+  if(!sitEditId && registro.hora_inicio && !yaAvisadoDuplicado){
+    const choqueFamilia = await chequearFamiliaYaCubierta(registro.familia_id, fecha, registro.hora_inicio, registro.hora_fin, nineraNombre, sitEditId);
+    if(!(await avisarSiFamiliaYaCubierta(choqueFamilia, familiaNombre, 'Sí, van dos'))) return;
   }
   let error;
   if(sitEditId){

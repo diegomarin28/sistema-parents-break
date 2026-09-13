@@ -189,75 +189,34 @@ async function guardarGruposZona(){
    es su propia fila, con fecha de nacimiento real (la edad se calcula sola,
    mismo criterio que en niñeras) y colegio.
    ============================================================ */
-function filaHijoFamilia(hijo, abierta){
+function filaHijoFamilia(hijo){
   const h = hijo || {};
   const q = s => String(s||'').replace(/"/g,'&quot;');
   const edadActual = edadHijo(h);
-  const faltaInfo = edadActual===null || !h.colegio;
-  const resumen = resumenUnHijo(h);
-  return `<div class="hijofamilia-row" style="border:1px solid var(--line);border-radius:8px;margin-bottom:8px;overflow:hidden;" data-edad-declarada="${h.edad_declarada??''}" data-edad-declarada-en="${h.edad_declarada_en||''}">
-    <div class="hijofamilia-summary" onclick="toggleHijoFamiliaRow(this)" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer;${faltaInfo?'color:var(--warn);':''}">
-      <span class="hf-summary-text" style="font-weight:600;">${resumen}${faltaInfo?' — Falta info':''}</span>
-      <span class="hf-summary-arrow">${abierta?'▴':'▾'}</span>
+  return `<div class="hijofamilia-row" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;" data-edad-declarada="${h.edad_declarada??''}" data-edad-declarada-en="${h.edad_declarada_en||''}">
+    <div class="grid3" style="margin-bottom:0;">
+      <div class="field" style="margin-bottom:0;"><label>Nombre</label><input type="text" class="hf-nombre" value="${q(h.nombre)}" placeholder="opcional"></div>
+      <div class="field" style="margin-bottom:0;"><label>Fecha de nacimiento</label><input type="date" class="hf-fecha-nac" value="${h.fecha_nacimiento||''}" onchange="this.closest('.hijofamilia-row').querySelector('.hf-edad-declarada').disabled = !!this.value;"></div>
+      <div class="field" style="margin-bottom:0;"><label>Colegio</label><input type="text" class="hf-colegio" value="${q(h.colegio)}"></div>
     </div>
-    <div class="hijofamilia-detail" style="display:${abierta?'block':'none'};padding:0 12px 12px;">
-      <div class="grid3" style="margin-bottom:0;">
-        <div class="field" style="margin-bottom:0;"><label>Nombre</label><input type="text" class="hf-nombre" value="${q(h.nombre)}" placeholder="opcional" oninput="actualizarResumenHijoFamilia(this)"></div>
-        <div class="field" style="margin-bottom:0;"><label>Fecha de nacimiento</label><input type="date" class="hf-fecha-nac" value="${h.fecha_nacimiento||''}" onchange="this.closest('.hijofamilia-row').querySelector('.hf-edad-declarada').disabled = !!this.value; actualizarResumenHijoFamilia(this);"></div>
-        <div class="field" style="margin-bottom:0;"><label>Colegio</label><input type="text" class="hf-colegio" value="${q(h.colegio)}" oninput="actualizarResumenHijoFamilia(this)"></div>
-      </div>
-      <div class="field" style="margin:6px 0 0;">
-        <label>O, si no sabés la fecha exacta: edad ahora mismo${edadActual!==null && !h.fecha_nacimiento ? ` <span class="helper" style="margin:0;">(hoy: ${edadActual} años)</span>` : ''}</label>
-        <input type="number" class="hf-edad-declarada" placeholder="${edadActual!==null && !h.fecha_nacimiento ? 'Cambiar edad a…' : 'Ej: 5'}" min="0" max="30" ${h.fecha_nacimiento ? 'disabled' : ''} onchange="actualizarResumenHijoFamilia(this)">
-        <div class="helper" style="margin:2px 0 0;">Dejalo vacío para no tocarla. Si escribís un número, queda esa edad a partir de hoy y suma un año sola cada 12 meses — como si fuese un reloj.</div>
-      </div>
-      <button type="button" class="smallbtn danger" style="margin-top:6px;" onclick="confirmarQuitarHijoFamilia(this)">Quitar</button>
+    <div class="field" style="margin:6px 0 0;">
+      <label>O, si no sabés la fecha exacta: edad ahora mismo${edadActual!==null && !h.fecha_nacimiento ? ` <span class="helper" style="margin:0;">(hoy: ${edadActual} años)</span>` : ''}</label>
+      <input type="number" class="hf-edad-declarada" placeholder="${edadActual!==null && !h.fecha_nacimiento ? 'Cambiar edad a…' : 'Ej: 5'}" min="0" max="30" ${h.fecha_nacimiento ? 'disabled' : ''}>
+      <div class="helper" style="margin:2px 0 0;">Dejalo vacío para no tocarla. Si escribís un número, queda esa edad a partir de hoy y suma un año sola cada 12 meses — como si fuese un reloj.</div>
     </div>
+    <button type="button" class="smallbtn danger" style="margin-top:6px;" onclick="this.closest('.hijofamilia-row').remove()">Quitar</button>
   </div>`;
-}
-// Texto compacto de la fila cerrada: nombre (o "Hijo N"), y lo que ya se sabe.
-function resumenUnHijo(h, posicion){
-  const nombre = h.nombre || `Hijo ${posicion||''}`.trim();
-  const edad = edadHijo(h);
-  const partes = [edad!==null ? `${edad} años` : null, h.colegio || null].filter(Boolean);
-  return partes.length ? `${nombre} — ${partes.join(' · ')}` : nombre;
-}
-function actualizarResumenHijoFamilia(inputEl){
-  const row = inputEl.closest('.hijofamilia-row');
-  const h = {
-    nombre: row.querySelector('.hf-nombre').value.trim(),
-    colegio: row.querySelector('.hf-colegio').value.trim(),
-    fecha_nacimiento: row.querySelector('.hf-fecha-nac').value || null,
-    edad_declarada: row.querySelector('.hf-edad-declarada').value || row.dataset.edadDeclarada || null,
-    edad_declarada_en: row.dataset.edadDeclaradaEn || todayISO(),
-  };
-  const faltaInfo = edadHijo(h)===null || !h.colegio;
-  const span = row.querySelector('.hf-summary-text');
-  const idx = [...row.parentElement.children].indexOf(row) + 1;
-  span.textContent = resumenUnHijo(h, idx) + (faltaInfo ? ' — Falta info' : '');
-  row.querySelector('.hijofamilia-summary').style.color = faltaInfo ? 'var(--warn)' : '';
-}
-function toggleHijoFamiliaRow(summaryEl){
-  const detail = summaryEl.nextElementSibling;
-  const abrir = detail.style.display==='none';
-  detail.style.display = abrir ? 'block' : 'none';
-  summaryEl.querySelector('.hf-summary-arrow').textContent = abrir ? '▴' : '▾';
-}
-function confirmarQuitarHijoFamilia(btn){
-  const row = btn.closest('.hijofamilia-row');
-  const nombre = row.querySelector('.hf-summary-text').textContent;
-  if(confirm(`¿Quitar a ${nombre}? Se va a borrar al guardar.`)) row.remove();
 }
 function htmlHijosFamilia(prefix, hijos){
   const lista = hijos && hijos.length ? hijos : [];
   return `<div class="field">
     <label>Hijos</label>
-    <div id="${prefix}-hijos-list">${lista.map((h,i)=>filaHijoFamilia(h, false)).join('')}</div>
+    <div id="${prefix}-hijos-list">${lista.map(filaHijoFamilia).join('')}</div>
     <button class="smallbtn" type="button" onclick="agregarFilaHijoFamilia('${prefix}')" style="margin-top:6px;">+ Agregar hijo</button>
   </div>`;
 }
 function agregarFilaHijoFamilia(prefix){
-  document.getElementById(prefix+'-hijos-list').insertAdjacentHTML('beforeend', filaHijoFamilia(null, true));
+  document.getElementById(prefix+'-hijos-list').insertAdjacentHTML('beforeend', filaHijoFamilia());
 }
 function leerHijosFamilia(prefix){
   return [...document.querySelectorAll(`#${prefix}-hijos-list .hijofamilia-row`)].map(row=>{
@@ -388,7 +347,7 @@ function restaurarScrollMainarea(valor){
    3 campos separados (banco / número / sucursal) en vez de un input libre,
    mismo criterio que quedó armado en el formulario de postulación.
    ============================================================ */
-const BANCOS_CUENTA = ['Itaú','BROU','Santander','Scotiabank','Prex','BBVA','Mercado Pago','HSBC','Otro'];
+const BANCOS_CUENTA = ['Itaú','BROU','Santander','Scotiabank','BBVA','HSBC','Otro'];
 // Separa el string guardado en sus 3 partes, para poder editarlo con los campos separados.
 function parsearCuentaBancaria(valor){
   const v = String(valor||'').trim();
@@ -421,7 +380,7 @@ function filaCuentaBancaria(valor=''){
   const otroValor = (!esConocido && banco) ? banco : '';
   const q = s => String(s||'').replace(/"/g,'&quot;');
   return `<div class="cuentabancaria-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
-    <select class="cuentabancaria-banco" data-banco-actual="${bancoSel}" onchange="toggleBancoOtro(this)" style="flex:1;min-width:100px;">
+    <select class="cuentabancaria-banco" onchange="toggleBancoOtro(this)" style="flex:1;min-width:100px;">
       <option value="">Banco…</option>
       ${BANCOS_CUENTA.map(b=>`<option value="${b}" ${bancoSel===b?'selected':''}>${b}</option>`).join('')}
     </select>
@@ -432,17 +391,8 @@ function filaCuentaBancaria(valor=''){
   </div>`;
 }
 function toggleBancoOtro(sel){
-  const row = sel.closest('.cuentabancaria-row');
-  const otro = row.querySelector('.cuentabancaria-otro');
+  const otro = sel.closest('.cuentabancaria-row').querySelector('.cuentabancaria-otro');
   otro.style.display = sel.value==='Otro' ? '' : 'none';
-  // Cambiar de banco es cambiar de cuenta -- el número y la sucursal que había cargados
-  // eran del banco anterior, no tiene sentido que se queden pegados al banco nuevo (eso
-  // daba a entender que dos bancos distintos comparten el mismo número de cuenta).
-  if(sel.dataset.bancoActual && sel.dataset.bancoActual !== sel.value){
-    row.querySelector('.cuentabancaria-numero').value = '';
-    row.querySelector('.cuentabancaria-sucursal').value = '';
-  }
-  sel.dataset.bancoActual = sel.value;
 }
 function agregarFilaCuentaBancaria(prefix){
   document.getElementById(prefix+'-cuentas-list').insertAdjacentHTML('beforeend', filaCuentaBancaria());
@@ -665,20 +615,21 @@ async function chequearDobleReservaDB(nineraNombre, fecha, horaInicio, horaFin){
   }
   return null;
 }
-/* Al crear una asignación fija nueva: chequea contra otros fijos de esa niñera (cualquier fecha, no vencen),
+/* Al crear/editar una asignación fija: chequea contra otros fijos de esa niñera (cualquier fecha, no vencen),
    y contra sittings ya registrados o solicitudes puntuales confirmadas DE HOY EN ADELANTE cuyo día de
-   semana caiga en los días elegidos para el fijo. */
-async function chequearFijoNuevoContraTodo(nineraNombre, dias, horaInicio, horaFin){
+   semana caiga en los días elegidos para el fijo. excluirAsigId es para cuando se está EDITANDO un fijo
+   existente -- si no, se autodetecta como conflicto contra sí mismo. */
+async function chequearFijoNuevoContraTodo(nineraNombre, dias, horaInicio, horaFin, excluirAsigId=null){
   if(!horaInicio) return null;
   const hoy = todayISO();
   const key = normaliza(nineraNombre);
   const [{data:fijos}, {data:regs}, {data:sols}] = await Promise.all([
-    sb.from('asignaciones').select('dias,hora_inicio,hora_fin,ninera_nombre, familias(nombre)'),
+    sb.from('asignaciones').select('id,dias,hora_inicio,hora_fin,ninera_nombre, familias(nombre)'),
     sb.from('sittings_traslados').select('familia_nombre,fecha,hora_inicio,hora_fin,ninera_nombre').gte('fecha', hoy),
     sb.from('solicitudes').select('familia_nombre,fecha,hora_inicio,hora_fin,estado,solicitud_ninieras(ninera_nombre,estado)').gte('fecha', hoy),
   ]);
   for(const ex of (fijos||[])){
-    if(normaliza(ex.ninera_nombre)!==key || !Array.isArray(ex.dias) || !dias.some(d=>ex.dias.includes(d))) continue;
+    if(ex.id===excluirAsigId || normaliza(ex.ninera_nombre)!==key || !Array.isArray(ex.dias) || !dias.some(d=>ex.dias.includes(d))) continue;
     if(rangosSolapan(horaInicio, horaFin, ex.hora_inicio, ex.hora_fin)) return {familia_nombre:ex.familias?.nombre||'(familia)', hora_inicio:ex.hora_inicio, hora_fin:ex.hora_fin};
   }
   for(const r of (regs||[])){
@@ -694,6 +645,73 @@ async function chequearFijoNuevoContraTodo(nineraNombre, dias, horaInicio, horaF
   return null;
 }
 function horaTxt(h){ return h ? h.slice(0,5) : '?'; }
+
+/* ============================================================
+   B6 · Detección de familia ya cubierta: si una familia ya tiene un
+   sitting REGISTRADO ese horario con otra niñera, avisa antes de
+   registrar/asignar una niñera distinta para el mismo horario -- capaz
+   se mandan dos niñeras a propósito, pero que quede la duda planteada.
+   ============================================================ */
+async function chequearFamiliaYaCubierta(familiaId, fecha, horaInicio, horaFin, nineraNombre, excluirRegId){
+  if(!familiaId || !fecha || !horaInicio) return null;
+  const { data } = await sb.from('sittings_traslados')
+    .select('id,ninera_nombre,hora_inicio,hora_fin')
+    .eq('familia_id', familiaId).eq('fecha', fecha);
+  const key = normaliza(nineraNombre);
+  for(const r of (data||[])){
+    if(r.id===excluirRegId || normaliza(r.ninera_nombre||'')===key) continue;
+    if(rangosSolapan(horaInicio, horaFin, r.hora_inicio, r.hora_fin)) return r;
+  }
+  return null;
+}
+async function avisarSiFamiliaYaCubierta(match, familiaNombre, textoBoton){
+  if(!match) return true;
+  return confirmarAccion(`${familiaNombre} ya tiene un sitting registrado ese horario con ${match.ninera_nombre} (${horaTxt(match.hora_inicio)}–${horaTxt(match.hora_fin)}). ¿Van dos niñeras a la vez, o es un error?`, textoBoton);
+}
+
+/* ============================================================
+   B5 · Detección de sitting ya cargado: antes de guardar un sitting
+   NUEVO, si ya existe un registro para la misma familia + niñera +
+   fecha, avisa con acceso directo a editar ese en vez de crear uno
+   nuevo por al lado. No bloquea -- puede ser un segundo turno real
+   el mismo día (ej. mañana y noche).
+   ============================================================ */
+async function chequearRegistroExistenteMismoDia(nineraNombre, familiaId, fecha, excluirId){
+  if(!familiaId || !fecha) return [];
+  const { data } = await sb.from('sittings_traslados')
+    .select('id,hora_inicio,hora_fin,cobro_familia,pago_ninera,ninera_nombre')
+    .eq('familia_id', familiaId).eq('fecha', fecha);
+  const key = normaliza(nineraNombre);
+  return (data||[]).filter(r=> r.id!==excluirId && normaliza(r.ninera_nombre||'')===key);
+}
+/* Como confirmarAccion, pero con 3 salidas: 'cancelar' | 'ver' | 'continuar'.
+   Si textoVer es null/vacío, no se muestra ese botón (queda en 2 vías). */
+function confirmarAccionTresVias(mensaje, textoVer, textoContinuar){
+  return new Promise((resolve)=>{
+    const overlay = document.createElement('div');
+    overlay.className = 'confirmoverlay';
+    overlay.innerHTML = `
+      <div class="confirmbox">
+        <div class="confirmmsg">${mensaje}</div>
+        <div class="confirmbtns" style="flex-wrap:wrap;">
+          <button class="btn ghost" id="confirm3-cancelar">Cancelar</button>
+          ${textoVer ? `<button class="btn" id="confirm3-ver">${textoVer}</button>` : ''}
+          <button class="btn danger" id="confirm3-continuar">${textoContinuar}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(()=>overlay.classList.add('show'));
+    function cerrar(resultado){
+      overlay.classList.remove('show');
+      setTimeout(()=>overlay.remove(), 180);
+      resolve(resultado);
+    }
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) cerrar('cancelar'); });
+    overlay.querySelector('#confirm3-cancelar').addEventListener('click', ()=>cerrar('cancelar'));
+    if(textoVer) overlay.querySelector('#confirm3-ver').addEventListener('click', ()=>cerrar('ver'));
+    overlay.querySelector('#confirm3-continuar').addEventListener('click', ()=>cerrar('continuar'));
+  });
+}
 async function avisarSiDobleReserva(choque, nineraNombre, textoBoton){
   if(!choque) return true;
   const fechaTxt = choque.fecha ? ` el ${new Date(choque.fecha+'T00:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'})}` : '';
