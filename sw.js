@@ -27,14 +27,9 @@ self.addEventListener('notificationclick', (event) => {
   // que no existe, y tiraba 404 (bug encontrado probando en vivo).
   const rutaCruda = (event.notification.data && event.notification.data.url) || './';
   const url = new URL(rutaCruda, self.registration.scope).href;
-  event.waitUntil((async () => {
-    const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const c of clientsList) {
-      if ('focus' in c) {
-        if ('navigate' in c) { try { await c.navigate(url); } catch (e) {} }
-        return c.focus();
-      }
-    }
-    if (self.clients.openWindow) return self.clients.openWindow(url);
-  })());
+  // Siempre abre una ventana nueva — NO intenta reusar/navegar una pestaña ya abierta.
+  // Antes probaba reciclar una pestaña existente, y una vez agarró una pestaña vieja que
+  // no era la app (tenía el código de sw.js abierto en texto plano) y se quedó ahí en vez
+  // de llevar a la app — bug encontrado probando en vivo.
+  event.waitUntil(self.clients.openWindow(url));
 });
