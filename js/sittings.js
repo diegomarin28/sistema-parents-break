@@ -4,6 +4,8 @@ let sitNinieras = [];
 let sitItems = [];
 let sitTipo = 'sitting';
 let sitPrefill = null; // {familiaNombre, nineraNombre, fecha, horaInicio, horaFin, notas} — precarga el form de sitting desde Agenda o desde "Pendiente" en Hoy
+let sitEsRegistroConocido = false; // true si se está editando uno ya guardado, o si vino con sitPrefill (un fijo/pendiente ya sabido) — controla si tiene sentido mostrar "Este día no hubo servicio"
+let sitPagoModoHora = false; // true = el campo de pago a niñera se tipea por hora (y se calcula el total solo), false = se tipea el total directo
 let sitEditId = null;
 let sitFamiliaSel = null;
 let sitNineraSel = null;
@@ -267,13 +269,21 @@ function sitFormHTML(){
         ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" data-dia="${d}" onclick="this.classList.toggle('selected')">${DIAS_CORTO[d]}</button>`).join('')}
       </div>
     </div>
-    <label class="chk" style="margin:0 0 10px;">
+    <label class="chk" style="margin:0 0 10px;${sitEsRegistroConocido ? '' : 'display:none;'}">
       <input type="checkbox" id="sit-cancelado" onchange="onSitCanceladoChange()" style="width:auto;">
       Este día no hubo servicio (canceló la familia o faltó la niñera sin reemplazo) — sin cargo
     </label>
     <div class="grid2">
       <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-cobro')"></div>
-      <div class="field"><label>Pago a niñera</label><input type="number" id="sit-pago" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-pago')"></div>
+      <div class="field">
+        <label>Pago TOTAL a niñera <span style="font-weight:400;color:var(--ink-soft);">(no por hora)</span>
+          ${sitTipo==='sitting' ? `<a href="#" id="sit-pago-modo-link" onclick="toggleSitPagoModoHora();return false;" style="font-weight:400;font-size:11.5px;margin-left:6px;">poner pago por hora</a>` : ''}
+        </label>
+        <input type="number" id="sit-pago" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-pago')">
+        <div id="sit-pago-hora-wrap" style="display:none;margin-top:6px;">
+          <input type="number" id="sit-pago-hora" placeholder="Pago por hora, ej. 280" oninput="onSitPagoHoraInput()">
+        </div>
+      </div>
     </div>
     <div id="sit-sin-tarifa-box"></div>
     <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="sit-notas"></textarea></div>
@@ -325,6 +335,8 @@ function wireSitAutocompletes(){
 function abrirModalSitForm(id=null){
   sitEditId = id;
   const r = id ? sitItems.find(x=>x.id===id) : null;
+  sitEsRegistroConocido = !!r || !!sitPrefill; // nuevo en blanco -> no corresponde "no hubo servicio"
+  sitPagoModoHora = false;
   sitTipo = r ? r.tipo : 'sitting';
   sitFamiliaSel = r ? (sitFamilias.find(f=>f.id===r.familia_id) || findFamilia(r.familia_nombre)) : null;
   sitNineraSel = r ? (sitNinieras.find(n=>n.id===r.ninera_id) || findNinera(r.ninera_nombre)) : null;
@@ -380,6 +392,7 @@ function abrirModalSitForm(id=null){
 }
 function setSitTipo(t){
   sitTipo = t;
+  sitPagoModoHora = false;
   const bS = document.getElementById('sit-tipo-sitting'), bT = document.getElementById('sit-tipo-traslado');
   if(bS) bS.classList.toggle('selected', t==='sitting');
   if(bT) bT.classList.toggle('selected', t==='traslado');
@@ -962,23 +975,31 @@ function actualizarCobroPagoPorHorario(){
   const pagoH = Number(sitFamiliaSel.pago_hora)||0;
   const horaIni = leerHora('sit-horaini');
   const horaFin = leerHora('sit-horafin');
-  if(!cobroH && !pagoH){
-    // Sin tarifa cargada: no hay nada para calcular, pero ofrecemos cargarla ahí mismo
-    // en vez de dejarlo en silencio — así la próxima vez con esta familia ya calcula solo.
-    if(sinTarifaBox && horaIni && horaFin){
-      sinTarifaBox.innerHTML = `
-        <div class="helper" style="margin:8px 0 6px;color:var(--clay-text);">${sitFamiliaSel.nombre} no tiene tarifa por hora cargada — cargala ahora y calculamos este sitting y los que vengan:</div>
-        <div class="grid2">
-          <div class="field"><label>Cobro por hora</label><input type="number" id="sit-tarifa-cobro-nueva" placeholder="ej. 400"></div>
-          <div class="field"><label>Pago por hora</label><input type="number" id="sit-tarifa-pago-nueva" placeholder="ej. 280"></div>
-        </div>
-        <button type="button" class="smallbtn" onclick="guardarTarifaFamiliaDesdeSitting()">Guardar tarifa y calcular</button>`;
+  // Si el usuario está usando "poner pago por hora" a mano para este sitting puntual, ese
+  // campo maneja el pago (ver onSitPagoHoraInput) — acá no lo tocamos, pero el cobro a la
+  // familia sigue calculándose normal. Si falta el PAGO por hora de la familia (haya o no
+  // cobro cargado), se ofrece cargarlo ahí mismo — antes esto solo se disparaba si faltaban
+  // los dos valores, así que una familia con cobro cargado pero sin pago quedaba calculando
+  // el pago en $0 en silencio, sin avisar nada.
+  if(!sitPagoModoHora){
+    if(!pagoH){
+      if(sinTarifaBox && horaIni && horaFin){
+        sinTarifaBox.innerHTML = `
+          <div class="helper" style="margin:8px 0 6px;color:var(--clay-text);">${sitFamiliaSel.nombre} ${cobroH ? 'no tiene cargado cuánto le paga a la niñera por hora' : 'no tiene tarifa por hora cargada'} — cargalo ahora y calculamos este sitting y los que vengan:</div>
+          <div class="grid2">
+            ${cobroH ? '' : `<div class="field"><label>Cobro por hora</label><input type="number" id="sit-tarifa-cobro-nueva" placeholder="ej. 400"></div>`}
+            <div class="field"><label>Pago por hora</label><input type="number" id="sit-tarifa-pago-nueva" placeholder="ej. 280"></div>
+          </div>
+          <button type="button" class="smallbtn" onclick="guardarTarifaFamiliaDesdeSitting()">Guardar tarifa y calcular</button>`;
+      } else if(sinTarifaBox){
+        sinTarifaBox.innerHTML = '';
+      }
     } else if(sinTarifaBox){
       sinTarifaBox.innerHTML = '';
     }
-    return;
+  } else if(sinTarifaBox){
+    sinTarifaBox.innerHTML = '';
   }
-  if(sinTarifaBox) sinTarifaBox.innerHTML = '';
   if(!horaIni || !horaFin) return;
   const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
   const mi = agendaMinutos(horaIni);
@@ -986,14 +1007,61 @@ function actualizarCobroPagoPorHorario(){
   if(cruza) mf += 24*60;
   if(mf<=mi) return; // horario todavía inválido/incompleto, no calcula nada raro
   const horasFrac = (mf-mi)/60;
-  cobroInput.value = Math.round(cobroH*horasFrac);
-  pagoInput.value = Math.round(pagoH*horasFrac);
+  if(cobroH) cobroInput.value = Math.round(cobroH*horasFrac);
+  if(pagoH && !sitPagoModoHora) pagoInput.value = Math.round(pagoH*horasFrac);
+  if(sitPagoModoHora) onSitPagoHoraInput(); // si cambió el horario, recalcula el total con el valor por hora ya tipeado
+  calcSitMargen();
+}
+/* Toggle "pago por hora" vs "pago total" para ESTE sitting puntual. El campo de pago total
+   sigue siendo lo que se guarda en la base (pago_ninera) — el de por hora es solo una forma
+   más cómoda de tipear, que calcula el total sola según el horario cargado. */
+function toggleSitPagoModoHora(){
+  sitPagoModoHora = !sitPagoModoHora;
+  const pagoInput = document.getElementById('sit-pago');
+  const horaWrap = document.getElementById('sit-pago-hora-wrap');
+  const link = document.getElementById('sit-pago-modo-link');
+  if(!pagoInput || !horaWrap) return;
+  if(sitPagoModoHora){
+    pagoInput.readOnly = true;
+    pagoInput.style.background = 'var(--bg)';
+    horaWrap.style.display = 'block';
+    if(link) link.textContent = 'volver a poner el total a mano';
+    if(sitFamiliaSel?.pago_hora){
+      const horaInput = document.getElementById('sit-pago-hora');
+      if(horaInput) horaInput.value = sitFamiliaSel.pago_hora;
+    }
+    onSitPagoHoraInput();
+  } else {
+    pagoInput.readOnly = false;
+    pagoInput.style.background = '';
+    horaWrap.style.display = 'none';
+    if(link) link.textContent = 'poner pago por hora';
+    actualizarCobroPagoPorHorario();
+  }
+}
+function onSitPagoHoraInput(){
+  const horaVal = Number(document.getElementById('sit-pago-hora')?.value)||0;
+  const pagoInput = document.getElementById('sit-pago');
+  const horaIni = leerHora('sit-horaini');
+  const horaFin = leerHora('sit-horafin');
+  if(!pagoInput || !horaIni || !horaFin) return;
+  const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
+  const mi = agendaMinutos(horaIni);
+  let mf = agendaMinutos(horaFin);
+  if(cruza) mf += 24*60;
+  if(mf<=mi) return;
+  const horasFrac = (mf-mi)/60;
+  pagoInput.value = Math.round(horaVal*horasFrac);
   calcSitMargen();
 }
 async function guardarTarifaFamiliaDesdeSitting(){
   if(!sitFamiliaSel) return;
-  const cobroH = Number(document.getElementById('sit-tarifa-cobro-nueva')?.value)||0;
-  const pagoH = Number(document.getElementById('sit-tarifa-pago-nueva')?.value)||0;
+  const cobroInputEl = document.getElementById('sit-tarifa-cobro-nueva');
+  const pagoInputEl = document.getElementById('sit-tarifa-pago-nueva');
+  // Si el campo de cobro no está en el formulario (porque la familia YA tenía cobro
+  // cargado), hay que conservar ese valor existente en vez de pisarlo con null.
+  const cobroH = cobroInputEl ? (Number(cobroInputEl.value)||0) : (Number(sitFamiliaSel.cobro_hora)||0);
+  const pagoH = pagoInputEl ? (Number(pagoInputEl.value)||0) : (Number(sitFamiliaSel.pago_hora)||0);
   if(!cobroH && !pagoH){ toast('Cargá al menos uno de los dos valores.', 'bad'); return; }
   const { error } = await sb.from('familias').update({cobro_hora:cobroH||null, pago_hora:pagoH||null}).eq('id', sitFamiliaSel.id);
   if(error){ toast('No se pudo guardar la tarifa: '+error.message, 'bad'); return; }
@@ -1018,6 +1086,21 @@ async function guardarSitting(){
   if(!sitEditId){
     if(!sitFamiliaSel && !(await confirmarNombreNuevo(familiaNombre, sitFamilias, 'familia'))) return;
     if(!sitNineraSel && !(await confirmarNombreNuevo(nineraNombre, sitNinieras, 'niñera'))) return;
+  }
+  // Si se usó "poner pago por hora" y esta familia todavía no tenía esa tarifa cargada,
+  // la guardamos de una vez -- así la próxima vez, con cualquier niñera, ya calcula sola,
+  // sin tener que ir a la ficha de la familia a mano.
+  if(sitPagoModoHora && sitFamiliaSel && !sitFamiliaSel.pago_hora){
+    const horaVal = Number(document.getElementById('sit-pago-hora')?.value)||0;
+    if(horaVal){
+      const { error: errTarifa } = await sb.from('familias').update({pago_hora:horaVal}).eq('id', sitFamiliaSel.id);
+      if(!errTarifa){
+        sitFamiliaSel.pago_hora = horaVal;
+        const enLista = sitFamilias.find(f=>f.id===sitFamiliaSel.id);
+        if(enLista) enLista.pago_hora = horaVal;
+        toast('Pago por hora guardado para esta familia — la próxima vez calcula solo.');
+      }
+    }
   }
   const registro = {
     tipo: sitTipo,
