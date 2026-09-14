@@ -15,14 +15,18 @@ self.addEventListener('push', (event) => {
     icon: 'icon-192.png',
     badge: 'icon-192.png',
     tag: data.id || (titulo + Date.now()),
-    data: { url: data.url || '/' },
+    data: { url: data.url || './' },
   };
   event.waitUntil(self.registration.showNotification(titulo, opciones));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/';
+  // Resuelto siempre contra el scope real del service worker (el subpath del repo en
+  // GitHub Pages) — un path que empiece con "/" a secas apuntaría a la raíz de github.io,
+  // que no existe, y tiraba 404 (bug encontrado probando en vivo).
+  const rutaCruda = (event.notification.data && event.notification.data.url) || './';
+  const url = new URL(rutaCruda, self.registration.scope).href;
   event.waitUntil((async () => {
     const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const c of clientsList) {
