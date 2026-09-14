@@ -488,22 +488,55 @@ async function cargarNotifLeidas(){
 }
 
 function renderNotifBell(){
-  const sinLeer = notifItems.filter(i=>!notifLeidas.has(i.id)).length;
+  const sinLeer = notifItems.filter(i=>!notifLeidas.has(i.id));
   document.querySelectorAll('.notif-badge').forEach(b=>{
-    b.textContent = sinLeer;
-    b.style.display = sinLeer ? 'flex' : 'none';
+    b.textContent = sinLeer.length;
+    b.style.display = sinLeer.length ? 'flex' : 'none';
   });
   const panel = document.getElementById('notif-panel');
   if(!panel) return;
-  const cuerpo = notifItems.length ? notifItems.map(i=>`
-    <div class="notif-item ${notifLeidas.has(i.id)?'':'unread'}" onclick="irANotificacion('${i.id}')">
-      <div class="notif-item-ic">${ICONS.alert}</div>
-      <div class="notif-item-body">
-        <div class="notif-item-title">${i.titulo}</div>
-        <div class="notif-item-msg">${i.mensaje}</div>
+  // Ahora solo se muestran las no leídas — deslizar (celu) o tocar la X (compu) las
+  // "borra" del panel marcándolas como leídas, así desaparecen solas.
+  const cuerpo = sinLeer.length ? sinLeer.map(i=>`
+    <div class="notif-item" data-id="${i.id}">
+      <div class="notif-item-bg">${ICONS.trash}</div>
+      <div class="notif-item-content" onclick="irANotificacion('${i.id}')">
+        <div class="notif-item-ic">${ICONS.alert}</div>
+        <div class="notif-item-body">
+          <div class="notif-item-title">${i.titulo}</div>
+          <div class="notif-item-msg">${i.mensaje}</div>
+        </div>
+        <button class="notif-item-xbtn" onclick="event.stopPropagation();marcarNotifLeida('${i.id}')" aria-label="Descartar" title="Descartar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
       </div>
     </div>`).join('') : '<div class="notif-empty">No hay avisos urgentes por ahora.</div>';
   panel.innerHTML = `<div class="notif-panel-head">Notificaciones</div>${cuerpo}`;
+  activarSwipeNotif();
+}
+
+// Deslizar para la izquierda en celu = descartar (como en el centro de notificaciones de
+// iOS). En compu no hay touch, ahí se usa el botón X que aparece al pasar el mouse.
+function activarSwipeNotif(){
+  document.querySelectorAll('.notif-item-content').forEach(el=>{
+    let startX = null, dx = 0;
+    el.addEventListener('touchstart', e=>{ startX = e.touches[0].clientX; dx = 0; }, {passive:true});
+    el.addEventListener('touchmove', e=>{
+      if(startX===null) return;
+      dx = e.touches[0].clientX - startX;
+      if(dx < 0) el.style.transform = `translateX(${Math.max(dx,-100)}px)`;
+    }, {passive:true});
+    el.addEventListener('touchend', ()=>{
+      const id = el.closest('.notif-item')?.dataset.id;
+      if(dx < -60 && id){
+        el.style.transform = 'translateX(-100%)';
+        setTimeout(()=>marcarNotifLeida(id), 160);
+      } else {
+        el.style.transform = '';
+      }
+      startX = null; dx = 0;
+    });
+  });
 }
 
 async function irANotificacion(id){
