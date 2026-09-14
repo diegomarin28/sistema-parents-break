@@ -14,6 +14,7 @@ self.addEventListener('push', (event) => {
     body: data.mensaje || '',
     icon: 'icon-192.png',
     badge: 'icon-192.png',
+    tag: data.id || (titulo + Date.now()),
     data: { url: data.url || '/' },
   };
   event.waitUntil(self.registration.showNotification(titulo, opciones));
