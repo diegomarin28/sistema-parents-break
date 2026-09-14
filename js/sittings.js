@@ -276,10 +276,9 @@ function sitFormHTML(){
     <div class="grid2">
       <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-cobro')"></div>
       <div class="field">
-        <label>Pago TOTAL a niñera <span style="font-weight:400;color:var(--ink-soft);">(no por hora)</span>
-          ${sitTipo==='sitting' ? `<a href="#" id="sit-pago-modo-link" onclick="toggleSitPagoModoHora();return false;" style="font-weight:400;font-size:11.5px;margin-left:6px;">poner pago por hora</a>` : ''}
-        </label>
+        <label>Pago TOTAL a niñera <span style="font-weight:400;color:var(--ink-soft);">(no por hora)</span></label>
         <input type="number" id="sit-pago" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-pago')">
+        ${sitTipo==='sitting' ? `<a href="#" id="sit-pago-modo-link" onclick="toggleSitPagoModoHora();return false;" style="display:inline-block;margin-top:5px;font-size:11.5px;color:var(--ink);text-decoration:underline;cursor:pointer;">poner pago por hora</a>` : ''}
         <div id="sit-pago-hora-wrap" style="display:none;margin-top:6px;">
           <input type="number" id="sit-pago-hora" placeholder="Pago por hora, ej. 280" oninput="onSitPagoHoraInput()">
         </div>
