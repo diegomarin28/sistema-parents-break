@@ -449,10 +449,19 @@ async function cargarNotificaciones(){
   // Extracto Itaú sin subir hace más de 15 días. El id incluye la fecha límite: mientras
   // no se suba un extracto nuevo, la fecha límite no cambia, así que esto avisa una sola
   // vez por período atrasado (no se repite cada 10 minutos) — recién vuelve a avisar si
-  // pasan otros 15 días desde la próxima vez que se suba.
+  // pasan otros 15 días desde la próxima vez que se suba. Si nunca se subió ninguno (no hay
+  // fila todavía), es el caso más urgente de todos, no el motivo para no avisar.
   try{
     const { data: cfg } = await sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle();
-    if(cfg?.actualizado_at){
+    if(!cfg?.actualizado_at){
+      items.push({
+        id: 'extracto:nunca',
+        tipo: 'extracto',
+        titulo: 'Falta subir el extracto de Itaú',
+        mensaje: `Todavía no se subió ningún extracto para conciliar.`,
+        destino: 'finanzas',
+      });
+    } else {
       const limite = new Date(cfg.actualizado_at);
       limite.setDate(limite.getDate()+15);
       if(limite.getTime() <= Date.now()){
