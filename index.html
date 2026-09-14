@@ -242,15 +242,20 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .notif-panel{position:fixed;top:78px;left:16px;width:320px;max-width:calc(100vw - 32px);max-height:70vh;overflow-y:auto;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-md);z-index:60;display:none;}
 .notif-panel.show{display:block;}
 .notif-panel-head{padding:12px 14px;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:14px;color:var(--ink);border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);border-radius:14px 14px 0 0;}
-.notif-item{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;align-items:flex-start;}
+.notif-item{position:relative;overflow:hidden;border-bottom:1px solid var(--line);}
 .notif-item:last-child{border-bottom:none;}
-.notif-item:hover{background:var(--accent-soft);}
-.notif-item.unread{border-left:3px solid var(--clay);}
-.notif-item:not(.unread){opacity:.55;}
+.notif-item-bg{position:absolute;inset:0;background:var(--clay);color:#fff;display:flex;align-items:center;justify-content:flex-end;padding-right:22px;}
+.notif-item-bg svg{width:18px;height:18px;}
+.notif-item-content{position:relative;display:flex;gap:10px;padding:12px 14px;align-items:flex-start;background:var(--paper);border-left:3px solid var(--clay);cursor:pointer;touch-action:pan-y;transition:transform 180ms ease;}
+.notif-item-content:hover{background:var(--accent-soft);}
 .notif-item-ic{width:16px;height:16px;color:var(--clay-text);flex-shrink:0;margin-top:2px;}
 .notif-item-ic svg{width:16px;height:16px;display:block;}
 .notif-item-title{font-weight:700;font-size:13px;color:var(--ink);}
 .notif-item-msg{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+.notif-item-xbtn{display:none;background:none;border:none;color:var(--ink-soft);cursor:pointer;padding:4px;border-radius:6px;flex-shrink:0;align-self:center;}
+.notif-item-content:hover .notif-item-xbtn{display:flex;align-items:center;justify-content:center;}
+.notif-item-xbtn:hover{color:var(--clay-text);background:var(--clay-soft);}
+.notif-item-xbtn svg{width:14px;height:14px;}
 .notif-empty{padding:20px 14px;text-align:center;color:var(--ink-soft);font-size:13px;}
 .notifcfg-list{margin-top:8px;}
 .notifcfg-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line);}
