@@ -69,7 +69,7 @@ function renderApp(){
     <div id="modfooter"></div>
     <div class="notif-panel" id="notif-panel"></div>
   `;
-  // Si venimos de tocar una notificación push (sw.js abre "/?ir=agenda"), arrancamos
+  // Si venimos de tocar una notificación push (sw.js abre "?ir=agenda"), arrancamos
   // directo en ese módulo en vez de Hoy, y limpiamos el parámetro de la URL.
   const irParam = new URLSearchParams(window.location.search).get('ir');
   if(irParam){
