@@ -1155,6 +1155,7 @@ const FICHA_CAMPOS = [
   {key:'nombre', label:'Nombre', hints:['nombre']},
   {key:'apellido', label:'Apellido', hints:['apellido']},
   {key:'edad', label:'Edad (texto viejo, sin fecha exacta)', hints:['edad']},
+  {key:'fecha_nacimiento', label:'Fecha de nacimiento', hints:['fecha de nacimiento','nacimiento']},
   {key:'disponibilidad', label:'Disponibilidad', hints:['disponibilidad para hacer']},
   {key:'zona_sitting', label:'Zona en la que puede hacer sitting', hints:['que puede hacer sitting']},
   {key:'disponible_tipo', label:'Disponible para', hints:['disponible para realizar']},

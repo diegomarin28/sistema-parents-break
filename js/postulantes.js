@@ -7,12 +7,9 @@ function afterRrhhRender(){
   document.querySelectorAll('[data-rrhhtab]').forEach(b=>b.addEventListener('click', ()=>{ rrhhTab=b.dataset.rrhhtab; renderModulo(); }));
   cargarCarsittingPendientes();
   const body = document.getElementById('rrhh-body');
-  // Devuelve la promesa del tab que quede activo, para que renderModulo() la propague y
-  // agendarDesdeIntake pueda esperar a que el form de entrevista ya esté armado en el DOM
-  // (con datos reales) antes de llenarlo, en vez de un setTimeout adivinado.
-  if(rrhhTab==='intake') return renderIntake(body);
-  if(rrhhTab==='entrevista') return renderEntrevista(body);
-  if(rrhhTab==='guardadas') return renderGuardadas(body);
+  if(rrhhTab==='intake') renderIntake(body);
+  if(rrhhTab==='entrevista') renderEntrevista(body);
+  if(rrhhTab==='guardadas') renderGuardadas(body);
 }
 let carsittingPendData = [];
 let carsittingPendAbierto = false;
@@ -184,19 +181,30 @@ async function descartarIntake(id){
   if(error){ toast('No se pudo descartar: '+error.message,'bad'); return; }
   loadIntake();
 }
-async function agendarDesdeIntake(i){
+function actualizarEdadCandidata(){
+  const inp = document.getElementById('f-fecha-nac');
+  const out = document.getElementById('f-edad-calculada');
+  if(!inp || !out) return;
+  const edad = calcularEdad(inp.value);
+  out.value = edad!==null ? `${edad} años` : '';
+}
+function agendarDesdeIntake(i){
   const c = intakeItems[i];
   rrhhTab = 'entrevista';
-  await renderModulo(); // espera a que el form de entrevista ya esté armado (preguntas + zonas cargadas)
-  document.getElementById('f-nombre').value = (c.nombre||'') + (c.apellido? ' '+c.apellido:'');
-  document.getElementById('f-telefono').value = c.telefono||'';
-  document.getElementById('f-zona').value = c.zona||'';
-  document.getElementById('f-origen').value = c.origen||'';
-  document.getElementById('f-exp-previa').value = c.experiencia||'';
-  entrevistaState.tipo = c.tipo || 'Niñera';
-  entrevistaState.fichaOrigen = c;
-  entrevistaState.candidataId = c.id;
-  renderFichaOrigen();
+  renderModulo();
+  setTimeout(()=>{
+    document.getElementById('f-nombre').value = (c.nombre||'') + (c.apellido? ' '+c.apellido:'');
+    document.getElementById('f-telefono').value = c.telefono||'';
+    document.getElementById('f-zona').value = c.zona||'';
+    document.getElementById('f-origen').value = c.origen||'';
+    document.getElementById('f-exp-previa').value = c.experiencia||'';
+    document.getElementById('f-fecha-nac').value = c.fecha_nacimiento||'';
+    actualizarEdadCandidata();
+    entrevistaState.tipo = c.tipo || 'Niñera';
+    entrevistaState.fichaOrigen = c;
+    entrevistaState.candidataId = c.id;
+    renderFichaOrigen();
+  }, 30);
 }
 function renderFichaOrigen(){
   const box = document.getElementById('fichaOrigenBox');
@@ -211,7 +219,7 @@ function renderFichaOrigen(){
   // ítem, que arranca con lo que ella escribió (o con lo último que se guardó en una
   // entrevista anterior) y se puede seguir escribiendo o editar directo ahí mismo — no hay
   // un texto fijo separado de la caja para agregar más.
-  const campos = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','zona_sitting'].includes(f.key));
+  const campos = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','zona_sitting','fecha_nacimiento'].includes(f.key));
   const filasTexto = campos.map(f=>`
     <div class="fichadl-row">
       <label>${f.label}</label>
@@ -253,6 +261,10 @@ async function renderEntrevista(body){
         <div class="field"><label>Teléfono</label><input type="tel" id="f-telefono"></div>
         <div class="field"><label>Zona</label><input type="text" id="f-zona"></div>
         <div class="field"><label>Rol pensado</label><select id="f-rol"><option value="">Elegir…</option><option>Turno fijo semanal</option><option>Sittings espontáneos</option><option>Traslados</option><option>Sin definir</option></select></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Fecha de nacimiento</label><input type="date" id="f-fecha-nac" oninput="actualizarEdadCandidata()"></div>
+        <div class="field"><label>Edad</label><input type="text" id="f-edad-calculada" disabled placeholder="—"></div>
       </div>
       <div class="grid2">
         <div class="field"><label>Cómo llegó</label><input type="text" id="f-origen"></div>
@@ -402,20 +414,21 @@ async function guardarCandidata(){
   if(entrevistaState.fichaOrigen){
     const nuevaZonaSitting = leerZonasChecklist('ent-zonasitting');
     const notasFicha = {};
-    FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','zona_sitting'].includes(f.key)).forEach(f=>{
+    FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','zona_sitting','fecha_nacimiento'].includes(f.key)).forEach(f=>{
       const val = document.getElementById(`ent-nota-${f.key}`)?.value.trim();
       if(val) notasFicha[f.key] = val;
     });
     extraFicha = { zona_sitting: nuevaZonaSitting || null, notas_ficha: notasFicha };
   }
   if(candidataId){
-    const { error } = await sb.from('candidatas').update({ estado:'entrevistada', telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value, ...extraFicha }).eq('id', candidataId);
+    const { error } = await sb.from('candidatas').update({ estado:'entrevistada', telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value, fecha_nacimiento: document.getElementById('f-fecha-nac').value || null, ...extraFicha }).eq('id', candidataId);
     if(error){ warnArea.innerHTML = errBox(error); return; }
   } else {
     if(!(await confirmarNombreNuevo(nombre, [...intakeItems, ...candidatasItems], 'niñera'))) return;
     const { data, error } = await sb.from('candidatas').insert({
       nombre, telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value,
       origen:document.getElementById('f-origen').value, experiencia:document.getElementById('f-exp-previa').value,
+      fecha_nacimiento: document.getElementById('f-fecha-nac').value || null,
       tipo: entrevistaState.tipo || 'Niñera', estado:'entrevistada', ...extraFicha,
     }).select().single();
     if(error){ warnArea.innerHTML = errBox(error); return; }
