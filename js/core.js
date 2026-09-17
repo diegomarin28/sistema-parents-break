@@ -138,16 +138,99 @@ function obtenerTodasLasZonas(){
   });
   return [...mapa.values()].sort((a,b)=>a.localeCompare(b));
 }
+const ICONO_LAPIZ = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+// Capitaliza cada palabra ("treinta y tres" -> "Treinta y Tres"), dejando en minúscula los
+// conectores cortos salvo que sean la primera palabra.
+function formatearNombreZona(s){
+  const conectores = new Set(['y','de','del','la','las','los','en']);
+  return (s||'').trim().split(/\s+/).map((w,i)=>{
+    const wl = w.toLowerCase();
+    if(i>0 && conectores.has(wl)) return wl;
+    return wl.charAt(0).toUpperCase()+wl.slice(1);
+  }).join(' ');
+}
+function filaZonaDeGrupo(z){
+  return `<span class="zg-zona-chip" data-zona="${z.replace(/"/g,'&quot;')}">${z} <button type="button" onclick="editarZonaChip(this)" title="Editar">${ICONO_LAPIZ}</button> <button type="button" onclick="this.closest('.zg-zona-chip').remove()" title="Quitar">✕</button></span>`;
+}
+function editarZonaChip(btn){
+  const chip = btn.closest('.zg-zona-chip');
+  const actual = chip.dataset.zona;
+  chip.innerHTML = `<input type="text" class="zg-zona-edit-input" value="${actual.replace(/"/g,'&quot;')}" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`;
+  const inp = chip.querySelector('input');
+  inp.addEventListener('blur', ()=>confirmarEdicionZonaChip(inp));
+  inp.focus();
+  inp.select();
+}
+function confirmarEdicionZonaChip(inp){
+  const chip = inp.closest('.zg-zona-chip');
+  if(!chip) return;
+  const val = formatearNombreZona(inp.value);
+  if(!val){ chip.remove(); return; }
+  chip.outerHTML = filaZonaDeGrupo(val);
+}
+function agregarZonaAEsteGrupo(btn){
+  const row = btn.closest('.zonagrupo-row');
+  const input = row.querySelector('.zg-zona-nueva');
+  const val = formatearNombreZona(input.value);
+  if(!val) return;
+  const lista = row.querySelector('.zg-zonas-list');
+  const vacio = lista.querySelector('.helper');
+  if(vacio) vacio.remove();
+  lista.insertAdjacentHTML('beforeend', filaZonaDeGrupo(val));
+  input.value = '';
+  input.focus();
+}
+function activarEdicionNombreGrupo(btn){
+  const row = btn.closest('.zonagrupo-row');
+  row.querySelector('.zg-nombre-display').style.display = 'none';
+  btn.style.display = 'none';
+  const inp = row.querySelector('.zg-nombre');
+  inp.style.display = '';
+  inp.focus();
+  inp.select();
+}
+function confirmarNombreGrupo(inp){
+  const row = inp.closest('.zonagrupo-row');
+  const disp = row.querySelector('.zg-nombre-display');
+  const btn = row.querySelector('.zg-nombre-editbtn');
+  disp.textContent = inp.value.trim() || '(sin nombre)';
+  disp.style.display = '';
+  if(btn) btn.style.display = '';
+  inp.style.display = 'none';
+  refrescarSelectsDeGrupos();
+}
 function filaZonaGrupo(g){
+  const nombre = g?.nombre || '';
+  const zonas = g?.zonas || [];
   return `
-    <div class="zonagrupo-row" data-id="${g?.id||''}" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;">
-      <div class="field" style="margin-bottom:6px;"><label>Nombre del grupo</label><input type="text" class="zg-nombre" value="${(g?.nombre||'').replace(/"/g,'&quot;')}" placeholder="ej. Carrasco / San Nicolás / Olivos"></div>
-      <div class="field" style="margin-bottom:6px;"><label>Zonas (separadas por coma)</label><input type="text" class="zg-zonas" value="${(g?.zonas||[]).join(', ').replace(/"/g,'&quot;')}" placeholder="Carrasco, San Nicolás, Olivos"></div>
-      <button type="button" class="smallbtn danger" onclick="this.closest('.zonagrupo-row').remove()">Eliminar grupo</button>
+    <div class="zonagrupo-row" data-id="${g?.id||''}">
+      <div class="zg-nombre-row">
+        <span class="zg-nombre-display">${nombre || '(sin nombre)'}</span>
+        <button type="button" class="iconbtn zg-nombre-editbtn" onclick="activarEdicionNombreGrupo(this)" title="Editar nombre">${ICONO_LAPIZ}</button>
+        <input type="text" class="zg-nombre" value="${nombre.replace(/"/g,'&quot;')}" placeholder="Nombre del grupo" style="display:none;" oninput="refrescarSelectsDeGrupos()" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmarNombreGrupo(this);}" onblur="confirmarNombreGrupo(this)">
+      </div>
+      <div class="zg-zonas-list">${zonas.map(filaZonaDeGrupo).join('') || '<span class="helper" style="margin:0;">Todavía sin zonas.</span>'}</div>
+      <div class="zg-agregar-zona">
+        <input type="text" class="zg-zona-nueva" placeholder="Agregar zona a este grupo…" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarZonaAEsteGrupo(this.nextElementSibling);}">
+        <button type="button" class="smallbtn" onclick="agregarZonaAEsteGrupo(this)">+ Agregar</button>
+      </div>
+      <button type="button" class="smallbtn danger" onclick="this.closest('.zonagrupo-row').remove();refrescarSelectsDeGrupos();">Eliminar grupo</button>
     </div>`;
 }
 function agregarFilaZonaGrupo(){
   document.getElementById('zonagrupos-list')?.insertAdjacentHTML('beforeend', filaZonaGrupo(null));
+}
+function refrescarSelectsDeGrupos(){
+  // Los desplegables de "zonas sin grupo" tienen que reflejar los grupos tal como están AHORA
+  // en el modal (incluidos los recién creados o renombrados, todavía sin guardar) — antes
+  // quedaban congelados con la lista de cuando se abrió el modal.
+  const nombres = [...document.querySelectorAll('.zonagrupo-row .zg-nombre')].map(inp=>inp.value.trim()).filter(Boolean);
+  const opciones = nombres.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+  document.querySelectorAll('.zsg-grupo-select').forEach(sel=>{
+    const actual = sel.value;
+    sel.innerHTML = opciones;
+    if(nombres.includes(actual)) sel.value = actual;
+  });
 }
 function abrirModalGruposZona(){
   const grupos = zonaGruposCache || [];
@@ -181,14 +264,17 @@ function agregarZonaAGrupoExistente(zona, btn){
   const nombreGrupo = row.querySelector('.zsg-grupo-select')?.value;
   const filaGrupo = [...document.querySelectorAll('.zonagrupo-row')].find(r=>r.querySelector('.zg-nombre').value.trim()===nombreGrupo);
   if(!filaGrupo) return;
-  const zonasInput = filaGrupo.querySelector('.zg-zonas');
-  const actuales = zonasInput.value.split(',').map(z=>z.trim()).filter(Boolean);
-  if(!actuales.some(z=>normaliza(z)===normaliza(zona))) actuales.push(zona);
-  zonasInput.value = actuales.join(', ');
+  const lista = filaGrupo.querySelector('.zg-zonas-list');
+  const yaEsta = [...lista.querySelectorAll('.zg-zona-chip')].some(chip=>normaliza(chip.dataset.zona)===normaliza(zona));
+  if(!yaEsta){
+    const vacio = lista.querySelector('.helper');
+    if(vacio) vacio.remove();
+    lista.insertAdjacentHTML('beforeend', filaZonaDeGrupo(formatearNombreZona(zona)));
+  }
   row.remove();
 }
 function crearGrupoConZona(zona, btn){
-  document.getElementById('zonagrupos-list')?.insertAdjacentHTML('beforeend', filaZonaGrupo({nombre:'', zonas:[zona]}));
+  document.getElementById('zonagrupos-list')?.insertAdjacentHTML('beforeend', filaZonaGrupo({nombre:'', zonas:[formatearNombreZona(zona)]}));
   btn.closest('.zonasingrupo-row')?.remove();
 }
 async function guardarGruposZona(){
@@ -197,7 +283,7 @@ async function guardarGruposZona(){
   const idsVistos = [];
   for(const fila of filas){
     const nombre = fila.querySelector('.zg-nombre').value.trim();
-    const zonas = fila.querySelector('.zg-zonas').value.split(',').map(z=>z.trim()).filter(Boolean);
+    const zonas = [...fila.querySelectorAll('.zg-zona-chip')].map(chip=>chip.dataset.zona).filter(Boolean);
     if(!nombre || !zonas.length) continue;
     const id = fila.dataset.id;
     if(id){
@@ -365,7 +451,7 @@ function checklistZonas(idPrefix, zonaActual, labelTexto='Zonas'){
     cuerpoChecklist = bloques.join('');
   }
   return `
-    <div class="field"><label>${labelTexto}</label>
+    <div class="field"><label>${labelTexto} <a href="#" onclick="event.preventDefault();alternarTodasZonasChecklist('${idPrefix}')" style="font-weight:400;font-size:11.5px;">seleccionar todas</a></label>
       <div id="${idPrefix}-zonas-checklist" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;max-height:180px;overflow-y:auto;">
         ${cuerpoChecklist}
       </div>
@@ -375,6 +461,13 @@ function checklistZonas(idPrefix, zonaActual, labelTexto='Zonas'){
       </div>
       <div class="helper" style="margin-top:4px;"><a href="#" onclick="abrirModalGruposZona();return false;">Editar grupos de zona</a> — zonas del mismo grupo se sugieren entre sí en Agenda, aunque el texto no sea idéntico.</div>
     </div>`;
+}
+function alternarTodasZonasChecklist(idPrefix){
+  const cont = document.getElementById(idPrefix+'-zonas-checklist');
+  if(!cont) return;
+  const boxes = [...cont.querySelectorAll('input[type=checkbox]')];
+  const todasMarcadas = boxes.length>0 && boxes.every(b=>b.checked);
+  boxes.forEach(b=>{ b.checked = !todasMarcadas; });
 }
 function agregarZonaAlChecklist(idPrefix){
   const input = document.getElementById(idPrefix+'-zona-nueva');
