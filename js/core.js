@@ -138,19 +138,24 @@ function obtenerTodasLasZonas(){
   });
   return [...mapa.values()].sort((a,b)=>a.localeCompare(b));
 }
-function abrirModalGruposZona(){
-  const grupos = zonaGruposCache || [];
-  const fila = (g) => `
+function filaZonaGrupo(g){
+  return `
     <div class="zonagrupo-row" data-id="${g?.id||''}" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;">
       <div class="field" style="margin-bottom:6px;"><label>Nombre del grupo</label><input type="text" class="zg-nombre" value="${(g?.nombre||'').replace(/"/g,'&quot;')}" placeholder="ej. Carrasco / San Nicolás / Olivos"></div>
       <div class="field" style="margin-bottom:6px;"><label>Zonas (separadas por coma)</label><input type="text" class="zg-zonas" value="${(g?.zonas||[]).join(', ').replace(/"/g,'&quot;')}" placeholder="Carrasco, San Nicolás, Olivos"></div>
       <button type="button" class="smallbtn danger" onclick="this.closest('.zonagrupo-row').remove()">Eliminar grupo</button>
     </div>`;
+}
+function agregarFilaZonaGrupo(){
+  document.getElementById('zonagrupos-list')?.insertAdjacentHTML('beforeend', filaZonaGrupo(null));
+}
+function abrirModalGruposZona(){
+  const grupos = zonaGruposCache || [];
   const html = `
     <h2>Grupos de zona</h2>
     <div class="helper">Zonas del mismo grupo se tratan como equivalentes para sugerir niñera↔familia en Agenda — la zona real de cada una no cambia, solo el matching.</div>
-    <div id="zonagrupos-list" style="margin-top:10px;">${grupos.map(fila).join('') || '<div class="empty">Todavía no hay grupos.</div>'}</div>
-    <button type="button" class="smallbtn" onclick="document.getElementById('zonagrupos-list').insertAdjacentHTML('beforeend', \`${fila(null).replace(/`/g,'\\`')}\`)" style="margin-bottom:10px;">+ Agregar grupo</button>
+    <div id="zonagrupos-list" style="margin-top:10px;">${grupos.map(filaZonaGrupo).join('') || '<div class="empty">Todavía no hay grupos.</div>'}</div>
+    <button type="button" class="smallbtn" onclick="agregarFilaZonaGrupo()" style="margin-bottom:10px;">+ Agregar grupo</button>
     <div id="zonagrupos-warn"></div>
     <button class="btn primary" style="width:100%;" onclick="guardarGruposZona()">Guardar</button>
   `;

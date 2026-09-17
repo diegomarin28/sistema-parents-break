@@ -205,16 +205,17 @@ function renderFichaOrigen(){
   const notas = c.notas_ficha || {};
   // "Zona en la que puede hacer sitting" es la única categórica de verdad acá (mismo listado
   // de zonas que ya usan Niñeras/Familias) — se edita con el mismo checklist reusable, así el
-  // valor final queda expandido de una, no como una nota aparte. El resto son de texto libre
-  // (lo que ella escribió en el form): se muestran tal cual, con un espacio abajo para que la
-  // entrevistadora agregue más — sin pisar lo que ella puso.
+  // valor final queda expandido de una. El resto son de texto libre: un solo textarea por
+  // ítem, que arranca con lo que ella escribió (o con lo último que se guardó en una
+  // entrevista anterior) y se puede seguir escribiendo o editar directo ahí mismo — no hay
+  // un texto fijo separado de la caja para agregar más.
   const campos = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','zona_sitting'].includes(f.key));
   const filasTexto = campos.map(f=>`
     <div class="fichadl-row">
-      <b>${f.label}</b>${c[f.key]||'<span class="helper" style="margin:0;">(no contestó esto en el form)</span>'}
-      <textarea id="ent-nota-${f.key}" placeholder="Agregar más (lo que se cuente en la entrevista)…">${notas[f.key]||''}</textarea>
+      <label>${f.label}</label>
+      <textarea id="ent-nota-${f.key}" placeholder="Sin dato del form — se puede escribir acá">${notas[f.key]!==undefined ? notas[f.key] : (c[f.key]||'')}</textarea>
     </div>`).join('');
-  box.innerHTML = `<div class="card"><h2>Ficha del formulario</h2><div class="helper">Lo que escribió ella queda tal cual — lo de abajo de cada ítem es para sumar lo que surja en la entrevista.</div>
+  box.innerHTML = `<div class="card"><h2>Ficha del formulario</h2><div class="helper">Se puede editar directo — arranca con lo que ella puso en el form.</div>
     <div class="fichadl">${checklistZonas('ent-zonasitting', c.zona_sitting, 'Zona en la que puede hacer sitting')}${filasTexto}</div></div>`;
 }
 
@@ -466,7 +467,7 @@ function verDetalle(i){
   const refsHtml = refs.length ? refs.map(r=>`<div class="q">${r.name||'(sin nombre)'} · ${r.phone||'sin tel'} · ${r.relacion||'—'} ${r.confirmado?'· ✓ confirmada':''}</div>`).join('') : '<div class="helper">Sin referencias.</div>';
   const psicoHtml = c.psico ? PSICO_IMGS.map(img=>`<div class="q"><b>${img.id}:</b> ${c.psico[img.id]||'(sin respuesta anotada)'}</div>`).join('') : '';
   const notasCd = cd.notas_ficha || {};
-  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]||notasCd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]||''}${notasCd[f.key]?`<br><i>Agregado en la entrevista: ${notasCd[f.key]}</i>`:''}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
+  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]||notasCd[f.key]).map(f=>`<div><b>${f.label}</b>${notasCd[f.key]!==undefined ? notasCd[f.key] : (cd[f.key]||'')}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
   abrirModal(`
     <div class="card resultcard">
       <div class="gauge" style="background:conic-gradient(${c.recomendacion==='Recomendada'?'var(--good)':c.recomendacion==='No recomendada'?'var(--bad)':'var(--warn)'} ${c.total/5*100}%, var(--line) 0);"><div class="inner"><div class="num">${Number(c.total).toFixed(1)}</div><div class="max">/ 5</div></div></div>
