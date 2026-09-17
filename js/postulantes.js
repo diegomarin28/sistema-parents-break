@@ -200,6 +200,7 @@ function agendarDesdeIntake(i){
 function renderFichaOrigen(){
   const box = document.getElementById('fichaOrigenBox');
   if(!box) return;
+  registrarRenderizadorZona('ent-zonasitting', renderFichaOrigen);
   const c = entrevistaState.fichaOrigen;
   if(!c){ box.innerHTML=''; return; }
   const notas = c.notas_ficha || {};

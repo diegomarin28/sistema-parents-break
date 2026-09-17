@@ -233,7 +233,14 @@ function refrescarSelectsDeGrupos(){
     if(nombres.includes(actual)) sel.value = actual;
   });
 }
-function abrirModalGruposZona(){
+const RENDERIZADORES_ZONA_POR_PREFIX = {}; // idPrefix -> función que vuelve a pintar ese checklist puntual
+function registrarRenderizadorZona(idPrefix, fn){ RENDERIZADORES_ZONA_POR_PREFIX[idPrefix] = fn; }
+let zonaGruposCallback = null;
+function abrirModalGruposZona(idPrefixOrigen){
+  // idPrefixOrigen identifica qué checklist llamó a esto -- así, al guardar, se vuelve a
+  // pintar ESE checklist con los grupos nuevos. Antes se guardaba bien pero la pantalla de
+  // atrás se quedaba con los datos viejos hasta salir y volver a entrar.
+  zonaGruposCallback = idPrefixOrigen ? RENDERIZADORES_ZONA_POR_PREFIX[idPrefixOrigen] : null;
   const grupos = zonaGruposCache || [];
   const zonasAgrupadas = new Set();
   grupos.forEach(g=>(g.zonas||[]).forEach(z=>zonasAgrupadas.add(normaliza(z))));
@@ -317,6 +324,7 @@ async function guardarGruposZona(){
   await cargarZonaGrupos();
   cerrarModal();
   toast('Grupos de zona guardados.');
+  if(typeof zonaGruposCallback === 'function'){ zonaGruposCallback(); zonaGruposCallback = null; }
 }
 /* ============================================================
    Hijos de una familia (tabla hijos_familia): antes "Niños (edades)" era un
@@ -437,12 +445,22 @@ function resumenHijosFamilia(hijos){
 function checklistZonas(idPrefix, zonaActual, labelTexto='Zonas'){
   const propiasRaw = zonasDe(zonaActual);
   const actuales = new Set(propiasRaw.map(normaliza));
+  const propiasExpandidas = [...propiasRaw];
+  // Si una de las zonas propias pertenece a un grupo, se tildan también las demás zonas de
+  // ESE grupo -- ej. si puso "Pocitos" (y ese grupo incluye Punta Carretas y Centro), las
+  // tres quedan pretildadas de una, no solo la que escribió literal.
+  if(zonaGruposCache){
+    propiasRaw.forEach(z=>{
+      const grupo = zonaGruposCache.find(g=>(g.zonas||[]).some(gz=>normaliza(gz)===normaliza(z)));
+      if(grupo) (grupo.zonas||[]).forEach(gz=>{ actuales.add(normaliza(gz)); propiasExpandidas.push(gz); });
+    });
+  }
   const base = obtenerTodasLasZonas();
-  // Las zonas que ya tiene esta persona/familia siempre aparecen en la lista, aunque todavía
-  // no estén en el listado general (ej. una candidata nueva que puso una zona que nadie más
-  // tiene cargada todavía) -- así nunca quedan "perdidas" ni hay que retipearlas a mano.
+  // Las zonas que ya tiene esta persona/familia (o las que se suman por pertenecer al mismo
+  // grupo) siempre aparecen en la lista, aunque todavía no estén en el listado general -- así
+  // nunca quedan "perdidas" ni hay que retipearlas a mano.
   const enBase = new Set(base.map(normaliza));
-  const todas = [...base, ...propiasRaw.filter(z=>!enBase.has(normaliza(z)))].sort((a,b)=>a.localeCompare(b));
+  const todas = [...base, ...propiasExpandidas.filter(z=>!enBase.has(normaliza(z)))].sort((a,b)=>a.localeCompare(b));
   // Ordenadas por grupo (las agrupadas primero, en su bloque, con el nombre del grupo como
   // encabezado; las que no están en ningún grupo quedan sueltas al final).
   const chk = z => `<label class="chk" style="margin:0;"><input type="checkbox" value="${z}" ${actuales.has(normaliza(z))?'checked':''}> ${z}</label>`;
@@ -473,7 +491,7 @@ function checklistZonas(idPrefix, zonaActual, labelTexto='Zonas'){
         <input type="text" id="${idPrefix}-zona-nueva" placeholder="Agregar zona nueva…" style="flex:1;">
         <button type="button" class="smallbtn" onclick="agregarZonaAlChecklist('${idPrefix}')">+ Agregar</button>
       </div>
-      <div class="helper" style="margin-top:4px;"><a href="#" onclick="abrirModalGruposZona();return false;">Editar grupos de zona</a> — zonas del mismo grupo se sugieren entre sí en Agenda, aunque el texto no sea idéntico.</div>
+      <div class="helper" style="margin-top:4px;"><a href="#" onclick="abrirModalGruposZona('${idPrefix}');return false;">Editar grupos de zona</a> — zonas del mismo grupo se sugieren entre sí en Agenda, aunque el texto no sea idéntico.</div>
     </div>`;
 }
 function alternarTodasZonasChecklist(idPrefix){

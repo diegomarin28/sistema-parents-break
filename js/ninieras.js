@@ -356,6 +356,7 @@ function editarNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
   const tipos = ['Niñera','Traslados','Ambas'];
   ninEditCandidataCache = n.candidatas || {};
+  registrarRenderizadorZona('ed', ()=>editarNinera(id));
   abrirModal(`
     <h2 style="margin:0 0 12px;">Editar a ${n.nombre}</h2>
     <div style="margin-bottom:14px;">

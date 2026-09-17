@@ -327,6 +327,7 @@ function verFamilia(id){
 function editarFamilia(id){
   const f = familiasItems.find(x=>x.id===id);
   if(!f) return;
+  registrarRenderizadorZona('ed-fam', ()=>editarFamilia(id));
   abrirModal(`
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
       <div style="width:46px;height:46px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-family:'Baloo 2',sans-serif;font-weight:600;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${(f.nombre||'?').charAt(0).toUpperCase()}</div>
