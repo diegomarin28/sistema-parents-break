@@ -227,7 +227,6 @@ async function renderEntrevista(body){
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
         <h2 style="margin:0;">Datos de la entrevista</h2>
-        <a href="#" onclick="abrirModalEditarPreguntas();return false;" style="font-size:12.5px;">Editar preguntas de la entrevista</a>
       </div>
       <div class="grid3">
         <div class="field"><label>Nombre de la candidata</label><input type="text" id="f-nombre"></div>
@@ -245,6 +244,7 @@ async function renderEntrevista(body){
       </div>
     </div>
     <div id="fichaOrigenBox"></div>
+    <div class="editpreguntasbox"><a href="#" onclick="abrirModalEditarPreguntas();return false;">Editar preguntas de la entrevista</a></div>
     <div id="competencias"></div>
     <div class="card">
       <h2>Explicación de juegos y capacitación extra</h2>
