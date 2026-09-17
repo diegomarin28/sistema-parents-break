@@ -29,7 +29,7 @@ function asegurarXLSX(){
 }
 
 function normaliza(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
-function zonasDe(zonaStr){ return (zonaStr||'').split('/').map(z=>z.trim()).filter(Boolean); }
+function zonasDe(zonaStr){ return (zonaStr||'').split(/[/,]/).map(z=>z.trim()).filter(Boolean); }
 /* ============================================================
    Grupos de zona: zonas muy puntuales (San Nicolás/Olivos/Carrasco) que en
    la práctica están a un par de cuadras, pero como texto nunca "matcheaban"
@@ -151,15 +151,45 @@ function agregarFilaZonaGrupo(){
 }
 function abrirModalGruposZona(){
   const grupos = zonaGruposCache || [];
+  const zonasAgrupadas = new Set();
+  grupos.forEach(g=>(g.zonas||[]).forEach(z=>zonasAgrupadas.add(normaliza(z))));
+  const sinGrupo = obtenerTodasLasZonas().filter(z=>!zonasAgrupadas.has(normaliza(z)));
+  const opcionesGrupos = grupos.map(g=>`<option value="${(g.nombre||'').replace(/"/g,'&quot;')}">${g.nombre}</option>`).join('');
+  const filaSinGrupo = (z) => `
+    <div class="zonasingrupo-row">
+      <span class="zsg-nombre">${z}</span>
+      ${grupos.length ? `<select class="zsg-grupo-select">${opcionesGrupos}</select><button type="button" class="smallbtn" onclick="agregarZonaAGrupoExistente('${z.replace(/'/g,"\\'")}', this)">Agregar a ese grupo</button>` : ''}
+      <button type="button" class="smallbtn" onclick="crearGrupoConZona('${z.replace(/'/g,"\\'")}', this)">Crear grupo nuevo</button>
+    </div>`;
   const html = `
     <h2>Grupos de zona</h2>
     <div class="helper">Zonas del mismo grupo se tratan como equivalentes para sugerir niñera↔familia en Agenda — la zona real de cada una no cambia, solo el matching.</div>
+    ${sinGrupo.length ? `
+    <div class="card" style="margin:12px 0;padding:12px;background:var(--bg);">
+      <div class="helper" style="margin-bottom:6px;"><b>Zonas sin grupo</b> — agregalas a un grupo existente o creá uno nuevo con esa zona:</div>
+      <div id="zonassingrupo-list">${sinGrupo.map(filaSinGrupo).join('')}</div>
+    </div>` : ''}
     <div id="zonagrupos-list" style="margin-top:10px;">${grupos.map(filaZonaGrupo).join('') || '<div class="empty">Todavía no hay grupos.</div>'}</div>
     <button type="button" class="smallbtn" onclick="agregarFilaZonaGrupo()" style="margin-bottom:10px;">+ Agregar grupo</button>
     <div id="zonagrupos-warn"></div>
     <button class="btn primary" style="width:100%;" onclick="guardarGruposZona()">Guardar</button>
   `;
   abrirModal(html);
+}
+function agregarZonaAGrupoExistente(zona, btn){
+  const row = btn.closest('.zonasingrupo-row');
+  const nombreGrupo = row.querySelector('.zsg-grupo-select')?.value;
+  const filaGrupo = [...document.querySelectorAll('.zonagrupo-row')].find(r=>r.querySelector('.zg-nombre').value.trim()===nombreGrupo);
+  if(!filaGrupo) return;
+  const zonasInput = filaGrupo.querySelector('.zg-zonas');
+  const actuales = zonasInput.value.split(',').map(z=>z.trim()).filter(Boolean);
+  if(!actuales.some(z=>normaliza(z)===normaliza(zona))) actuales.push(zona);
+  zonasInput.value = actuales.join(', ');
+  row.remove();
+}
+function crearGrupoConZona(zona, btn){
+  document.getElementById('zonagrupos-list')?.insertAdjacentHTML('beforeend', filaZonaGrupo({nombre:'', zonas:[zona]}));
+  btn.closest('.zonasingrupo-row')?.remove();
 }
 async function guardarGruposZona(){
   const warn = document.getElementById('zonagrupos-warn');
