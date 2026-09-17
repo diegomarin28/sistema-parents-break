@@ -299,7 +299,7 @@ function resumenHijosFamilia(hijos){
     return edad!==null ? `${h.nombre||'Hijo/a'} (${edad} años)` : (h.nombre||'Hijo/a');
   }).join(', ');
 }
-function checklistZonas(idPrefix, zonaActual){
+function checklistZonas(idPrefix, zonaActual, labelTexto='Zonas'){
   const todas = obtenerTodasLasZonas();
   const actuales = new Set(zonasDe(zonaActual).map(normaliza));
   // Ordenadas por grupo (las agrupadas primero, en su bloque, con el nombre del grupo como
@@ -324,7 +324,7 @@ function checklistZonas(idPrefix, zonaActual){
     cuerpoChecklist = bloques.join('');
   }
   return `
-    <div class="field"><label>Zonas</label>
+    <div class="field"><label>${labelTexto}</label>
       <div id="${idPrefix}-zonas-checklist" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;max-height:180px;overflow-y:auto;">
         ${cuerpoChecklist}
       </div>

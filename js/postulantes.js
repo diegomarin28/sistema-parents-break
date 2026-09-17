@@ -202,14 +202,27 @@ function renderFichaOrigen(){
   if(!box) return;
   const c = entrevistaState.fichaOrigen;
   if(!c){ box.innerHTML=''; return; }
-  const rows = FICHA_CAMPOS.filter(f=>c[f.key] && !['nombre','apellido','telefono','zona'].includes(f.key)).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
-  box.innerHTML = `<div class="card"><h2>Ficha del formulario</h2><div class="helper">Cargada por ella misma antes de la entrevista — no editable acá.</div><div class="fichadl">${rows||'<div>Sin más datos.</div>'}</div></div>`;
+  const notas = c.notas_ficha || {};
+  // "Zona en la que puede hacer sitting" es la única categórica de verdad acá (mismo listado
+  // de zonas que ya usan Niñeras/Familias) — se edita con el mismo checklist reusable, así el
+  // valor final queda expandido de una, no como una nota aparte. El resto son de texto libre
+  // (lo que ella escribió en el form): se muestran tal cual, con un espacio abajo para que la
+  // entrevistadora agregue más — sin pisar lo que ella puso.
+  const campos = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','zona_sitting'].includes(f.key));
+  const filasTexto = campos.map(f=>`
+    <div class="fichadl-row">
+      <b>${f.label}</b>${c[f.key]||'<span class="helper" style="margin:0;">(no contestó esto en el form)</span>'}
+      <textarea id="ent-nota-${f.key}" placeholder="Agregar más (lo que se cuente en la entrevista)…">${notas[f.key]||''}</textarea>
+    </div>`).join('');
+  box.innerHTML = `<div class="card"><h2>Ficha del formulario</h2><div class="helper">Lo que escribió ella queda tal cual — lo de abajo de cada ítem es para sumar lo que surja en la entrevista.</div>
+    <div class="fichadl">${checklistZonas('ent-zonasitting', c.zona_sitting, 'Zona en la que puede hacer sitting')}${filasTexto}</div></div>`;
 }
 
 /* ---- Entrevista ---- */
 let entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null };
 async function renderEntrevista(body){
   if(!entrevistaPreguntasCache) await cargarEntrevistaPreguntas();
+  if(!zonaGruposCache) cargarZonaGrupos(); // para el checklist de "zona en la que puede hacer sitting" de más abajo
   body.innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
@@ -367,15 +380,27 @@ async function guardarCandidata(){
   PSICO_IMGS.forEach(img=>{ const el = document.querySelector(`[data-psico="${img.id}"]`); psico[img.id]= el?el.value:''; });
 
   let candidataId = entrevistaState.candidataId;
+  // Si hay ficha de origen (vino de un form ya completado), guardamos también la zona de
+  // sitting expandida (checklist) y lo que se haya agregado en cada ítem durante la entrevista.
+  let extraFicha = {};
+  if(entrevistaState.fichaOrigen){
+    const nuevaZonaSitting = leerZonasChecklist('ent-zonasitting');
+    const notasFicha = {};
+    FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','zona_sitting'].includes(f.key)).forEach(f=>{
+      const val = document.getElementById(`ent-nota-${f.key}`)?.value.trim();
+      if(val) notasFicha[f.key] = val;
+    });
+    extraFicha = { zona_sitting: nuevaZonaSitting || null, notas_ficha: notasFicha };
+  }
   if(candidataId){
-    const { error } = await sb.from('candidatas').update({ estado:'entrevistada', telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value }).eq('id', candidataId);
+    const { error } = await sb.from('candidatas').update({ estado:'entrevistada', telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value, ...extraFicha }).eq('id', candidataId);
     if(error){ warnArea.innerHTML = errBox(error); return; }
   } else {
     if(!(await confirmarNombreNuevo(nombre, [...intakeItems, ...candidatasItems], 'niñera'))) return;
     const { data, error } = await sb.from('candidatas').insert({
       nombre, telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value,
       origen:document.getElementById('f-origen').value, experiencia:document.getElementById('f-exp-previa').value,
-      tipo: entrevistaState.tipo || 'Niñera', estado:'entrevistada',
+      tipo: entrevistaState.tipo || 'Niñera', estado:'entrevistada', ...extraFicha,
     }).select().single();
     if(error){ warnArea.innerHTML = errBox(error); return; }
     candidataId = data.id;
@@ -440,7 +465,8 @@ function verDetalle(i){
   const refs = c.referencias||[];
   const refsHtml = refs.length ? refs.map(r=>`<div class="q">${r.name||'(sin nombre)'} · ${r.phone||'sin tel'} · ${r.relacion||'—'} ${r.confirmado?'· ✓ confirmada':''}</div>`).join('') : '<div class="helper">Sin referencias.</div>';
   const psicoHtml = c.psico ? PSICO_IMGS.map(img=>`<div class="q"><b>${img.id}:</b> ${c.psico[img.id]||'(sin respuesta anotada)'}</div>`).join('') : '';
-  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
+  const notasCd = cd.notas_ficha || {};
+  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]||notasCd[f.key]).map(f=>`<div><b>${f.label}</b>${cd[f.key]||''}${notasCd[f.key]?`<br><i>Agregado en la entrevista: ${notasCd[f.key]}</i>`:''}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
   abrirModal(`
     <div class="card resultcard">
       <div class="gauge" style="background:conic-gradient(${c.recomendacion==='Recomendada'?'var(--good)':c.recomendacion==='No recomendada'?'var(--bad)':'var(--warn)'} ${c.total/5*100}%, var(--line) 0);"><div class="inner"><div class="num">${Number(c.total).toFixed(1)}</div><div class="max">/ 5</div></div></div>
