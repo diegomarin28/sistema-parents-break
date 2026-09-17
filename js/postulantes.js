@@ -7,9 +7,12 @@ function afterRrhhRender(){
   document.querySelectorAll('[data-rrhhtab]').forEach(b=>b.addEventListener('click', ()=>{ rrhhTab=b.dataset.rrhhtab; renderModulo(); }));
   cargarCarsittingPendientes();
   const body = document.getElementById('rrhh-body');
-  if(rrhhTab==='intake') renderIntake(body);
-  if(rrhhTab==='entrevista') renderEntrevista(body);
-  if(rrhhTab==='guardadas') renderGuardadas(body);
+  // Devuelve la promesa del tab que quede activo, para que renderModulo() la propague y
+  // agendarDesdeIntake pueda esperar a que el form de entrevista ya esté armado en el DOM
+  // (con datos reales) antes de llenarlo, en vez de un setTimeout adivinado.
+  if(rrhhTab==='intake') return renderIntake(body);
+  if(rrhhTab==='entrevista') return renderEntrevista(body);
+  if(rrhhTab==='guardadas') return renderGuardadas(body);
 }
 let carsittingPendData = [];
 let carsittingPendAbierto = false;
@@ -181,21 +184,19 @@ async function descartarIntake(id){
   if(error){ toast('No se pudo descartar: '+error.message,'bad'); return; }
   loadIntake();
 }
-function agendarDesdeIntake(i){
+async function agendarDesdeIntake(i){
   const c = intakeItems[i];
   rrhhTab = 'entrevista';
-  renderModulo();
-  setTimeout(()=>{
-    document.getElementById('f-nombre').value = (c.nombre||'') + (c.apellido? ' '+c.apellido:'');
-    document.getElementById('f-telefono').value = c.telefono||'';
-    document.getElementById('f-zona').value = c.zona||'';
-    document.getElementById('f-origen').value = c.origen||'';
-    document.getElementById('f-exp-previa').value = c.experiencia||'';
-    entrevistaState.tipo = c.tipo || 'Niñera';
-    entrevistaState.fichaOrigen = c;
-    entrevistaState.candidataId = c.id;
-    renderFichaOrigen();
-  }, 30);
+  await renderModulo(); // espera a que el form de entrevista ya esté armado (preguntas + zonas cargadas)
+  document.getElementById('f-nombre').value = (c.nombre||'') + (c.apellido? ' '+c.apellido:'');
+  document.getElementById('f-telefono').value = c.telefono||'';
+  document.getElementById('f-zona').value = c.zona||'';
+  document.getElementById('f-origen').value = c.origen||'';
+  document.getElementById('f-exp-previa').value = c.experiencia||'';
+  entrevistaState.tipo = c.tipo || 'Niñera';
+  entrevistaState.fichaOrigen = c;
+  entrevistaState.candidataId = c.id;
+  renderFichaOrigen();
 }
 function renderFichaOrigen(){
   const box = document.getElementById('fichaOrigenBox');

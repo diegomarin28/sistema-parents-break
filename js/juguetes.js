@@ -17,7 +17,7 @@ function renderJuguetes(body){
     </div>
     <div id="juguetesgrid"></div>
   `;
-  cargarJuguetes();
+  return cargarJuguetes();
 }
 async function cargarJuguetes(){
   const grid = document.getElementById('juguetesgrid');

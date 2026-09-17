@@ -1057,10 +1057,10 @@ async function eliminarRegistroDesdeAgenda(regId){
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
 }
-function editarRegistroDesdeAgenda(regId){
+async function editarRegistroDesdeAgenda(regId){
   cerrarModal();
-  setModulo('sittings');
-  setTimeout(()=>abrirModalSitForm(regId), 500);
+  await setModulo('sittings'); // espera a que sitItems ya esté cargado antes de buscar el registro
+  abrirModalSitForm(regId);
 }
 async function confirmarNinera(solNineraId){
   let sPrevio = null, nPrevio = null;
@@ -1149,19 +1149,23 @@ function renderModulo(){
   document.getElementById('modfooter').innerHTML = '';
   suscribirRealtimeModuloActivo();
   const cont = document.getElementById('modcontent');
-  if(!moduloActivo){ renderDashboard(cont); return; }
-  if(moduloActivo.startsWith('pend-')){ renderPendHoy(cont); return; }
+  // Devuelve la promesa del render específico (cuando la tiene) para que quien llame a
+  // renderModulo()/setModulo() pueda hacer `await` y saber que los datos ya cargaron de
+  // verdad, en vez de adivinar un setTimeout con un tiempo fijo (ver editarRegistroDesdeAgenda,
+  // cargarSittingDesdePendiente, agendarDesdeIntake, irANotificacion).
+  if(!moduloActivo){ return renderDashboard(cont); }
+  if(moduloActivo.startsWith('pend-')){ return renderPendHoy(cont); }
   const m = MODULOS.find(x=>x.key===moduloActivo);
-  if(moduloActivo==='agenda'){ renderAgenda(cont); return; }
-  if(moduloActivo==='rrhh'){ cont.innerHTML = moduloHeader(m.label) + rrhhShell(); afterRrhhRender(); return; }
-  if(moduloActivo==='ninieras'){ cont.innerHTML = moduloHeader(m.label) + '<div id="ninieras-body"></div>'; renderNinieras(document.getElementById('ninieras-body')); return; }
-  if(moduloActivo==='familias'){ cont.innerHTML = moduloHeader(m.label) + '<div id="fam-body"></div>'; renderFamilias(document.getElementById('fam-body')); return; }
-  if(moduloActivo==='finanzas'){ renderFinanzas(cont); return; }
-  if(moduloActivo==='sittings'){ cont.innerHTML = moduloHeader(m.label) + '<div id="sit-body"></div>'; renderSittings(document.getElementById('sit-body')); return; }
-  if(moduloActivo==='marketing'){ renderMarketing(cont); return; }
-  if(moduloActivo==='legal'){ renderLegal(cont); return; }
-  if(moduloActivo==='juguetes'){ cont.innerHTML = moduloHeader(m.label) + '<div id="jug-body"></div>'; renderJuguetes(document.getElementById('jug-body')); return; }
-  if(moduloActivo==='intermediaciones'){ renderIntermediaciones(cont); return; }
-  if(moduloActivo==='notificaciones'){ cont.innerHTML = moduloHeader(m.label) + '<div id="notifcfg-body"></div>'; renderNotifConfig(document.getElementById('notifcfg-body')); return; }
+  if(moduloActivo==='agenda'){ return renderAgenda(cont); }
+  if(moduloActivo==='rrhh'){ cont.innerHTML = moduloHeader(m.label) + rrhhShell(); return afterRrhhRender(); }
+  if(moduloActivo==='ninieras'){ cont.innerHTML = moduloHeader(m.label) + '<div id="ninieras-body"></div>'; return renderNinieras(document.getElementById('ninieras-body')); }
+  if(moduloActivo==='familias'){ cont.innerHTML = moduloHeader(m.label) + '<div id="fam-body"></div>'; return renderFamilias(document.getElementById('fam-body')); }
+  if(moduloActivo==='finanzas'){ return renderFinanzas(cont); }
+  if(moduloActivo==='sittings'){ cont.innerHTML = moduloHeader(m.label) + '<div id="sit-body"></div>'; return renderSittings(document.getElementById('sit-body')); }
+  if(moduloActivo==='marketing'){ return renderMarketing(cont); }
+  if(moduloActivo==='legal'){ return renderLegal(cont); }
+  if(moduloActivo==='juguetes'){ cont.innerHTML = moduloHeader(m.label) + '<div id="jug-body"></div>'; return renderJuguetes(document.getElementById('jug-body')); }
+  if(moduloActivo==='intermediaciones'){ return renderIntermediaciones(cont); }
+  if(moduloActivo==='notificaciones'){ cont.innerHTML = moduloHeader(m.label) + '<div id="notifcfg-body"></div>'; return renderNotifConfig(document.getElementById('notifcfg-body')); }
 }
 

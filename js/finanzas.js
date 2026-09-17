@@ -771,7 +771,7 @@ async function cargarJuguetesDeNinera(nombre){
   const { data } = await sb.from('juguetes').select('nombre').eq('ninera_nombre', nombre);
   if(!data || !data.length) return;
   box.innerHTML = `
-    <div style="margin-top:14px;background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--ink);cursor:pointer;" onclick="setModulo('juguetes'); setTimeout(()=>{ const s=document.getElementById('jug-filt-ninera'); if(s){ s.value='${nombre}'; filtrarJuguetes(); } }, 300);">
+    <div style="margin-top:14px;background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--ink);cursor:pointer;" onclick="(async()=>{ await setModulo('juguetes'); const s=document.getElementById('jug-filt-ninera'); if(s){ s.value='${nombre}'; filtrarJuguetes(); } })();">
       ${data.length} juguete${data.length===1?'':'s'} en su casa: ${data.map(j=>j.nombre).join(', ')}
     </div>`;
 }

@@ -28,7 +28,7 @@ function renderNinieras(body){
     </div></div>
     <div id="ninierasgrid"></div>
   `;
-  cargarNinieras();
+  return cargarNinieras();
 }
 // Mini sección arriba de todo, separada de la lista general -- solo aparece si hay alguna
 // cumpleañera hoy, para no ocupar espacio de más el resto del año.

@@ -67,9 +67,11 @@ async function renderSittings(body){
     <div id="incidentes-wrap"></div>
   `;
   await cargarSitBase();
-  cargarSitLista();
-  cargarSitHistorial();
-  cargarIncidentes();
+  // Antes estas tres se disparaban sin esperar (fire-and-forget): renderSittings() "terminaba"
+  // antes de que sitItems tuviera datos reales, así que quien esperaba a setModulo('sittings')
+  // para después buscar un registro por id (editar desde Agenda, o desde "Cargar sitting" en
+  // Hoy) se encontraba con sitItems todavía vacío. Ahora se esperan las tres.
+  await Promise.all([cargarSitLista(), cargarSitHistorial(), cargarIncidentes()]);
 }
 let sitHistItems = [];
 let sitHistOffset = 0;

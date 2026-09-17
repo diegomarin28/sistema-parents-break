@@ -87,7 +87,7 @@ function toggleSidebarMobile(force){
   sb.classList.toggle('open', abrir);
   bd.classList.toggle('show', abrir);
 }
-function setModulo(k){ moduloActivo=k; renderModulo(); toggleSidebarMobile(false); }
+function setModulo(k){ moduloActivo=k; const p = renderModulo(); toggleSidebarMobile(false); return p; }
 function renderSidebar(){
   const activeTop = (moduloActivo===null || moduloActivo==='hoy') ? 'hoy' : (MODULOS.some(m=>m.key===moduloActivo) ? moduloActivo : null);
   document.getElementById('sidebar').innerHTML = `
@@ -352,7 +352,7 @@ function renderPendHoy(cont){
     <div class="actions"><button class="btn primary" onclick="setModulo('sittings')">Ir a cargar un sitting suelto</button></div>
   `;
 }
-function cargarSittingDesdePendiente(item){
+async function cargarSittingDesdePendiente(item){
   sitPrefill = {
     familiaNombre: item.familia_nombre,
     nineraNombre: item.ninera_nombre,
@@ -361,8 +361,8 @@ function cargarSittingDesdePendiente(item){
     horaFin: item.hora_fin,
     notas: 'Cargado desde "Sittings sin registrar"',
   };
-  setModulo('sittings');
-  setTimeout(()=>abrirModalSitForm(), 500);
+  await setModulo('sittings');
+  abrirModalSitForm();
 }
 
 /* ================= NOTIFICACIONES (campanita) =================
@@ -544,9 +544,9 @@ async function irANotificacion(id){
   await marcarNotifLeida(id);
   toggleNotifPanel(false);
   if(!item) return;
-  setModulo(item.destino);
+  await setModulo(item.destino);
   if(item.abrirId && item.destino==='ninieras' && typeof verNinera==='function'){
-    setTimeout(()=>verNinera(item.abrirId), 500);
+    verNinera(item.abrirId);
   }
 }
 
