@@ -226,10 +226,14 @@ async function cargarSitBase(){
 }
 
 function registradoPorUsuario(){
-  const email = session?.user?.email || '';
-  if(email==='pauugericke@gmail.com') return 'Paulina G';
-  if(email==='delfifrommel@gmail.com') return 'Delfina F';
-  return 'Paulina G';
+  // Usa el nombre para mostrar de la cuenta logueada (mismo que el sidebar) en vez de un
+  // mapa de mails hardcodeado — así escala solo cuando se suma una cuenta nueva, sin volver
+  // a tocar este archivo.
+  if(typeof nombreUsuario==='function'){
+    const n = nombreUsuario();
+    if(n && n!=='?') return n;
+  }
+  return '';
 }
 function sitFormHTML(){
   return `
@@ -239,10 +243,7 @@ function sitFormHTML(){
       <button type="button" class="tipobtn ${sitTipo==='traslado'?'selected':''}" id="sit-tipo-traslado" onclick="setSitTipo('traslado')">Traslado</button>
     </div>
     <div class="grid3">
-      <div class="field"><label>Registró</label><select id="sit-registro">
-        <option ${!sitEditId && registradoPorUsuario()==='Paulina G'?'selected':''}>Paulina G</option>
-        <option ${!sitEditId && registradoPorUsuario()==='Delfina F'?'selected':''}>Delfina F</option>
-      </select></div>
+      <div class="field"><label>Registró</label><input type="text" id="sit-registro" value="${sitEditId ? '' : registradoPorUsuario()}" placeholder="Nombre"></div>
       <div class="field" style="position:relative;">
         <label>Familia</label>
         <input type="text" id="sit-familia" autocomplete="off">
@@ -349,7 +350,7 @@ function abrirModalSitForm(id=null){
     if(r){
       document.getElementById('sit-familia').value = r.familia_nombre || '';
       document.getElementById('sit-ninera').value = r.ninera_nombre || '';
-      document.getElementById('sit-registro').value = r.registrado_por || 'Paulina G';
+      document.getElementById('sit-registro').value = r.registrado_por || registradoPorUsuario();
       document.getElementById('sit-fecha').value = r.fecha || '';
       document.getElementById('sit-cobro').value = r.cobro_familia || 0;
       document.getElementById('sit-pago').value = r.pago_ninera || 0;
