@@ -202,12 +202,13 @@ function confirmarNombreGrupo(inp){
 function filaZonaGrupo(g){
   const nombre = g?.nombre || '';
   const zonas = g?.zonas || [];
+  const sinNombreAun = !nombre; // grupo recién creado, todavía sin nombre -> arranca en modo edición ya visible, no escondido detrás del lápiz
   return `
     <div class="zonagrupo-row" data-id="${g?.id||''}">
       <div class="zg-nombre-row">
-        <span class="zg-nombre-display">${nombre || '(sin nombre)'}</span>
-        <button type="button" class="iconbtn zg-nombre-editbtn" onclick="activarEdicionNombreGrupo(this)" title="Editar nombre">${ICONO_LAPIZ}</button>
-        <input type="text" class="zg-nombre" value="${nombre.replace(/"/g,'&quot;')}" placeholder="Nombre del grupo" style="display:none;" oninput="refrescarSelectsDeGrupos()" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmarNombreGrupo(this);}" onblur="confirmarNombreGrupo(this)">
+        <span class="zg-nombre-display" style="${sinNombreAun?'display:none;':''}">${nombre}</span>
+        <button type="button" class="iconbtn zg-nombre-editbtn" onclick="activarEdicionNombreGrupo(this)" title="Editar nombre" style="${sinNombreAun?'display:none;':''}">${ICONO_LAPIZ}</button>
+        <input type="text" class="zg-nombre" value="${nombre.replace(/"/g,'&quot;')}" placeholder="Nombre del grupo" style="${sinNombreAun?'':'display:none;'}" oninput="refrescarSelectsDeGrupos()" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmarNombreGrupo(this);}" onblur="confirmarNombreGrupo(this)">
       </div>
       <div class="zg-zonas-list">${zonas.map(filaZonaDeGrupo).join('') || '<span class="helper" style="margin:0;">Todavía sin zonas.</span>'}</div>
       <div class="zg-agregar-zona">
@@ -274,17 +275,30 @@ function agregarZonaAGrupoExistente(zona, btn){
   row.remove();
 }
 function crearGrupoConZona(zona, btn){
-  document.getElementById('zonagrupos-list')?.insertAdjacentHTML('beforeend', filaZonaGrupo({nombre:'', zonas:[formatearNombreZona(zona)]}));
+  const nombreZona = formatearNombreZona(zona);
+  document.getElementById('zonagrupos-list')?.insertAdjacentHTML('beforeend', filaZonaGrupo({nombre:nombreZona, zonas:[nombreZona]}));
   btn.closest('.zonasingrupo-row')?.remove();
+  refrescarSelectsDeGrupos();
 }
 async function guardarGruposZona(){
   const warn = document.getElementById('zonagrupos-warn');
+  warn.innerHTML = '';
   const filas = [...document.querySelectorAll('.zonagrupo-row')];
+  const incompletas = filas.filter(fila=>{
+    const nombre = fila.querySelector('.zg-nombre').value.trim();
+    const tieneZonas = fila.querySelectorAll('.zg-zona-chip').length > 0;
+    return (nombre && !tieneZonas) || (!nombre && tieneZonas);
+  });
+  if(incompletas.length){
+    warn.innerHTML = '<div class="warnbox">Hay un grupo sin nombre o sin ninguna zona cargada — completalo o eliminalo con "Eliminar grupo" antes de guardar.</div>';
+    incompletas[0].scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
   const idsVistos = [];
   for(const fila of filas){
     const nombre = fila.querySelector('.zg-nombre').value.trim();
     const zonas = [...fila.querySelectorAll('.zg-zona-chip')].map(chip=>chip.dataset.zona).filter(Boolean);
-    if(!nombre || !zonas.length) continue;
+    if(!nombre || !zonas.length) continue; // fila totalmente vacía (ni nombre ni zonas) -- se ignora sin avisar, no es un grupo a medio completar
     const id = fila.dataset.id;
     if(id){
       const { error } = await sb.from('zona_grupos').update({nombre, zonas}).eq('id', id);
