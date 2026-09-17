@@ -7,9 +7,12 @@ function afterRrhhRender(){
   document.querySelectorAll('[data-rrhhtab]').forEach(b=>b.addEventListener('click', ()=>{ rrhhTab=b.dataset.rrhhtab; renderModulo(); }));
   cargarCarsittingPendientes();
   const body = document.getElementById('rrhh-body');
-  if(rrhhTab==='intake') renderIntake(body);
-  if(rrhhTab==='entrevista') renderEntrevista(body);
-  if(rrhhTab==='guardadas') renderGuardadas(body);
+  // Devuelve la promesa del tab que quede activo, para que renderModulo() la propague y
+  // agendarDesdeIntake pueda esperar a que el form de entrevista ya esté armado en el DOM
+  // (con datos reales) antes de llenarlo, en vez de un setTimeout adivinado.
+  if(rrhhTab==='intake') return renderIntake(body);
+  if(rrhhTab==='entrevista') return renderEntrevista(body);
+  if(rrhhTab==='guardadas') return renderGuardadas(body);
 }
 let carsittingPendData = [];
 let carsittingPendAbierto = false;
@@ -86,6 +89,14 @@ function errBox(e){ return `<div class="warnbox">Error de conexión con la base:
 /* ---- Candidatas a entrevistar (intake) ---- */
 let intakeItems = [];
 let intakeFiltro = 'Todas';
+// Prefiere la fecha de nacimiento real (calcula la edad exacta) por sobre el campo de texto
+// viejo -- antes esta lista solo miraba el texto viejo, así que una candidata con fecha
+// cargada pero sin ese texto vencido aparecía como "edad s/d" aunque sí se supiera su edad.
+function textoEdadCandidata(c){
+  const calculada = calcularEdad(c.fecha_nacimiento);
+  if(calculada!==null) return `${calculada} años`;
+  return c.edad ? c.edad+(String(c.edad).length<=2?' años':'') : 'edad s/d';
+}
 function renderIntake(body){
   body.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:var(--gutter);">
@@ -155,7 +166,7 @@ async function loadIntake(){
       <div class="av" ${c.foto_url && c.autoriza_foto!==false?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${c.foto_url}', 'Foto de ${c.nombre}')"`:''}>${c.foto_url?`<img src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.textContent='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${c.nombre} ${c.apellido||''}</div>
-        <div class="meta">${c.zona||'zona s/d'} · ${c.edad?c.edad+(String(c.edad).length<=2?' años':''):'edad s/d'}${c.origen?' · '+c.origen:''}</div>
+        <div class="meta">${c.zona||'zona s/d'} · ${textoEdadCandidata(c)}${c.origen?' · '+c.origen:''}</div>
       </div>
       <div class="badge-slot">
         <span class="badge brand" style="font-size:10px;padding:2px 8px;">${c.tipo||'Niñera'}</span>
@@ -181,30 +192,28 @@ async function descartarIntake(id){
   if(error){ toast('No se pudo descartar: '+error.message,'bad'); return; }
   loadIntake();
 }
+async function agendarDesdeIntake(i){
+  const c = intakeItems[i];
+  rrhhTab = 'entrevista';
+  await renderModulo(); // espera a que el form de entrevista ya esté armado (preguntas + zonas cargadas)
+  document.getElementById('f-nombre').value = (c.nombre||'') + (c.apellido? ' '+c.apellido:'');
+  document.getElementById('f-telefono').value = c.telefono||'';
+  document.getElementById('f-zona').value = c.zona||'';
+  document.getElementById('f-origen').value = c.origen||'';
+  document.getElementById('f-exp-previa').value = c.experiencia||'';
+  document.getElementById('f-fecha-nac').value = c.fecha_nacimiento||'';
+  actualizarEdadCandidata();
+  entrevistaState.tipo = c.tipo || 'Niñera';
+  entrevistaState.fichaOrigen = c;
+  entrevistaState.candidataId = c.id;
+  renderFichaOrigen();
+}
 function actualizarEdadCandidata(){
   const inp = document.getElementById('f-fecha-nac');
   const out = document.getElementById('f-edad-calculada');
   if(!inp || !out) return;
   const edad = calcularEdad(inp.value);
   out.value = edad!==null ? `${edad} años` : '';
-}
-function agendarDesdeIntake(i){
-  const c = intakeItems[i];
-  rrhhTab = 'entrevista';
-  renderModulo();
-  setTimeout(()=>{
-    document.getElementById('f-nombre').value = (c.nombre||'') + (c.apellido? ' '+c.apellido:'');
-    document.getElementById('f-telefono').value = c.telefono||'';
-    document.getElementById('f-zona').value = c.zona||'';
-    document.getElementById('f-origen').value = c.origen||'';
-    document.getElementById('f-exp-previa').value = c.experiencia||'';
-    document.getElementById('f-fecha-nac').value = c.fecha_nacimiento||'';
-    actualizarEdadCandidata();
-    entrevistaState.tipo = c.tipo || 'Niñera';
-    entrevistaState.fichaOrigen = c;
-    entrevistaState.candidataId = c.id;
-    renderFichaOrigen();
-  }, 30);
 }
 function renderFichaOrigen(){
   const box = document.getElementById('fichaOrigenBox');
