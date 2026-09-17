@@ -26,6 +26,8 @@
 *{box-sizing:border-box;}
 html{overflow-x:hidden;}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+a{color:var(--accent);text-decoration:none;}
+a:hover{text-decoration:underline;}
 h1,h2,h3{font-family:'Baloo 2',sans-serif;margin:0;}
 .wrap{margin:0;}
 .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--clay-text);margin-bottom:6px;}
@@ -181,11 +183,12 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .placeholder h2{font-size:19px;margin-bottom:8px;color:var(--ink);}
 .placeholder p{max-width:440px;margin:0 auto;line-height:1.6;font-size:14px;}
 .fichadl{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-size:13px;}
-.editpreguntasbox{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:-6px 0 4px;}
-.editpreguntasbox a{color:var(--ink);font-weight:600;font-size:12.5px;text-decoration:underline;}
+.editpreguntasbox{background:var(--bg);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:12px 16px;margin:-6px 0 4px;}
+.editpreguntasbox a{color:var(--ink);font-weight:700;font-size:14px;}
 .fichadl div{padding:4px 0;border-bottom:1px dashed var(--line);white-space:pre-line;}
 .fichadl b{color:var(--ink-soft);font-weight:600;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.02em;}
-.fichadl-row textarea{margin-top:4px;min-height:40px;font-size:12.5px;white-space:normal;}
+.fichadl-row label{color:var(--ink-soft);font-weight:600;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px;}
+.fichadl-row textarea{margin-top:4px;min-height:52px;font-size:12.5px;white-space:normal;}
 .fichadl .field{grid-column:1/-1;padding:8px 0 12px;border-bottom:1px dashed var(--line);}
 .asigtable{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;}
 .asigtable th,.asigtable td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;}
