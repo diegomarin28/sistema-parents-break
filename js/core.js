@@ -305,8 +305,14 @@ function resumenHijosFamilia(hijos){
   }).join(', ');
 }
 function checklistZonas(idPrefix, zonaActual, labelTexto='Zonas'){
-  const todas = obtenerTodasLasZonas();
-  const actuales = new Set(zonasDe(zonaActual).map(normaliza));
+  const propiasRaw = zonasDe(zonaActual);
+  const actuales = new Set(propiasRaw.map(normaliza));
+  const base = obtenerTodasLasZonas();
+  // Las zonas que ya tiene esta persona/familia siempre aparecen en la lista, aunque todavía
+  // no estén en el listado general (ej. una candidata nueva que puso una zona que nadie más
+  // tiene cargada todavía) -- así nunca quedan "perdidas" ni hay que retipearlas a mano.
+  const enBase = new Set(base.map(normaliza));
+  const todas = [...base, ...propiasRaw.filter(z=>!enBase.has(normaliza(z)))].sort((a,b)=>a.localeCompare(b));
   // Ordenadas por grupo (las agrupadas primero, en su bloque, con el nombre del grupo como
   // encabezado; las que no están en ningún grupo quedan sueltas al final).
   const chk = z => `<label class="chk" style="margin:0;"><input type="checkbox" value="${z}" ${actuales.has(normaliza(z))?'checked':''}> ${z}</label>`;
@@ -367,6 +373,20 @@ function leerZonasChecklist(idPrefix){
 function scrollToDetalle(id){
   const el = document.getElementById(id);
   if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+/* Encabezado de tarjeta con flechita para minimizar/expandir el bloque entero. Se usa en
+   Entrevista (Ficha del formulario y cada bloque de preguntas) — el contenido va adentro de
+   un .card-body, y toggleCardCollapse esconde/muestra ese body nada más. */
+function cardHeaderConColapso(titulo){
+  return `<div style="display:flex;justify-content:space-between;align-items:center;">
+    <h2 style="margin:0;">${titulo}</h2>
+    <button type="button" class="card-collapse-btn" onclick="toggleCardCollapse(this)" aria-label="Minimizar/expandir">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+  </div>`;
+}
+function toggleCardCollapse(btn){
+  btn.closest('.card-collapsible')?.classList.toggle('collapsed');
 }
 
 /* Al editar/eliminar algo de una lista larga (niñeras, familias), recargar la

@@ -215,8 +215,10 @@ function renderFichaOrigen(){
       <label>${f.label}</label>
       <textarea id="ent-nota-${f.key}" placeholder="Sin dato del form — se puede escribir acá">${notas[f.key]!==undefined ? notas[f.key] : (c[f.key]||'')}</textarea>
     </div>`).join('');
-  box.innerHTML = `<div class="card"><h2>Ficha del formulario</h2><div class="helper">Se puede editar directo — arranca con lo que ella puso en el form.</div>
-    <div class="fichadl">${checklistZonas('ent-zonasitting', c.zona_sitting, 'Zona en la que puede hacer sitting')}${filasTexto}</div></div>`;
+  box.innerHTML = `<div class="card card-collapsible">${cardHeaderConColapso('Ficha del formulario')}<div class="card-body">
+    <div class="helper">Se puede editar directo — arranca con lo que ella puso en el form.</div>
+    <div class="fichadl">${checklistZonas('ent-zonasitting', c.zona_sitting, 'Zona en la que puede hacer sitting')}${filasTexto}</div>
+  </div></div>`;
 }
 
 /* ---- Entrevista ---- */
@@ -224,6 +226,17 @@ let entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null,
 async function renderEntrevista(body){
   if(!entrevistaPreguntasCache) await cargarEntrevistaPreguntas();
   if(!zonaGruposCache) cargarZonaGrupos(); // para el checklist de "zona en la que puede hacer sitting" de más abajo
+  // ninierasItems/familiasItems alimentan obtenerTodasLasZonas() (usado por el checklist) pero
+  // solo se llenan al visitar Niñeras/Familias -- si nunca se entró ahí en esta sesión, el
+  // checklist aparecía vacío aunque sí hubiera zonas cargadas en el sistema.
+  if(!ninierasItems.length || !familiasItems.length){
+    const [{data:n}, {data:f}] = await Promise.all([
+      sb.from('ninieras').select('zona'),
+      sb.from('familias').select('zona'),
+    ]);
+    if(!ninierasItems.length) ninierasItems = n||[];
+    if(!familiasItems.length) familiasItems = f||[];
+  }
   body.innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
@@ -299,10 +312,10 @@ async function renderEntrevista(body){
 function renderCompetencias(){
   const cont = document.getElementById('competencias');
   cont.innerHTML = COMP_PRINCIPALES.map(c => { const preguntas = preguntasDe(c.key); return `
-    <div class="card"><h2>${c.titulo}</h2>${preguntas.length? preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
+    <div class="card card-collapsible">${cardHeaderConColapso(c.titulo)}<div class="card-body">${preguntas.length? preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
       <textarea placeholder="Notas de la respuesta…" data-notes="${c.key}"></textarea>
       <div class="scorebar" data-scorebar="${c.key}">${[1,2,3,4,5].map(n=>`<div class="scorebtn" data-score="${c.key}:${n}">${n}</div>`).join('')}</div>
-      <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div>
+      <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div></div>
   `; }).join('');
   bindCompetenciaHandlers(cont);
 }
@@ -310,10 +323,10 @@ function renderCompetenciasFinales(){
   const cont = document.getElementById('competencias-finales');
   if(!cont) return;
   cont.innerHTML = COMP_FINALES.map(c => { const preguntas = preguntasDe(c.key); return `
-    <div class="card"><h2>${c.titulo}</h2>${preguntas.length? preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
+    <div class="card card-collapsible">${cardHeaderConColapso(c.titulo)}<div class="card-body">${preguntas.length? preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
       <textarea placeholder="Notas de la respuesta…" data-notes="${c.key}"></textarea>
       <div class="scorebar" data-scorebar="${c.key}">${[1,2,3,4,5].map(n=>`<div class="scorebtn" data-score="${c.key}:${n}">${n}</div>`).join('')}</div>
-      <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div>
+      <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div></div>
   `; }).join('');
   bindCompetenciaHandlers(cont);
 }
