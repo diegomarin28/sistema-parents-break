@@ -289,6 +289,22 @@ function construirEsTrabajoFijo(asigs){
     return fijoSet.has(normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||''));
   };
 }
+// Cierre de semana para "Por pagar": por defecto los fijos cierran el sábado (así se les
+// puede pagar antes del fin de semana), salvo que tengan algún horario fijo en sábado o
+// domingo -- ahí se sigue esperando al domingo, para no dejar ese día de trabajo afuera del
+// total. Se arma por niñera a partir de sus asignaciones (asig.dias, códigos D/L/M/X/J/V/S).
+function construirTrabajaFinde(asigs){
+  const diasPorNinera = {};
+  (asigs||[]).forEach(a=>{
+    const key = normaliza(a.ninera_nombre||'');
+    if(!key) return;
+    (a.dias||[]).forEach(d=>{ (diasPorNinera[key] ||= new Set()).add(d); });
+  });
+  return function trabajaFinde(nineraNombre){
+    const set = diasPorNinera[normaliza(nineraNombre||'')];
+    return !!set && (set.has('S') || set.has('D'));
+  };
+}
 // Un sitting de un fijo (niñera con relación fija con esa familia) recién se cuenta en
 // Finanzas -- ingresos, gastos, ganancia, margen, movimientos -- cuando la semana en la que
 // cayó ya terminó (domingo pasado). Mientras la semana está en curso, ese número todavía
@@ -482,9 +498,9 @@ function lunesDeSemana(fechaISO){
   d.setDate(d.getDate()+diff);
   return d.toISOString().slice(0,10);
 }
-function finDeSemanaDesde(lunesISO){
+function finDeSemanaDesde(lunesISO, trabajaFinde=true){
   const d = new Date(lunesISO+'T00:00:00');
-  d.setDate(d.getDate()+6);
+  d.setDate(d.getDate() + (trabajaFinde ? 6 : 5)); // +6 domingo (default, sin cambios) · +5 sábado
   return d.toISOString().slice(0,10);
 }
 function fmtFechaCortaFin(fechaISO){
@@ -495,9 +511,9 @@ function bucketKeyFecha(fechaISO, frecuencia){
   if(frecuencia==='semanal') return lunesDeSemana(fechaISO);
   return fechaISO;
 }
-function bucketLabelFecha(bucketKey, frecuencia){
+function bucketLabelFecha(bucketKey, frecuencia, trabajaFinde=true){
   if(frecuencia==='mensual') return monthLabel(bucketKey);
-  if(frecuencia==='semanal') return `Semana del ${fmtFechaCortaFin(bucketKey)} al ${fmtFechaCortaFin(finDeSemanaDesde(bucketKey))}`;
+  if(frecuencia==='semanal') return `Semana del ${fmtFechaCortaFin(bucketKey)} al ${fmtFechaCortaFin(finDeSemanaDesde(bucketKey, trabajaFinde))}`;
   return fmtFechaCortaFin(bucketKey);
 }
 async function cargarPorCobrarPorPagar(){
@@ -506,13 +522,14 @@ async function cargarPorCobrarPorPagar(){
     sb.from('sittings_traslados').select('id,familia_id,familia_nombre,ninera_id,ninera_nombre,fecha,pago_ninera').eq('pagado', false).gt('pago_ninera', 0),
     sb.from('familias').select('id,nombre,frecuencia_cobro'),
     sb.from('ninieras').select('id,nombre,cuenta_bancaria'),
-    sb.from('asignaciones').select('familia_id,ninera_id,ninera_nombre,familias(nombre)'),
+    sb.from('asignaciones').select('familia_id,ninera_id,ninera_nombre,dias,familias(nombre)'),
   ]);
   const famFrecPorId = {}; const famFrecPorNombre = {};
   (fams||[]).forEach(f=>{ famFrecPorId[f.id] = f.frecuencia_cobro || 'mensual'; famFrecPorNombre[normaliza(f.nombre)] = f.frecuencia_cobro || 'mensual'; });
   const ninInfoPorId = {}; const ninInfoPorNombre = {};
   (nins||[]).forEach(n=>{ ninInfoPorId[n.id] = n; ninInfoPorNombre[normaliza(n.nombre)] = n; });
   const esTrabajoFijo = construirEsTrabajoFijo(asigs);
+  const trabajaFinde = construirTrabajaFinde(asigs);
 
   const gruposCobrar = {};
   (pendCobrar||[]).forEach(r=>{
@@ -536,15 +553,16 @@ async function cargarPorCobrarPorPagar(){
     const bucket = bucketKeyFecha(r.fecha, frec);
     const info = r.ninera_id ? ninInfoPorId[r.ninera_id] : ninInfoPorNombre[normaliza(r.ninera_nombre)];
     const key = (r.ninera_id||normaliza(r.ninera_nombre))+'|'+bucket;
-    if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, frec, bucket, total:0, ids:[], cuenta:(info?.cuenta_bancaria&&info.cuenta_bancaria.length)?info.cuenta_bancaria.join(' · '):''};
+    if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuenta:(info?.cuenta_bancaria&&info.cuenta_bancaria.length)?info.cuenta_bancaria.join(' · '):''};
     gruposPagar[key].total += Number(r.pago_ninera)||0;
     gruposPagar[key].ids.push(r.id);
   });
   const listaPagar = Object.values(gruposPagar)
     // Un fijo se agrupa por semana completa -- si esa semana todavía no terminó, mostrar
     // el total ahora sería mostrar un pago a mitad de armar (le falta lo que falta cobrar
-    // esos días). Se muestra recién cuando termina la semana (domingo pasado).
-    .filter(g => g.frec!=='semanal' || finDeSemanaDesde(g.bucket) < todayISO())
+    // esos días). Se muestra recién cuando termina la semana: sábado pasado para la mayoría
+    // de los fijos, domingo pasado para los que tienen algún horario fijo el fin de semana.
+    .filter(g => g.frec!=='semanal' || finDeSemanaDesde(g.bucket, g.finde) < todayISO())
     .sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
 
   renderPorCobrar(listaCobrar);
@@ -587,7 +605,7 @@ function renderPorPagar(lista){
       <div class="agendarow" style="border-bottom:1px solid var(--line);">
         <div>
           <div style="font-weight:600;">${g.nombre}</div>
-          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec)} · ${g.frec}</div>
+          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec, g.finde)} · ${g.frec}</div>
           ${g.cuenta ? `<div class="helper" style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;">${g.cuenta}</div>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
