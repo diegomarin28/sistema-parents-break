@@ -62,6 +62,7 @@ async function renderSittings(body){
         <div class="field"><label>Desde</label><input type="date" id="sithist-desde" onchange="renderSitHistorialCustom()"></div>
         <div class="field"><label>Hasta</label><input type="date" id="sithist-hasta" onchange="renderSitHistorialCustom()"></div>
       </div>
+      <button class="smallbtn" onclick="abrirModalExportarHistorialPDF()" style="margin-bottom:12px;">Exportar a PDF</button>
       <div id="sithist-lista"></div>
     </div>
     <div id="incidentes-wrap"></div>
@@ -133,6 +134,40 @@ function resenaBadge(nineraNombre){
   const color = Number(prom)>=4 ? 'var(--good)' : Number(prom)>=3 ? '#7A5A16' : 'var(--clay-text)';
   return `<span style="font-weight:600;color:${color};">★ ${prom} (${res.cant})</span>`;
 }
+// Horario/duración solo aplica a sittings (hora_inicio/hora_fin) -- los traslados usan
+// km/origen/destino, no tienen ese concepto, así que muestran "—".
+function horarioEfectuadoTexto(r){
+  if(r.tipo!=='sitting' || !r.hora_inicio || !r.hora_fin) return '—';
+  return `${r.hora_inicio.slice(0,5)}–${r.hora_fin.slice(0,5)}`;
+}
+function horasEfectuadasTexto(r){
+  if(r.tipo!=='sitting' || !r.hora_inicio || !r.hora_fin) return '—';
+  const mi = agendaMinutos(r.hora_inicio);
+  let mf = agendaMinutos(r.hora_fin);
+  if(r.termina_dia_siguiente) mf += 24*60;
+  if(mf<=mi) return '—';
+  const horas = (mf-mi)/60;
+  return (Number.isInteger(horas) ? horas : horas.toFixed(1)) + ' hs';
+}
+// Fila compartida entre el historial "Todo/período" y el de rango personalizado -- antes
+// estaba duplicada en los dos lugares, con riesgo real de que se actualice uno y no el otro.
+// Clickeable: toca la fila para editar el registro (así "Detalle" queda fácil de completar
+// justo donde se ve, sin tener que ir a buscarlo a la lista de arriba).
+function filaHistorialTr(r){
+  const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+  return `<tr style="cursor:pointer;" onclick="abrirModalSitForm('${r.id}')" title="Tocar para editar">
+    <td>${fechaFmt}</td>
+    <td>${r.ninera_nombre}</td>
+    <td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td>
+    <td>${horarioEfectuadoTexto(r)}</td>
+    <td>${horasEfectuadasTexto(r)}</td>
+    <td>$${r.cobro_familia||0}</td>
+    <td>$${r.pago_ninera||0}</td>
+    <td class="hist-detalle" title="${(r.notas||'').replace(/"/g,'&quot;')}">${r.notas||'—'}</td>
+    <td>${resenaBadge(r.ninera_nombre)}</td>
+  </tr>`;
+}
+const HIST_THEAD = `<tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Horario</th><th>Horas</th><th>Cobro</th><th>Pago</th><th>Detalle</th><th>Reseña niñera</th></tr>`;
 function onSitHistPeriodoChange(){
   sitHistMostrar = 10;
   const val = document.getElementById('sithist-periodo')?.value;
@@ -172,11 +207,107 @@ async function renderSitHistorialCustom(){
   const totalPago = items.reduce((s,r)=>s+(Number(r.pago_ninera)||0),0);
   cont.innerHTML = `
     <div class="helper" style="margin:8px 0;">${items.length} registro(s) · cobrado $${totalCobro.toLocaleString('es-UY')} · pagado $${totalPago.toLocaleString('es-UY')}</div>
-    <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
-    <tbody>${items.map(r=>{
-      const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
-    }).join('')}</tbody></table></div>`;
+    <div class="tablewrap"><table class="asigtable"><thead>${HIST_THEAD}</thead>
+    <tbody>${items.map(filaHistorialTr).join('')}</tbody></table></div>`;
+}
+/* ---- Exportar historial a PDF ----
+   Siempre pide un rango de fechas explícito (Desde/Hasta) y hace una consulta directa a la
+   base para ese rango exacto -- no depende de los 200 registros cacheados ni de "Mostrar
+   más", así que el PDF siempre sale completo aunque el rango sea grande o muy atrás en el
+   histórico. Respeta los filtros de Familia/Tipo que ya estén elegidos arriba. No incluye
+   Pago a niñera ni Reseña niñera -- eso queda solo en pantalla, no en el PDF que se comparte
+   afuera. El "Detalle" (columna nueva) es el mismo campo "Notas" que ya existía en el
+   formulario de sitting -- se edita ahí (o tocando la fila en el historial), no acá. */
+let exphistItemsPreview = [];
+function abrirModalExportarHistorialPDF(){
+  const famSel = document.getElementById('sithist-familia');
+  const tipoSel = document.getElementById('sithist-tipo');
+  const desdeActual = document.getElementById('sithist-desde')?.value || '';
+  const hastaActual = document.getElementById('sithist-hasta')?.value || '';
+  exphistItemsPreview = [];
+  const html = `
+    <h2>Exportar historial a PDF</h2>
+    <div class="helper">Elegí el rango de fechas exacto a exportar — no depende de lo que esté cargado en pantalla.</div>
+    <div class="grid2" style="margin-top:10px;">
+      <div class="field"><label>Desde</label><input type="date" id="exphist-desde" value="${desdeActual}"></div>
+      <div class="field"><label>Hasta</label><input type="date" id="exphist-hasta" value="${hastaActual}"></div>
+    </div>
+    <div class="helper" style="margin-top:2px;">Familia: ${famSel?.selectedOptions?.[0]?.textContent || 'Todas'} · Tipo: ${tipoSel?.selectedOptions?.[0]?.textContent || 'Todos'} — los mismos filtros de arriba.</div>
+    <div id="exphist-warn"></div>
+    <button class="btn primary" style="width:100%;margin-top:14px;" onclick="generarVistaPreviaHistorialPDF()">Ver vista previa</button>
+    <div id="exphist-preview" style="margin-top:16px;"></div>
+  `;
+  abrirModal(html);
+}
+async function generarVistaPreviaHistorialPDF(){
+  const desde = document.getElementById('exphist-desde')?.value;
+  const hasta = document.getElementById('exphist-hasta')?.value;
+  const warn = document.getElementById('exphist-warn');
+  const preview = document.getElementById('exphist-preview');
+  if(warn) warn.innerHTML = '';
+  if(!desde || !hasta){ if(warn) warn.innerHTML = '<div class="warnbox">Elegí las dos fechas.</div>'; return; }
+  if(hasta < desde){ if(warn) warn.innerHTML = '<div class="warnbox">"Hasta" tiene que ser posterior a "Desde".</div>'; return; }
+  preview.innerHTML = '<div class="empty"><span class="spinner dark"></span> Buscando…</div>';
+  const famF = document.getElementById('sithist-familia')?.value||'';
+  const tipoF = document.getElementById('sithist-tipo')?.value||'';
+  const data = await sbLeer(
+    sb.from('sittings_traslados').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
+    'los registros de ese período', []
+  );
+  let items = data || [];
+  if(famF) items = items.filter(s=>normaliza(s.familia_nombre)===famF);
+  if(tipoF) items = items.filter(s=>s.tipo===tipoF);
+  if(!items.length){ preview.innerHTML = '<div class="empty">No hay registros en ese rango con estos filtros.</div>'; return; }
+  exphistItemsPreview = items;
+  const totalCobro = items.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
+  preview.innerHTML = `
+    <div class="helper" style="margin-bottom:8px;">${items.length} registro(s) · cobrado $${totalCobro.toLocaleString('es-UY')}</div>
+    <div class="tablewrap" style="max-height:320px;overflow-y:auto;"><table class="asigtable">
+      <thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Horario</th><th>Horas</th><th>Cobro</th><th>Detalle</th></tr></thead>
+      <tbody>${items.map(r=>`<tr>
+        <td>${r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</td>
+        <td>${r.ninera_nombre}</td>
+        <td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td>
+        <td>${horarioEfectuadoTexto(r)}</td>
+        <td>${horasEfectuadasTexto(r)}</td>
+        <td>$${r.cobro_familia||0}</td>
+        <td class="hist-detalle" title="${(r.notas||'').replace(/"/g,'&quot;')}">${r.notas||'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <button class="btn primary" style="width:100%;margin-top:12px;" onclick="descargarHistorialPDF('${desde}','${hasta}')">Descargar PDF</button>
+  `;
+}
+function descargarHistorialPDF(desde, hasta){
+  if(!exphistItemsPreview.length) return;
+  const fmtFecha = (iso) => iso ? new Date(iso+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+  const famSel = document.getElementById('sithist-familia');
+  const famLabel = famSel?.selectedOptions?.[0]?.textContent || 'Todas';
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation:'landscape'});
+  doc.setFontSize(14);
+  doc.text('Parents Break — Historial de sittings y traslados', 14, 16);
+  doc.setFontSize(10);
+  doc.text(`Del ${fmtFecha(desde)} al ${fmtFecha(hasta)} · Familia: ${famLabel}`, 14, 23);
+  const totalCobro = exphistItemsPreview.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
+  doc.text(`${exphistItemsPreview.length} registro(s) · Total cobrado: $${totalCobro.toLocaleString('es-UY')}`, 14, 29);
+  doc.autoTable({
+    startY: 35,
+    head: [['Fecha','Niñera','Familia','Horario','Horas','Cobro','Detalle']],
+    body: exphistItemsPreview.map(r=>[
+      fmtFecha(r.fecha),
+      r.ninera_nombre||'',
+      r.familia_nombre + (r.cancelado ? ' (Cancelado)' : ''),
+      horarioEfectuadoTexto(r),
+      horasEfectuadasTexto(r),
+      `$${(r.cobro_familia||0).toLocaleString('es-UY')}`,
+      r.notas || '',
+    ]),
+    styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
+    headStyles:{fillColor:[117,124,187]},
+    columnStyles:{6:{cellWidth:75}},
+  });
+  doc.save(`historial-parents-break-${desde}-a-${hasta}.pdf`);
+  toast('PDF descargado.');
 }
 function renderSitHistorial(){
   const cont = document.getElementById('sithist-lista');
@@ -210,11 +341,8 @@ function renderSitHistorial(){
   const totalPago = items.reduce((s,r)=>s+(Number(r.pago_ninera)||0),0);
   cont.innerHTML = `
     <div class="helper" style="margin:8px 0;">${itemsMostrados.length} de ${items.length} registro(s)${cargadosLabel} · cobrado $${totalCobro.toLocaleString('es-UY')} · pagado $${totalPago.toLocaleString('es-UY')}</div>
-    <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Cobro</th><th>Pago</th><th>Reseña niñera</th></tr></thead>
-    <tbody>${itemsMostrados.map(r=>{
-      const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td>${r.ninera_nombre}</td><td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td>${resenaBadge(r.ninera_nombre)}</td></tr>`;
-    }).join('')}</tbody></table></div>
+    <div class="tablewrap"><table class="asigtable"><thead>${HIST_THEAD}</thead>
+    <tbody>${itemsMostrados.map(filaHistorialTr).join('')}</tbody></table></div>
     ${botonMostrarMas}${botonMas}`;
 }
 async function cargarSitBase(){
