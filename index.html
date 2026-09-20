@@ -11,6 +11,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Parents Break">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&family=Dancing+Script:wght@700&display=swap');
 :root{
@@ -217,6 +219,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .asigtable th,.asigtable td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;}
 .tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 .tablewrap .asigtable{min-width:480px;}
+.hist-detalle{max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .tablecell-btns{display:inline-flex;gap:6px;}
 .margenpos{color:var(--good);font-weight:600;}
 .margenneg{color:var(--bad);font-weight:600;}
