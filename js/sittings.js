@@ -79,6 +79,7 @@ let sitHistOffset = 0;
 let sitHistTotal = 0;
 let sitHistLoadingMore = false;
 let sitHistMostrar = 10; // cuántas filas se ven de una — separado de cuántas se traen del servidor
+let sitListaMostrar = 15; // igual criterio para "Registros de [mes]", arriba del historial
 const SIT_HIST_PAGE = 200;
 async function cargarSitHistorial(){
   const [{data:pagina, count}, {data:resenas}, {data:soloFamilias}] = await Promise.all([
@@ -222,8 +223,9 @@ let exphistItemsPreview = [];
 function abrirModalExportarHistorialPDF(){
   const famSel = document.getElementById('sithist-familia');
   const tipoSel = document.getElementById('sithist-tipo');
-  const desdeActual = document.getElementById('sithist-desde')?.value || '';
-  const hastaActual = document.getElementById('sithist-hasta')?.value || '';
+  const hoy = todayISO();
+  const desdeActual = document.getElementById('sithist-desde')?.value || `${hoy.slice(0,4)}-01-01`;
+  const hastaActual = document.getElementById('sithist-hasta')?.value || hoy;
   exphistItemsPreview = [];
   const html = `
     <h2>Exportar historial a PDF</h2>
@@ -1345,6 +1347,7 @@ async function cargarSitLista(){
   const { data, error } = await sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
   if(error){ wrap.innerHTML = errBox(error); return; }
   sitItems = data || [];
+  sitListaMostrar = 15; // se resetea cada vez que se recarga el mes, para no arrastrar un "mostrar todo" al cambiar de mes
   const cobrado = sitItems.reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
   const pagado = sitItems.reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
   summary.innerHTML = `
@@ -1352,15 +1355,25 @@ async function cargarSitLista(){
     <div class="summarycard"><div class="statlabel">Pagado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${pagado}</div></div>
     <div class="summarycard" style="border-left:3px solid var(--good);"><div class="statlabel">Margen</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${cobrado-pagado}</div></div>
   `;
+  renderSitListaTabla();
+}
+// Solo pinta la tabla desde sitItems (ya en memoria) — la usan tanto cargarSitLista() como el
+// botón "Mostrar más", que no necesita volver a pedirle nada a la base.
+function renderSitListaTabla(){
+  const wrap = document.getElementById('sit-list-wrap');
+  if(!wrap) return;
   if(!sitItems.length){ wrap.innerHTML = `<div class="empty">No hay registros cargados en ${monthLabel(sitMes)} todavía.</div>`; return; }
+  const itemsMostrados = sitItems.slice(0, sitListaMostrar);
+  const hayMas = sitListaMostrar < sitItems.length;
   wrap.innerHTML = `
     <h2>Registros de ${monthLabel(sitMes)}</h2>
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Tipo</th><th>Familia</th><th>Niñera</th><th>Cobro</th><th>Pago</th><th>Margen</th><th></th></tr></thead>
-    <tbody>${sitItems.map(r=>{
+    <tbody>${itemsMostrados.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
       return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm('${r.id}')">Editar</button><button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha}).replace(/'/g,"&#39;")})'>Incidente</button><button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></div></td></tr>`;
     }).join('')}</tbody></table></div>
+    ${hayMas ? `<button class="smallbtn" onclick="sitListaMostrar+=15;renderSitListaTabla();" style="margin-top:10px;">Mostrar más</button>` : ''}
   `;
 }
 function exportarSitCSV(){
