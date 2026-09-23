@@ -38,6 +38,14 @@ async function boot(){
   if(session && typeof autogenerarSittingsFijosSemana === 'function') autogenerarSittingsFijosSemana();
   sb.auth.onAuthStateChange((event, s) => {
     session = s;
+    // TOKEN_REFRESHED es una renovación silenciosa del token de sesión que pasa sola cada
+    // tanto, incluso con la app en foco y en uso -- no cambia qué hay que mostrar en pantalla,
+    // así que no se vuelve a pintar nada. Antes SÍ disparaba renderRoot() -> renderApp(), que
+    // reescribe toda la app desde cero -- si pasaba mientras alguien completaba un formulario
+    // largo (ej. una entrevista), se perdía todo lo tipeado sin ningún aviso. Segunda causa
+    // real de pérdida de datos encontrada el 22/09/2026 (junto con el refresh forzado de
+    // visibilitychange en bootstrap.js, ya sacado).
+    if(event === 'TOKEN_REFRESHED') return;
     if(event === 'SIGNED_IN'){
       moduloActivo = null; // cada login nuevo arranca limpio en "Hoy"
       if(esAccesoTemporal) toast('Entraste con acceso temporal — esta sesión se cierra sola al cerrar esta pestaña.');
