@@ -19,15 +19,11 @@ document.addEventListener('touchend', (e) => {
   swipeStartX = null;
 }, {passive:true});
 
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') {
-    sessionStorage.setItem('pb_hidden_at', String(Date.now()));
-    return;
-  }
-  const hiddenAt = Number(sessionStorage.getItem('pb_hidden_at') || 0);
-  const estuvoRatoAfuera = hiddenAt && (Date.now() - hiddenAt > 2 * 60 * 1000); // más de 2 minutos en background
-  if (estuvoRatoAfuera && !document.querySelector('.confirmoverlay.show')) {
-    location.replace(location.pathname + '?_=' + Date.now());
-  }
-});
+/* Antes había acá un refresh forzado de la página si estuvo más de 2 minutos en segundo
+   plano (visibilitychange), para evitar datos viejos en pantalla. Se sacó el 22/09/2026:
+   Delfina perdió una entrevista completa (texto tipeado, notas) dos veces por esto — volvía
+   de Meet o el teléfono se bloqueaba un rato, y al volver el refresh forzado borraba todo sin
+   avisar. El riesgo de perder trabajo de verdad pesa más que el de ver un dato desactualizado
+   un rato, así que no se reemplazó por nada — si hace falta, la mayoría de los módulos ya
+   traen datos frescos solos al volver a entrar, o vía Realtime. */
 
