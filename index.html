@@ -245,6 +245,9 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 @keyframes spin{to{transform:rotate(360deg);}}
 @media (max-width:760px){.loginstage{grid-template-columns:1fr;grid-template-rows:auto 1fr;}.loginbrand{padding:36px 28px;min-height:180px;}.loginbrand h1{font-size:22px;}.loginbrand p{display:none;}.loginformside{padding:28px;}}
 .toaststack{position:fixed;top:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:10px;}
+#aviso-volviste{position:fixed;top:0;left:0;right:0;z-index:210;background:var(--accent);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:13px;flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.15);}
+#aviso-volviste button{background:#fff;color:var(--accent);border:none;border-radius:8px;padding:5px 12px;font-weight:700;cursor:pointer;font-size:12.5px;}
+#aviso-volviste .aviso-volviste-cerrar{background:none;color:#fff;font-weight:400;padding:2px 6px;font-size:15px;}
 .toast{background:var(--ink);color:#fff;padding:16px 20px;border-radius:12px;font-size:15.5px;font-weight:600;line-height:1.35;box-shadow:var(--shadow-md);animation:toastIn 220ms cubic-bezier(.2,.8,.2,1);max-width:340px;}
 .toast.good{background:var(--good);}
 .toast.bad{background:var(--bad);}
@@ -408,6 +411,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
   #modcontent{padding:20px 16px 100px;}
   .statrow{grid-template-columns:1fr 1fr;}
   .pendbanner{flex-wrap:wrap;}
+  #aviso-volviste{top:52px;}
 }
 @media (max-width:480px){.statrow{grid-template-columns:1fr;}}
 @media (max-width:760px){
