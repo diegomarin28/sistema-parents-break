@@ -1,8 +1,11 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-self.addEventListener('fetch', (e) => {
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-});
+// Sin listener de 'fetch' a propósito (29/09/2026). El que había mandaba TODAS las
+// descargas (la app y cada consulta a Supabase) por el service worker, sin guardar nada en
+// caché (el caches.match de respaldo nunca encontraba nada). Solo sumaba demora: después de
+// un rato sin usar la app el navegador duerme el service worker, y había que despertarlo
+// antes de cada descarga. Sin este listener el navegador descarga directo. El service worker
+// sigue haciendo lo único que hacía de verdad: recibir las notificaciones push.
 
 /* ---- Push real (Web Push + VAPID) ----
    El payload lo arma la Edge Function "enviar-push-urgentes": {titulo, mensaje, url}. */
