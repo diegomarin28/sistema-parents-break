@@ -32,8 +32,21 @@ async function boot(){
     // Limpiamos el ?acceso=temporal de la URL visible, sin recargar la página.
     window.history.replaceState({}, '', window.location.pathname);
   }
+  // Arranque rápido: si en este dispositivo ya hay una sesión guardada, se pinta la app al
+  // toque con esa sesión, sin esperar a getSession(). Cuando la app estuvo más de una hora sin
+  // abrirse, getSession() primero renueva el token contra Supabase (0,8 s de promedio, hasta
+  // 1,4 s, medido en los logs del 29/09/2026) y durante todo ese rato la pantalla quedaba en
+  // blanco. Las consultas que dispara la app ya pintada esperan solas a que termine esa
+  // renovación (supabase-js las encola), así que no salen con un token vencido. Si al final
+  // la sesión resulta no ser válida, más abajo se pasa al login como siempre.
+  let pendienteGuardadoAntes = false;
+  try{ pendienteGuardadoAntes = localStorage.getItem(LS_POST_LOGIN_PENDIENTE) === '1'; }catch(e){}
+  const hayTokensEnUrl = /access_token=|type=recovery|[?&]code=/.test(window.location.hash + window.location.search);
+  const sesionGuardada = (esAccesoTemporal || pendienteGuardadoAntes || hayTokensEnUrl) ? null : leerSesionGuardada();
+  if(sesionGuardada){ session = sesionGuardada; renderRoot(); }
   const { data } = await sb.auth.getSession();
   session = data.session;
+  const yaPintadaConEstaSesion = !!(sesionGuardada && session && session.user?.id === sesionGuardada.user?.id);
   // Autogenera los sittings de horarios fijos para esta semana si todavía no existen — silencioso, no bloquea el boot.
   if(session && typeof autogenerarSittingsFijosSemana === 'function') autogenerarSittingsFijosSemana();
   sb.auth.onAuthStateChange((event, s) => {
@@ -70,9 +83,21 @@ async function boot(){
   if(session && pendienteGuardado){
     faceidPendiente = true;
     await continuarPostLogin();
-  } else {
-    renderRoot();
+  } else if(!yaPintadaConEstaSesion){
+    renderRoot(); // no había sesión guardada, o la guardada ya no sirve -> login
   }
+}
+// Lee la sesión que supabase-js guarda en localStorage (misma clave que usa la librería:
+// sb-<ref del proyecto>-auth-token). Solo se usa para decidir qué pintar primero; la sesión
+// real y vigente la sigue manejando supabase-js.
+function leerSesionGuardada(){
+  try{
+    const ref = new URL(SUPABASE_URL).hostname.split('.')[0];
+    const raw = localStorage.getItem(`sb-${ref}-auth-token`);
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    return (s && s.user && s.refresh_token) ? s : null;
+  }catch(e){ return null; }
 }
 function renderRoot(){
   if(faceidPendiente) return; // ya se está mostrando la pantalla obligatoria, no la pisamos
