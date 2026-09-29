@@ -20,12 +20,15 @@ function renderNinieras(body){
   body.innerHTML = `
     <div id="nin-cumpleaneras-wrap"></div>
     <div id="nin-zonasnuevas-wrap"></div>
+    <div id="nin-temporadas-wrap"></div>
     <div id="nin-utilizacion-wrap"></div>
     <div class="card" style="padding:14px 18px;"><div class="grid3">
       <div class="field" style="margin:0;"><label>Buscar (nombre, universidad, idioma...)</label><input type="text" id="filt-nombre" autocomplete="off" placeholder="Escribí para filtrar..." oninput="filtrarNinieras()"></div>
       <div class="field" style="margin:0;"><label>Zona</label><select id="filt-zona" onchange="filtrarNinieras()"><option value="">Todas las zonas</option></select></div>
       <div class="field" style="margin:0;"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
-    </div></div>
+    </div>
+    <div class="field" style="margin:12px 0 0;"><label>Cuándo (junto con una zona: quiénes están ahí esos meses)</label><div id="filt-meses-wrap">${htmlFiltroMeses()}</div></div>
+    </div>
     <div id="ninierasgrid"></div>
   `;
   return cargarNinieras();
@@ -43,13 +46,19 @@ function renderCumpleaneras(){
   </div>`;
 }
 async function cargarNinieras(){
-  if(!zonaGruposCache) cargarZonaGrupos(); // para cuando se abra "Editar" y haga falta el checklist agrupado
-  if(!zonasConfirmadasCache) await cargarZonasConfirmadas();
+  asegurarEstilosTemporada();
+  // Los grupos de zona ahora se esperan: además del checklist de "Editar", la lista los usa
+  // para saber qué zonas son de afuera (temporadas) al filtrar y al poner el badge.
+  await Promise.all([
+    zonaGruposCache ? null : cargarZonaGrupos(),
+    zonasConfirmadasCache ? null : cargarZonasConfirmadas(),
+  ]);
   const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true).order('nombre');
   if(error){ const g = document.getElementById('ninierasgrid'); if(g) g.innerHTML = errBox(error); return; }
   ninierasItems = data;
   renderCumpleaneras();
   renderZonasNuevasPanel();
+  renderTemporadasPanel();
   await cargarUtilizacionNinieras();
   await cargarConteoIncidentesNinieras();
   // llenar desplegable de zonas: una niñera puede cubrir varias zonas separadas por "/" —
@@ -183,27 +192,47 @@ function filtrarNinieras(){
   const fn = normaliza(document.getElementById('filt-nombre')?.value||'');
   const fz = document.getElementById('filt-zona')?.value||'';
   const ft = document.getElementById('filt-tipo')?.value||'';
+  const qsFiltro = quincenasDeMeses(ninFiltroMeses);
+  const filtraPeriodo = !!(fz && qsFiltro.length);
+  const cobertura = {}; // id -> 'todo' | 'parte' | 'desconocido' (solo con filtro de período)
   const filtradas = ninierasItems.filter(n => {
     const cd = n.candidatas || {};
     const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia].filter(Boolean).join(' '));
     const matchTexto = !fn || blob.includes(fn);
     const matchZona = !fz || zonasDe(n.zona).some(z=>normaliza(z)===fz);
     const matchTipo = !ft || (n.tipo||'Niñera')===ft;
-    return matchTexto && matchZona && matchTipo;
+    if(!(matchTexto && matchZona && matchTipo)) return false;
+    if(!filtraPeriodo) return true;
+    const c = coberturaPeriodo(n, fz, qsFiltro);
+    cobertura[n.id] = c;
+    return c!=='nada';
   });
-  const countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${ninierasItems.length} niñeras</div>`;
+  const zonaLabel = fz ? (document.getElementById('filt-zona')?.selectedOptions?.[0]?.textContent || fz) : '';
+  const mesesTxt = [...ninFiltroMeses].sort((a,b)=>a-b).map(m=>TEMP_MESES_LARGO[m]).join(', ');
+  const completas = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]!=='parte') : filtradas;
+  const parciales = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]==='parte') : [];
+  const sinDato = filtraPeriodo ? completas.filter(n=>cobertura[n.id]==='desconocido').length : 0;
+  let countMsg;
+  if(filtraPeriodo){
+    countMsg = `<div class="helper" style="margin:0 0 8px;">${completas.length} en ${zonaLabel} todo ${mesesTxt}${sinDato?` (${sinDato} sin temporada cargada, se muestran igual)`:''}${parciales.length?`, ${parciales.length} solo una parte`:''}</div>`;
+  } else {
+    countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${ninierasItems.length} niñeras${ninFiltroMeses.size && !fz ? '. Elegí también una zona para filtrar por mes.' : ''}</div>`;
+  }
   if(!filtradas.length){ grid.innerHTML = countMsg + '<div class="empty">Ninguna niñera coincide con la búsqueda.</div>'; return; }
-  grid.innerHTML = countMsg + '<div class="person-list">' + filtradas.map(n=>`
+  const mostrarTira = filtraPeriodo || (fz && grupoFueraDeZona(fz));
+  const filaNinera = n=>`
     <div class="person-row">
       <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')"`:''}>${n.foto?`<img src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${n.nombre}${cvEstaDesactualizado(n) ? ` <span style="color:var(--warn);font-weight:600;font-size:12px;">· Actualizar CV</span>` : ''}</div>
         <div class="meta">${n.zona||'zona s/d'}${(() => { const e = calcularEdad(n.candidatas?.fecha_nacimiento); return e!==null ? ' · '+e+' años' : (n.candidatas?.edad ? ' · '+n.candidatas.edad : ''); })()}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
+        ${mostrarTira ? htmlMiniTemporada(n, qsFiltro) : ''}
       </div>
       <div class="badge-slot">
         <span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span>
         ${!n.candidatas?.fecha_nacimiento ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin fecha de nac.</span>` : ''}
         ${ninIncidentesCount[normaliza(n.nombre)] ? `<span class="badge bad" style="font-size:10px;padding:2px 8px;">${ninIncidentesCount[normaliza(n.nombre)]} incidente${ninIncidentesCount[normaliza(n.nombre)]===1?'':'s'}</span>` : ''}
+        ${badgeTemporada(n)}
       </div>
       <div class="rowbtns">
         <button class="smallbtn" onclick="verNinera('${n.id}')">Ver ficha</button>
@@ -211,7 +240,9 @@ function filtrarNinieras(){
         <button class="smallbtn" onclick="generarMensajeCV('${n.id}')">CV</button>
         <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarNinera('${n.id}')" title="Eliminar niñera" aria-label="Eliminar niñera">${ICONS.trash}</button>
       </div>
-    </div>`).join('') + '</div>';
+    </div>`;
+  grid.innerHTML = countMsg + '<div class="person-list">' + completas.map(filaNinera).join('') + '</div>'
+    + (parciales.length ? `<div class="helper" style="margin:16px 0 8px;">Solo parte del período (la tira muestra en qué quincenas está en ${zonaLabel}${grupoFueraDeZona(fz)?'':' — lo pintado es cuándo está afuera'})</div><div class="person-list">${parciales.map(filaNinera).join('')}</div>` : '');
 }
 // Sección "Datos de carsitting" reutilizable: busca por nombre (sin importar tildes/mayúsculas)
 // contra TODOS los registros de carsitting_datos, sin depender de si ya está en Niñeras o
@@ -376,6 +407,18 @@ function editarNinera(id){
     </div>
     ${htmlCuentasBancarias('ed', n.cuenta_bancaria)}
     ${checklistZonas('ed', n.zona)}
+    ${gruposFueraDeNinera(n).length ? `
+    <div class="field">
+      <label>Cuándo está afuera de Montevideo</label>
+      <div class="helper" style="margin:0 0 4px;">Marcá las quincenas en que está en la zona de afuera. Tocá el mes para marcarlo entero. Si cambiaste las zonas recién, guardá y volvé a abrir para ver el calendario de la zona nueva.</div>
+      ${htmlEditorTemporada('ed-temp', gruposFueraDeNinera(n), n.temporada)}
+      <span data-temp-guardar="ed-temp" style="display:none;"></span>
+      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+        <button type="button" class="smallbtn" onclick="setTodasQuincenas('ed-temp', true)">Todo el año</button>
+        <button type="button" class="smallbtn" onclick="setTodasQuincenas('ed-temp', false)">Limpiar</button>
+      </div>
+      ${tienePropuestaNueva(n) ? `<div class="helper" style="margin:6px 0 0;color:var(--warn);">Mandó sus fechas por el link. Revisalas en el panel "Temporadas fuera de Montevideo".</div>` : ''}
+    </div>` : ''}
     <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
     <div class="field">
       <label>Fecha de nacimiento</label>
@@ -509,6 +552,14 @@ async function guardarEdicionNinera(id){
     cuenta_bancaria: leerCuentasBancarias('ed'),
     notas: document.getElementById('ed-notas').value,
   };
+  // Temporada: se guarda (y se marca como actualizada) solo si el calendario estaba en pantalla
+  // y se tocó -- abrir "Editar" para cambiar el teléfono no tiene que dar la temporada por revisada.
+  const editorTemp = document.querySelector('[data-temp-guardar="ed-temp"]');
+  if(hayEditorTemporada('ed-temp') && editorTemp && editorTemp.dataset.tocado==='1'){
+    const nPrev = ninierasItems.find(x=>x.id===id);
+    cambios.temporada = leerEditorTemporada('ed-temp', nPrev?.temporada);
+    cambios.temporada_actualizada_en = new Date().toISOString();
+  }
   const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   const extraInputs = [...document.querySelectorAll('#ed-extra-fields [data-campo]')];
@@ -628,3 +679,344 @@ function descargarMensajeCV(id){
   marcarCvGenerado(id);
 }
 
+
+/* ============================================================
+   Temporadas fuera de Montevideo/Canelones (Punta del Este y alrededores)
+   ------------------------------------------------------------
+   Muchas niñeras son de Pocitos/Carrasco pero pasan parte del verano en
+   Punta. La zona sola no alcanza para saber dónde está cada una en cada
+   momento del año, así que para los grupos de zona marcados como
+   "fuera_de_montevideo" se guarda en qué quincenas está ahí:
+     ninieras.temporada = { "<zona_grupo_id>": [0..23] }
+   Quincena q = mes*2 + (0 primera, 1 segunda) -- q=0 es 1-15 de enero,
+   q=1 es 16-31 de enero, ... q=23 es 16-31 de diciembre.
+   Regla de búsqueda (decidida con Diego/Pau/Delfi):
+   - Buscar una zona "fuera" en un período -> solo las que marcaron estar
+     ahí en esas quincenas.
+   - Buscar una zona de Montevideo/Canelones -> las que están en Punta en
+     esas quincenas NO aparecen (no están en Pocitos si están en Punta).
+   - Una niñera sin temporada cargada nunca se esconde: aparece igual,
+     con el badge "Sin temporada", para no perder a nadie por falta de dato.
+   La temporada "vence" cada 1 de setiembre (antes de que arranque el
+   verano): si no se actualizó desde entonces vuelve el badge, y se puede
+   confirmar con un toque que se repite lo del año pasado.
+   ============================================================ */
+const TEMP_MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic'];
+const TEMP_MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','setiembre','octubre','noviembre','diciembre'];
+const TEMP_TODAS = Array.from({length:24}, (_,i)=>i);
+let ninFiltroMeses = new Set(); // meses (0-11) elegidos en el filtro "Cuándo"
+let ninTempAbierto = false;
+
+function asegurarEstilosTemporada(){
+  if(document.getElementById('estilos-temporada')) return;
+  const st = document.createElement('style');
+  st.id = 'estilos-temporada';
+  st.textContent = `
+.temp-meses{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:2px;margin:0 0 3px;}
+.temp-meses button{border:none;background:none;padding:0;font-size:10.5px;color:var(--ink-soft);font-family:'Inter',sans-serif;cursor:pointer;text-align:left;}
+.temp-meses span{font-size:10.5px;color:var(--ink-soft);}
+.temp-strip{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:2px;}
+.temp-strip .tq{height:22px;border-radius:4px;background:var(--bg);border:1px solid var(--line);padding:0;cursor:pointer;}
+.temp-strip .tq:nth-child(2n){margin-right:2px;}
+.temp-strip .tq.on{background:var(--accent);border-color:var(--accent);}
+.temp-strip.mini{pointer-events:none;margin-top:5px;max-width:260px;}
+.temp-strip.mini .tq{height:6px;border-radius:2px;cursor:default;}
+.temp-strip.mini .tq.foco{outline:1.5px solid var(--clay);outline-offset:1px;}
+.temp-strip.propuesta .tq.on{background:var(--clay);border-color:var(--clay);}
+.temp-row{padding:12px 0;border-bottom:1px solid var(--line);}
+.temp-row:last-child{border-bottom:none;}
+.temp-row-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+.temp-acciones{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.mes-chips{display:flex;gap:4px;flex-wrap:wrap;align-items:center;}
+.mes-chip{border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);border-radius:100px;padding:4px 10px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;}
+.mes-chip.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+@media (max-width:760px){ .temp-strip .tq{height:26px;} .temp-strip .tq:nth-child(2n){margin-right:1px;} }
+`;
+  document.head.appendChild(st);
+}
+
+/* ---- Lógica compartida ---- */
+function gruposFueraDeZonaStr(zonaStr){
+  const zonas = zonasDe(zonaStr).map(normaliza);
+  return (zonaGruposCache||[]).filter(g=>g.fuera_de_montevideo && (g.zonas||[]).some(z=>zonas.includes(normaliza(z))));
+}
+function gruposFueraDeNinera(n){ return gruposFueraDeZonaStr(n.zona); }
+function grupoFueraDeZona(zonaKey){
+  return (zonaGruposCache||[]).find(g=>g.fuera_de_montevideo && (g.zonas||[]).some(z=>normaliza(z)===zonaKey)) || null;
+}
+function inicioTemporadaActual(ref=new Date()){
+  // Setiembre (mes 8) arranca la temporada nueva -- de setiembre a agosto del año siguiente.
+  const y = ref.getMonth()>=8 ? ref.getFullYear() : ref.getFullYear()-1;
+  return new Date(y, 8, 1);
+}
+function temporadaCargada(n){ return !!n.temporada_actualizada_en; }
+// 'na' (no tiene zonas fuera) | 'sin' (nunca se cargó) | 'vieja' (cargada antes del 1 de setiembre) | 'ok'
+function estadoTemporada(n){
+  if(!gruposFueraDeNinera(n).length) return 'na';
+  if(!temporadaCargada(n)) return 'sin';
+  return new Date(n.temporada_actualizada_en) >= inicioTemporadaActual() ? 'ok' : 'vieja';
+}
+function tienePropuestaNueva(n){
+  if(!n.temporada_propuesta || !n.temporada_propuesta_en) return false;
+  return !n.temporada_actualizada_en || new Date(n.temporada_propuesta_en) > new Date(n.temporada_actualizada_en);
+}
+function quincenasDeGrupo(temporada, grupoId){
+  const qs = (temporada||{})[grupoId];
+  return Array.isArray(qs) ? qs.map(Number).filter(q=>Number.isInteger(q) && q>=0 && q<24) : [];
+}
+function quincenasDeMeses(meses){ return [...meses].flatMap(m=>[m*2, m*2+1]).sort((a,b)=>a-b); }
+// true | false | null (no se sabe: sin temporada cargada)
+function nineraPresenteEnZona(n, zonaKey, q){
+  const grupo = grupoFueraDeZona(zonaKey);
+  // Sin ninguna zona de afuera no hay temporada que mirar: está siempre en sus zonas.
+  if(!gruposFueraDeNinera(n).length) return !grupo;
+  if(!temporadaCargada(n)) return null;
+  if(grupo) return quincenasDeGrupo(n.temporada, grupo.id).includes(q);
+  // Zona de Montevideo/Canelones: está, salvo que esa quincena esté en alguna zona de afuera.
+  return !gruposFueraDeNinera(n).some(g=>quincenasDeGrupo(n.temporada, g.id).includes(q));
+}
+// Para el filtro: 'todo' | 'parte' | 'nada' | 'desconocido'
+function coberturaPeriodo(n, zonaKey, qs){
+  if(!qs.length) return 'todo';
+  let si = 0;
+  for(const q of qs){
+    const p = nineraPresenteEnZona(n, zonaKey, q);
+    if(p===null) return 'desconocido';
+    if(p) si++;
+  }
+  return si===qs.length ? 'todo' : (si>0 ? 'parte' : 'nada');
+}
+function textoQuincenas(qs){
+  // "Todo el año" / "enero y febrero completos, 1ra quincena de marzo"
+  const set = new Set(qs);
+  if(!set.size) return 'No va';
+  if(set.size===24) return 'Todo el año';
+  const partes = [];
+  let m = 0;
+  while(m<12){
+    if(set.has(m*2) && set.has(m*2+1)){
+      let fin = m;
+      while(fin+1<12 && set.has((fin+1)*2) && set.has((fin+1)*2+1)) fin++;
+      partes.push(fin===m ? TEMP_MESES_LARGO[m] : `${TEMP_MESES_LARGO[m]} a ${TEMP_MESES_LARGO[fin]}`);
+      m = fin+1;
+    } else {
+      if(set.has(m*2)) partes.push(`1ra quincena de ${TEMP_MESES_LARGO[m]}`);
+      if(set.has(m*2+1)) partes.push(`2da quincena de ${TEMP_MESES_LARGO[m]}`);
+      m++;
+    }
+  }
+  return partes.join(', ');
+}
+
+/* ---- Editor: una tira de 24 quincenas por grupo de zona "fuera" ---- */
+function htmlEditorTemporada(prefix, grupos, temporada, opts={}){
+  if(!grupos.length) return '';
+  return grupos.map(g=>{
+    const qs = new Set(quincenasDeGrupo(temporada, g.id));
+    return `
+    <div class="temp-editor" data-prefix="${prefix}" data-grupo="${g.id}" style="margin-top:6px;">
+      ${grupos.length>1 || opts.mostrarNombreGrupo ? `<div class="helper" style="margin:0 0 4px;">${g.nombre}</div>` : ''}
+      <div class="temp-meses">${TEMP_MESES.map((m,i)=>`<button type="button" onclick="toggleMesTemporada(this, ${i})" title="Marcar o desmarcar ${TEMP_MESES_LARGO[i]} completo">${m}</button>`).join('')}</div>
+      <div class="temp-strip${opts.propuesta?' propuesta':''}">${TEMP_TODAS.map(q=>`<button type="button" class="tq${qs.has(q)?' on':''}" data-q="${q}" onclick="toggleQuincena(this)" title="${q%2?'2da':'1ra'} quincena de ${TEMP_MESES_LARGO[q>>1]}" aria-label="${q%2?'2da':'1ra'} quincena de ${TEMP_MESES_LARGO[q>>1]}" aria-pressed="${qs.has(q)}"></button>`).join('')}</div>
+      <div class="helper temp-resumen" style="margin:4px 0 0;">${textoQuincenas([...qs])}</div>
+    </div>`;
+  }).join('');
+}
+function htmlMiniTemporada(n, focoQs=[]){
+  const grupos = gruposFueraDeNinera(n);
+  if(!grupos.length || !temporadaCargada(n)) return '';
+  const foco = new Set(focoQs);
+  const qs = new Set(grupos.flatMap(g=>quincenasDeGrupo(n.temporada, g.id)));
+  return `<div class="temp-strip mini" aria-hidden="true">${TEMP_TODAS.map(q=>`<span class="tq${qs.has(q)?' on':''}${foco.has(q)?' foco':''}"></span>`).join('')}</div>`;
+}
+function refrescarResumenEditor(editor){
+  const qs = [...editor.querySelectorAll('.tq.on')].map(b=>Number(b.dataset.q));
+  const r = editor.querySelector('.temp-resumen');
+  if(r) r.textContent = textoQuincenas(qs);
+  const prefix = editor.dataset.prefix;
+  const btn = document.querySelector(`[data-temp-guardar="${prefix}"]`);
+  if(btn){ btn.style.display = ''; btn.dataset.tocado = '1'; }
+}
+function toggleQuincena(btn){
+  btn.classList.toggle('on');
+  btn.setAttribute('aria-pressed', btn.classList.contains('on'));
+  refrescarResumenEditor(btn.closest('.temp-editor'));
+}
+function toggleMesTemporada(btn, mes){
+  const editor = btn.closest('.temp-editor');
+  const celdas = [editor.querySelector(`.tq[data-q="${mes*2}"]`), editor.querySelector(`.tq[data-q="${mes*2+1}"]`)];
+  const prender = !celdas.every(c=>c.classList.contains('on'));
+  celdas.forEach(c=>{ c.classList.toggle('on', prender); c.setAttribute('aria-pressed', prender); });
+  refrescarResumenEditor(editor);
+}
+function setTodasQuincenas(prefix, prender){
+  document.querySelectorAll(`.temp-editor[data-prefix="${prefix}"]`).forEach(editor=>{
+    editor.querySelectorAll('.tq').forEach(c=>{ c.classList.toggle('on', prender); c.setAttribute('aria-pressed', prender); });
+    refrescarResumenEditor(editor);
+  });
+}
+function leerEditorTemporada(prefix, temporadaBase){
+  // Arranca de lo que ya tenía (así no se pierden grupos que no se muestran en este editor)
+  const out = {...(temporadaBase||{})};
+  document.querySelectorAll(`.temp-editor[data-prefix="${prefix}"]`).forEach(editor=>{
+    out[editor.dataset.grupo] = [...editor.querySelectorAll('.tq.on')].map(b=>Number(b.dataset.q)).sort((a,b)=>a-b);
+  });
+  return out;
+}
+function hayEditorTemporada(prefix){ return !!document.querySelector(`.temp-editor[data-prefix="${prefix}"]`); }
+
+/* ---- Filtro "Cuándo" en la lista de niñeras ---- */
+function htmlFiltroMeses(){
+  return `<div class="mes-chips" id="filt-meses">${TEMP_MESES.map((m,i)=>`<button type="button" class="mes-chip${ninFiltroMeses.has(i)?' on':''}" aria-pressed="${ninFiltroMeses.has(i)}" onclick="toggleFiltroMes(${i})">${m}</button>`).join('')}${ninFiltroMeses.size?`<button type="button" class="smallbtn" style="margin-left:4px;" onclick="limpiarFiltroMeses()">Limpiar</button>`:''}</div>`;
+}
+function pintarFiltroMeses(){
+  const wrap = document.getElementById('filt-meses-wrap');
+  if(wrap) wrap.innerHTML = htmlFiltroMeses();
+}
+function toggleFiltroMes(i){
+  ninFiltroMeses.has(i) ? ninFiltroMeses.delete(i) : ninFiltroMeses.add(i);
+  pintarFiltroMeses();
+  filtrarNinieras();
+}
+function limpiarFiltroMeses(){ ninFiltroMeses.clear(); pintarFiltroMeses(); filtrarNinieras(); }
+
+/* ---- Badge en la fila de la lista ---- */
+function badgeTemporada(n){
+  if(tienePropuestaNueva(n)) return `<span class="badge accent" style="font-size:10px;padding:2px 8px;">Mandó su temporada</span>`;
+  const est = estadoTemporada(n);
+  if(est==='sin') return `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin temporada</span>`;
+  if(est==='vieja') return `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Temporada sin actualizar</span>`;
+  return '';
+}
+
+/* ---- Panel "Temporadas fuera de Montevideo" ---- */
+function toggleTemporadasPanel(){ ninTempAbierto = !ninTempAbierto; renderTemporadasPanel(); }
+function renderTemporadasPanel(){
+  const wrap = document.getElementById('nin-temporadas-wrap');
+  if(!wrap) return;
+  asegurarEstilosTemporada();
+  const lista = ninierasItems.filter(n=>gruposFueraDeNinera(n).length);
+  if(!lista.length){ wrap.innerHTML = ''; return; }
+  const propuestas = lista.filter(tienePropuestaNueva);
+  const pendientes = lista.filter(n=>!tienePropuestaNueva(n) && estadoTemporada(n)!=='ok');
+  const alDia = lista.filter(n=>!tienePropuestaNueva(n) && estadoTemporada(n)==='ok');
+  const inicio = inicioTemporadaActual();
+  const resumen = [
+    propuestas.length ? `${propuestas.length} ${propuestas.length===1?'mandó':'mandaron'} sus fechas` : '',
+    pendientes.length ? `${pendientes.length} sin actualizar` : '',
+    `${alDia.length} al día`,
+  ].filter(Boolean).join(', ');
+  wrap.innerHTML = `
+    <div class="card" style="padding:14px 18px;margin-bottom:14px;${(propuestas.length||pendientes.length)?'border-left:3px solid var(--warn);border-radius:0 12px 12px 0;':''}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;cursor:pointer;" onclick="toggleTemporadasPanel()">
+        <h2 style="margin:0;">Temporadas fuera de Montevideo</h2>
+        <div class="helper" style="margin:0;">${resumen} ${ninTempAbierto?'(tocá para cerrar)':'(tocá para ver)'}</div>
+      </div>
+      ${ninTempAbierto ? `
+        <div class="helper" style="margin:8px 0 4px;">Marcá en qué quincenas está cada una en la zona de afuera. Tocá el mes para marcarlo entero. Lo que no esté marcado cuenta como que está en Montevideo o Canelones. Se pide actualizar cada año desde el 1 de setiembre (esta temporada arrancó el ${inicio.toLocaleDateString('es-UY',{day:'numeric',month:'long',year:'numeric'})}).</div>
+        ${[...propuestas, ...pendientes, ...alDia].map(filaTemporadaPanel).join('')}
+      ` : ''}
+    </div>`;
+}
+function filaTemporadaPanel(n){
+  const prefix = 'tp-'+n.id;
+  const grupos = gruposFueraDeNinera(n);
+  const est = estadoTemporada(n);
+  const propuesta = tienePropuestaNueva(n);
+  const prop = n.temporada_propuesta || {};
+  const fechaAct = n.temporada_actualizada_en ? new Date(n.temporada_actualizada_en).toLocaleDateString('es-UY',{day:'numeric',month:'short',year:'numeric'}) : null;
+  const estadoTxt = propuesta
+    ? `Mandó sus fechas el ${new Date(n.temporada_propuesta_en).toLocaleDateString('es-UY',{day:'numeric',month:'short'})} — revisalas y aceptalas`
+    : est==='sin' ? 'Nunca se cargó'
+    : est==='vieja' ? `Última actualización: ${fechaAct} (temporada anterior)`
+    : `Actualizada el ${fechaAct}`;
+  return `
+    <div class="temp-row" id="temp-row-${n.id}">
+      <div class="temp-row-head">
+        <div>
+          <div style="font-weight:600;">${n.nombre}</div>
+          <div class="helper" style="margin:0;">${n.zona||''}</div>
+          <div class="helper" style="margin:2px 0 0;color:${(propuesta||est!=='ok')?'var(--warn)':'var(--ink-soft)'};">${estadoTxt}</div>
+          ${propuesta && prop.comentario ? `<div class="helper" style="margin:2px 0 0;">Comentario: "${escaparHtmlTemp(prop.comentario)}"</div>` : ''}
+        </div>
+        <div class="temp-acciones">
+          ${est==='vieja' && !propuesta ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior('${n.id}')">Repetir lo del año pasado</button>` : ''}
+          <button type="button" class="smallbtn" onclick="pedirTemporadaWhatsapp('${n.id}')">Pedirle por WhatsApp</button>
+          <button type="button" class="smallbtn" onclick="setTodasQuincenas('${prefix}', true)">Todo el año</button>
+          <button type="button" class="smallbtn" onclick="setTodasQuincenas('${prefix}', false)">Limpiar</button>
+        </div>
+      </div>
+      ${htmlEditorTemporada(prefix, grupos, propuesta ? (prop.temporada||{}) : n.temporada, {propuesta})}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+        ${propuesta
+          ? `<button type="button" class="smallbtn" style="background:var(--accent);color:#fff;border-color:var(--accent);" onclick="guardarTemporadaPanel('${n.id}')">Aceptar estas fechas</button>
+             <button type="button" class="smallbtn" onclick="descartarPropuestaTemporada('${n.id}')">Descartar lo que mandó</button>`
+          : `<button type="button" class="smallbtn" data-temp-guardar="${prefix}" style="display:${est==='ok'?'none':''};background:var(--accent);color:#fff;border-color:var(--accent);" onclick="guardarTemporadaPanel('${n.id}')">${est==='ok'?'Guardar cambios':'Guardar temporada'}</button>`}
+      </div>
+    </div>`;
+}
+function escaparHtmlTemp(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function guardarTemporadaEnBase(id, temporada, extra={}){
+  const cambios = { temporada, temporada_actualizada_en: new Date().toISOString(), ...extra };
+  const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
+  if(error){ toast('No se pudo guardar la temporada: '+error.message, 'bad'); return false; }
+  const n = ninierasItems.find(x=>x.id===id);
+  if(n) Object.assign(n, cambios);
+  return true;
+}
+async function guardarTemporadaPanel(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  if(!n) return;
+  const temporada = leerEditorTemporada('tp-'+id, n.temporada);
+  const extra = tienePropuestaNueva(n) ? { temporada_propuesta: null, temporada_propuesta_en: null } : {};
+  if(!(await guardarTemporadaEnBase(id, temporada, extra))) return;
+  toast(`Temporada de ${n.nombre.split(' ')[0]} guardada.`);
+  refrescarTrasTemporada();
+}
+async function repetirTemporadaAnterior(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  if(!n) return;
+  // Mismas quincenas que ya tenía -- solo se renueva la fecha de actualización.
+  if(!(await guardarTemporadaEnBase(id, n.temporada || {}))) return;
+  toast(`Listo: ${n.nombre.split(' ')[0]} repite las mismas fechas este año.`);
+  refrescarTrasTemporada();
+}
+async function descartarPropuestaTemporada(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  if(!n) return;
+  if(!(await confirmarAccion(`¿Descartar las fechas que mandó ${n.nombre.split(' ')[0]}? Queda con la temporada que tenía antes.`, 'Descartar'))) return;
+  const { error } = await sb.from('ninieras').update({ temporada_propuesta: null, temporada_propuesta_en: null }).eq('id', id);
+  if(error){ toast('No se pudo descartar: '+error.message, 'bad'); return; }
+  n.temporada_propuesta = null; n.temporada_propuesta_en = null;
+  refrescarTrasTemporada();
+}
+function refrescarTrasTemporada(){
+  // Solo se repintan el panel y la lista (con su scroll), sin volver a pedir todo a la base.
+  const scroll = guardarScrollMainarea();
+  renderTemporadasPanel();
+  filtrarNinieras();
+  restaurarScrollMainarea(scroll);
+}
+/* Link para que la propia niñera cargue sus fechas desde el celular. Lo que manda
+   queda como propuesta (temporada_propuesta) y recién pasa a la temporada real
+   cuando Pau o Delfi la aceptan en el panel. Borrador de texto, a revisar por ellas. */
+function linkTemporadaNinera(n){
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+  return `${base}temporada.html?t=${n.temporada_token}`;
+}
+function mensajeTemporadaPara(n){
+  const primerNombre = (n.nombre||'').trim().split(' ')[0] || n.nombre;
+  return `Hola ${primerNombre}! Te escribimos de Parents Break. Estamos armando la agenda de la temporada en Punta del Este y queremos saber en qué fechas vas a estar por allá. Nos marcás las quincenas acá? Es un minuto:\n\n${linkTemporadaNinera(n)}\n\nGracias!`;
+}
+function pedirTemporadaWhatsapp(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  if(!n) return;
+  if(!n.temporada_token){ toast('Falta el link de esta niñera. Recargá la página e intentá de nuevo.', 'bad'); return; }
+  const tel = formatearTelefonoWhatsApp(n.telefono);
+  if(!tel){
+    navigator.clipboard?.writeText(linkTemporadaNinera(n));
+    toast('No tiene teléfono cargado. Copié el link para que se lo mandes por otro lado.');
+    return;
+  }
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensajeTemporadaPara(n))}`, '_blank');
+}

@@ -211,6 +211,7 @@ function filaZonaGrupo(g){
         <input type="text" class="zg-nombre" value="${nombre.replace(/"/g,'&quot;')}" placeholder="Nombre del grupo" style="${sinNombreAun?'':'display:none;'}" oninput="refrescarSelectsDeGrupos()" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmarNombreGrupo(this);}" onblur="confirmarNombreGrupo(this)">
       </div>
       <div class="zg-zonas-list">${zonas.map(filaZonaDeGrupo).join('') || '<span class="helper" style="margin:0;">Todavía sin zonas.</span>'}</div>
+      <label class="chk" style="margin:6px 0;white-space:normal;"><input type="checkbox" class="zg-fuera" ${g?.fuera_de_montevideo?'checked':''}> Fuera de Montevideo y Canelones (a las niñeras de este grupo se les pide en qué quincenas del año están)</label>
       <div class="zg-agregar-zona">
         <input type="text" class="zg-zona-nueva" placeholder="Agregar zona a este grupo…" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarZonaAEsteGrupo(this.nextElementSibling);}">
         <button type="button" class="smallbtn" onclick="agregarZonaAEsteGrupo(this)">+ Agregar</button>
@@ -305,14 +306,15 @@ async function guardarGruposZona(){
   for(const fila of filas){
     const nombre = fila.querySelector('.zg-nombre').value.trim();
     const zonas = [...fila.querySelectorAll('.zg-zona-chip')].map(chip=>chip.dataset.zona).filter(Boolean);
+    const fuera_de_montevideo = !!fila.querySelector('.zg-fuera')?.checked;
     if(!nombre || !zonas.length) continue; // fila totalmente vacía (ni nombre ni zonas) -- se ignora sin avisar, no es un grupo a medio completar
     const id = fila.dataset.id;
     if(id){
-      const { error } = await sb.from('zona_grupos').update({nombre, zonas}).eq('id', id);
+      const { error } = await sb.from('zona_grupos').update({nombre, zonas, fuera_de_montevideo}).eq('id', id);
       if(error){ warn.innerHTML = errBox(error); return; }
       idsVistos.push(id);
     } else {
-      const { data, error } = await sb.from('zona_grupos').insert({nombre, zonas, orden: (zonaGruposCache||[]).length}).select().single();
+      const { data, error } = await sb.from('zona_grupos').insert({nombre, zonas, fuera_de_montevideo, orden: (zonaGruposCache||[]).length}).select().single();
       if(error){ warn.innerHTML = errBox(error); return; }
       idsVistos.push(data.id);
     }
@@ -325,6 +327,9 @@ async function guardarGruposZona(){
   cerrarModal();
   toast('Grupos de zona guardados.');
   if(typeof zonaGruposCallback === 'function'){ zonaGruposCallback(); zonaGruposCallback = null; }
+  // Si se marcó o desmarcó un grupo como "fuera de Montevideo", el panel de temporadas y
+  // los badges de la lista de niñeras dependen de eso -- se repintan al toque.
+  if(document.getElementById('nin-temporadas-wrap') && typeof renderTemporadasPanel==='function'){ renderTemporadasPanel(); filtrarNinieras(); }
 }
 /* ============================================================
    Hijos de una familia (tabla hijos_familia): antes "Niños (edades)" era un
