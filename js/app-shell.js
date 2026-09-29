@@ -190,7 +190,7 @@ async function loadDashboardData(){
     sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
     sb.from('ninieras').select('nombre,tipo,activa'),
     sb.from('familias').select('cobro_hora'),
-    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', primerDiaMesesAtras(6)),
+    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera,cobrado,pagado').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('sittings_traslados').select('fecha,familia_nombre,ninera_nombre').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()),
     sb.from('solicitudes').select('*').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()).eq('estado','confirmada'),
@@ -232,8 +232,9 @@ async function loadDashboardData(){
       if(!r.fecha) return;
       const mes = r.fecha.slice(0,7);
       if(!porMes[mes]) porMes[mes] = {ingresos:0, gastos:0};
-      porMes[mes].ingresos += Number(r.cobro_familia)||0;
-      porMes[mes].gastos += Number(r.pago_ninera)||0;
+      // Mismo criterio de caja que Finanzas: solo lo ya cobrado / ya pagado.
+      if(r.cobrado) porMes[mes].ingresos += Number(r.cobro_familia)||0;
+      if(r.pagado) porMes[mes].gastos += Number(r.pago_ninera)||0;
     });
     (gastos||[]).forEach(g=>{
       if(!g.fecha) return;

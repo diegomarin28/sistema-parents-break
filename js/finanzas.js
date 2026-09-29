@@ -3,7 +3,7 @@ let finMes = null;
 async function renderFinanzas(cont){
   finMes = finMes || currentMonthStr();
   cont.innerHTML = moduloHeader('Finanzas') + `
-    <div class="helper">Ingresos y pagos a niñeras vienen automáticos desde Sittings &amp; traslados. Los demás gastos del negocio (alquiler, insumos, etc.) se cargan acá a mano. Los cobros se pueden conciliar automáticamente subiendo el extracto de Itaú, más abajo.</div>
+    <div class="helper">Ingresos y pagos a niñeras vienen automáticos desde Sittings &amp; traslados, pero recién entran al balance cuando se marcan como cobrados o pagados (en Por cobrar / Por pagar, o con Editar en cada movimiento). Los demás gastos del negocio (alquiler, insumos, etc.) se cargan acá a mano. Los cobros se pueden conciliar automáticamente subiendo el extracto de Itaú, más abajo.</div>
     <div class="mesbar">
       <div class="mesnav">
         <button onclick="cambiarFinMesRel(-1)" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
@@ -15,7 +15,7 @@ async function renderFinanzas(cont){
     <div class="summary3" id="fin-summary"></div>
     <div class="card" id="fin-balance-wrap">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-        <div><h2 style="margin:0;">Balance de varios meses</h2><div class="helper" style="margin:2px 0 0;">Ingresos y gastos mes a mes, para ver la tendencia y no solo la foto de un mes.</div></div>
+        <div><h2 style="margin:0;">Balance de varios meses</h2><div class="helper" style="margin:2px 0 0;">Lo cobrado y lo pagado mes a mes, para ver la tendencia y no solo la foto de un mes.</div></div>
         <select id="fin-balance-rango" onchange="cargarBalanceMultiMes(Number(this.value))" style="width:auto;">
           <option value="3">Últimos 3 meses</option>
           <option value="6" selected>Últimos 6 meses</option>
@@ -205,6 +205,7 @@ async function guardarEdicionGasto(id){
 let finGastosItems = [];
 let finFijosItems = [];
 let finSitsDelMes = [];
+let finSitsTodosDelMes = []; // todos los registros del mes, sin filtrar -- para Movimientos y para editar
 let finZonaPorFamiliaId = {};
 let finZonaPorFamiliaNombre = {};
 let finMargenTab = 'familia';
@@ -370,14 +371,22 @@ async function cargarFinanzas(){
       }).join('') + (totalFijos>0 ? `<div class="helper" style="margin-top:8px;">Total fijos aplicados a ${monthLabel(finMes)}: <b>$${totalFijos.toLocaleString('es-UY')}</b></div>` : '');
     }
   }
-  const ingresos = (sits||[]).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
-  const egresosNinieras = (sits||[]).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
+  // Criterio de caja: un cobro entra al balance recién cuando está marcado como cobrado, y un
+  // pago a niñera recién cuando está marcado como pagado. Lo pendiente se muestra aparte, abajo
+  // del balance, pero no se suma. Se usa sitsRaw (sin el filtro de semana incompleta de los
+  // fijos): si la plata ya entró o ya salió, cuenta aunque la semana no haya terminado.
+  finSitsTodosDelMes = sitsRaw || [];
+  const ingresos = finSitsTodosDelMes.filter(r=>r.cobrado).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
+  const egresosNinieras = finSitsTodosDelMes.filter(r=>r.pagado).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
+  const pendienteCobro = finSitsTodosDelMes.filter(r=>!r.cobrado).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
+  const pendientePago = finSitsTodosDelMes.filter(r=>!r.pagado).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
   const egresosGenerales = (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos;
   const egresos = egresosNinieras + egresosGenerales;
   summary.innerHTML = `
-    <div class="summarycard"><div class="statlabel">Ingresos de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${ingresos.toLocaleString('es-UY')}</div></div>
-    <div class="summarycard"><div class="statlabel">Gastos de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--clay-text);">$${egresos.toLocaleString('es-UY')}</div></div>
+    <div class="summarycard"><div class="statlabel">Cobrado de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${ingresos.toLocaleString('es-UY')}</div></div>
+    <div class="summarycard"><div class="statlabel">Gastos pagados de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--clay-text);">$${egresos.toLocaleString('es-UY')}</div></div>
     <div class="summarycard" style="border-left:3px solid var(--accent);"><div class="statlabel">Balance</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${(ingresos-egresos).toLocaleString('es-UY')}</div></div>
+    ${(pendienteCobro||pendientePago) ? `<div class="helper" style="grid-column:1/-1;margin:0;">Todavía sin entrar al balance: $${pendienteCobro.toLocaleString('es-UY')} por cobrar y $${pendientePago.toLocaleString('es-UY')} por pagar de ${monthLabel(finMes)}. Entran cuando se marcan como cobrados o pagados.</div>` : ''}
   `;
   const chartCard = document.getElementById('fin-breakdown-card');
   if(chartCard){
@@ -398,22 +407,24 @@ async function cargarFinanzas(){
     }
   }
   const movs = [];
-  (sits||[]).forEach(r=>{
-    if(Number(r.cobro_familia)) movs.push({fecha:r.fecha, texto:`${r.familia_nombre} — ${r.tipo==='sitting'?'sitting':'traslado'} (${r.ninera_nombre})`, monto:Number(r.cobro_familia)});
-    if(Number(r.pago_ninera)) movs.push({fecha:r.fecha, texto:`Pago a ${r.ninera_nombre}`, monto:-Number(r.pago_ninera)});
+  finSitsTodosDelMes.forEach(r=>{
+    if(Number(r.cobro_familia)) movs.push({fecha:r.fecha, texto:`${r.familia_nombre} — ${r.tipo==='sitting'?'sitting':'traslado'} (${r.ninera_nombre})`, monto:Number(r.cobro_familia), sitId:r.id, pendiente:!r.cobrado, pendTxt:'Sin cobrar'});
+    if(Number(r.pago_ninera)) movs.push({fecha:r.fecha, texto:`Pago a ${r.ninera_nombre}`, monto:-Number(r.pago_ninera), sitId:r.id, pendiente:!r.pagado, pendTxt:'Sin pagar'});
   });
   (gastos||[]).forEach(g=>{
     movs.push({fecha:g.fecha, texto:g.concepto, monto:-Number(g.monto), gastoId:g.id});
   });
   movs.sort((a,b)=> b.fecha.localeCompare(a.fecha));
   if(!movs.length){ movsBox.innerHTML = `<div class="empty">No hay movimientos cargados en ${monthLabel(finMes)} todavía.</div>`; return; }
-  movsBox.innerHTML = `<h2>Movimientos de ${monthLabel(finMes)}</h2>` + movs.map(mv=>{
+  movsBox.innerHTML = `<h2>Movimientos de ${monthLabel(finMes)}</h2><div class="helper">Los marcados como sin cobrar o sin pagar todavía no suman al balance.</div>` + movs.map(mv=>{
     const fechaFmt = new Date(mv.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
+    const colorMonto = mv.pendiente ? 'var(--ink-soft)' : (mv.monto>0?'var(--good)':'var(--clay-text)');
     return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
-      <div>${fechaFmt} · ${mv.texto}</div>
+      <div>${fechaFmt} · ${mv.texto}${mv.pendiente ? ` <span class="badge warn" style="margin-left:6px;">${mv.pendTxt}</span>` : ''}</div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${mv.monto>0?'var(--good)':'var(--clay-text)'};">${mv.monto>0?'+':''}$${mv.monto.toLocaleString('es-UY')}</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${colorMonto};">${mv.monto>0?'+':''}$${mv.monto.toLocaleString('es-UY')}</span>
         ${mv.gastoId ? `<button class="smallbtn" onclick="editarGastoGeneral('${mv.gastoId}')">Editar</button><button class="smallbtn danger" onclick="eliminarGastoGeneral('${mv.gastoId}')">Eliminar</button>` : ''}
+        ${mv.sitId ? `<button class="smallbtn" onclick="editarMovimientoSitting('${mv.sitId}')">Editar</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -421,7 +432,9 @@ async function cargarFinanzas(){
 
 /* ---- Balance de varios meses ---- */
 let finBalanceChart = null;
+let finBalanceMeses = 6;
 async function cargarBalanceMultiMes(nMeses){
+  finBalanceMeses = nMeses;
   const chartReady = asegurarChart(); // en paralelo con las consultas de abajo
   const wrap = document.getElementById('fin-balance-totales');
   const sel = document.getElementById('fin-balance-rango');
@@ -433,7 +446,7 @@ async function cargarBalanceMultiMes(nMeses){
   const [y,m] = meses[meses.length-1].split('-').map(Number);
   const hasta = new Date(y, m, 1).toISOString().slice(0,10);
   const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}] = await Promise.all([
-    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', desde).lt('fecha', hasta),
+    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera,cobrado,pagado').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('monto,desde,activo'),
   ]);
@@ -443,8 +456,9 @@ async function cargarBalanceMultiMes(nMeses){
   (sits||[]).forEach(r=>{
     const mes = r.fecha.slice(0,7);
     if(!porMes[mes]) return;
-    porMes[mes].ingresos += Number(r.cobro_familia)||0;
-    porMes[mes].gastos += Number(r.pago_ninera)||0;
+    // Mismo criterio de caja que el resumen del mes: solo lo ya cobrado / ya pagado.
+    if(r.cobrado) porMes[mes].ingresos += Number(r.cobro_familia)||0;
+    if(r.pagado) porMes[mes].gastos += Number(r.pago_ninera)||0;
   });
   (gastos||[]).forEach(g=>{
     const mes = g.fecha.slice(0,7);
@@ -619,8 +633,64 @@ async function marcarGrupoResuelto(ids, campo){
   const { error } = await sb.from('sittings_traslados').update({[campo]:true}).in('id', ids);
   if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
   toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
+  refrescarFinanzasCompleto();
+}
+/* Todo lo que depende de cobrado/pagado se recarga junto -- si no, el balance queda
+   desfasado de Por cobrar / Por pagar hasta salir y volver a entrar a Finanzas. */
+function refrescarFinanzasCompleto(){
+  if(!document.getElementById('fin-movs')) return;
+  cargarFinanzas();
+  cargarBalanceMultiMes(finBalanceMeses);
   cargarPorCobrarPorPagar();
   actualizarFinanzasBadge();
+}
+
+/* ---- Corregir un movimiento que viene de Sittings & traslados ----
+   Montos y estado (cobrado / pagado) se corrigen acá mismo, sin salir de Finanzas.
+   Destildar cobrado/pagado sirve para deshacer un "Marcar cobrado" hecho por error:
+   el movimiento vuelve a Por cobrar / Por pagar y sale del balance. Para cambiar
+   horario, familia o niñera se abre el formulario completo de Sittings. */
+function editarMovimientoSitting(id){
+  const r = finSitsTodosDelMes.find(x=>x.id===id);
+  if(!r) return;
+  const fechaTxt = new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'});
+  abrirModal(`
+    <h2 style="margin:0 0 4px;padding-right:32px;">${r.familia_nombre||'(familia)'}</h2>
+    <div class="helper" style="margin-bottom:16px;">${r.tipo==='traslado'?'Traslado':'Sitting'} del ${fechaTxt} con ${r.ninera_nombre||'(niñera)'}</div>
+    <div class="grid2">
+      <div class="field"><label>Cobro a la familia</label><input type="number" id="fin-mov-cobro" value="${Number(r.cobro_familia)||0}"></div>
+      <div class="field"><label>Pago a la niñera</label><input type="number" id="fin-mov-pago" value="${Number(r.pago_ninera)||0}"></div>
+      <label class="chk"><input type="checkbox" id="fin-mov-cobrado" ${r.cobrado?'checked':''}> Ya se cobró</label>
+      <label class="chk"><input type="checkbox" id="fin-mov-pagado" ${r.pagado?'checked':''}> Ya se le pagó</label>
+    </div>
+    <div class="helper" style="margin-top:10px;">Solo lo marcado como cobrado o pagado suma al balance.</div>
+    <div id="fin-mov-warn"></div>
+    <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="editarRegistroDesdeAgenda('${r.id}')">Cambiar horario, familia o niñera</button>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="guardarMovimientoSitting('${r.id}')">Guardar</button>
+    </div>`);
+}
+async function guardarMovimientoSitting(id){
+  const cobroTxt = document.getElementById('fin-mov-cobro').value;
+  const pagoTxt = document.getElementById('fin-mov-pago').value;
+  const warn = document.getElementById('fin-mov-warn');
+  const cobro = Number(cobroTxt), pago = Number(pagoTxt);
+  if(cobroTxt==='' || pagoTxt==='' || !isFinite(cobro) || !isFinite(pago) || cobro<0 || pago<0){
+    if(warn) warn.innerHTML = '<div class="warnbox">Los montos tienen que ser números (0 o más).</div>';
+    return;
+  }
+  const cambios = {
+    cobro_familia: cobro,
+    pago_ninera: pago,
+    cobrado: document.getElementById('fin-mov-cobrado').checked,
+    pagado: document.getElementById('fin-mov-pagado').checked,
+  };
+  const { error } = await sb.from('sittings_traslados').update(cambios).eq('id', id);
+  if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  toast('Movimiento actualizado.');
+  refrescarFinanzasCompleto();
 }
 
 /* ---- Conciliación de cobros contra extracto Itaú ---- */
