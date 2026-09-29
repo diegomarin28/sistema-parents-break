@@ -32,6 +32,7 @@ textarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:1
 .enviar[disabled]{opacity:.6;cursor:default;}
 .error{color:var(--bad);font-size:13.5px;margin-top:10px;}
 .card{background:var(--paper);border-radius:14px;padding:22px 18px;box-shadow:0 1px 4px rgba(49,47,69,.06);}
+input.tel{width:100%;border:1px solid var(--line);border-radius:10px;padding:13px 12px;font:16px 'Inter',sans-serif;color:var(--ink);}
 </style>
 </head>
 <body>
@@ -40,7 +41,11 @@ textarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:1
 const FN_URL = 'https://wvewzamdohrpfhpccvcz.supabase.co/functions/v1/temporada-ninera';
 const API_KEY = 'sb_publishable_NX4E4FfAkwFQSFo4Rgl0Jg_IcebuaaI';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+// Dos formas de entrar: link personal (?t=...) o el link general de difusión, donde se
+// identifica con su celular (el que tiene cargado en su ficha).
 const token = new URLSearchParams(location.search).get('t') || '';
+let telefono = '';
+function identidad(){ return token ? { t: token } : { tel: telefono }; }
 const app = document.getElementById('app');
 let datos = null;
 const seleccion = {}; // grupoId -> Set de quincenas (0-23)
@@ -74,7 +79,7 @@ function pintar(){
         <div class="grupo">${esc(g.nombre)}</div>
         <div class="atajos">
           <button type="button" class="atajo" onclick="todo('${g.id}', true)">Todo el año</button>
-          <button type="button" class="atajo" onclick="todo('${g.id}', false)">Borrar todo</button>
+          <button type="button" class="atajo" onclick="todo('${g.id}', false)">No voy este año</button>
         </div>
         ${MESES.map((m,i)=>`
           <div class="mes">
@@ -103,7 +108,7 @@ async function enviar(){
   const temporada = {};
   Object.keys(seleccion).forEach(g=>{ temporada[g] = [...seleccion[g]].sort((a,b)=>a-b); });
   try{
-    const r = await fetch(FN_URL, { method:'POST', headers:{'Content-Type':'application/json', apikey:API_KEY}, body: JSON.stringify({ t: token, temporada, comentario: guardarComentario() }) });
+    const r = await fetch(FN_URL, { method:'POST', headers:{'Content-Type':'application/json', apikey:API_KEY}, body: JSON.stringify({ ...identidad(), temporada, comentario: guardarComentario() }) });
     if(!r.ok) throw new Error();
     app.innerHTML = `<div class="card"><img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()"><h1>Listo, gracias ${esc(datos.nombre)}!</h1><p class="lead">Ya nos llegaron tus fechas. Si algo cambia, podés volver a abrir este mismo link y mandarlas de nuevo.</p></div>`;
   }catch(e){
@@ -111,15 +116,48 @@ async function enviar(){
     err.textContent = 'No se pudo enviar. Revisá tu conexión e intentá de nuevo.';
   }
 }
-async function iniciar(){
-  try{
-    const r = await fetch(`${FN_URL}?t=${encodeURIComponent(token)}`, { headers:{ apikey:API_KEY } });
-    if(!r.ok) throw new Error(String(r.status));
-    datos = await r.json();
-  }catch(e){
-    app.innerHTML = `<div class="card"><h1>Este link no funciona</h1><p class="lead">Puede que esté incompleto o que ya no esté activo. Escribinos por WhatsApp y te mandamos uno nuevo.</p></div>`;
+function pedirTelefono(error){
+  app.innerHTML = `
+    <div class="card">
+      <img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()">
+      <h1>Tu temporada en Punta del Este</h1>
+      <p class="lead">Queremos saber en qué fechas del año vas a estar por Punta del Este, para ofrecerte sittings allá o acá según corresponda. Primero, poné tu celular (el mismo que nos diste).</p>
+      <input class="tel" id="tel" type="tel" inputmode="tel" autocomplete="tel" placeholder="099 123 456" value="${esc(telefono)}" onkeydown="if(event.key==='Enter') buscarTelefono()">
+      <button type="button" class="enviar" id="buscar" onclick="buscarTelefono()">Seguir</button>
+      <div class="error" id="error">${error||''}</div>
+    </div>`;
+}
+async function buscarTelefono(){
+  const v = (document.getElementById('tel')?.value || '').trim();
+  const err = document.getElementById('error');
+  if(v.replace(/\D/g,'').length < 8){ err.textContent = 'Revisá el número, parece incompleto.'; return; }
+  telefono = v;
+  const btn = document.getElementById('buscar');
+  btn.disabled = true; btn.textContent = 'Buscando...';
+  await cargarDatos();
+}
+async function cargarDatos(){
+  const qs = token ? `t=${encodeURIComponent(token)}` : `tel=${encodeURIComponent(telefono)}`;
+  let r;
+  try{ r = await fetch(`${FN_URL}?${qs}`, { headers:{ apikey:API_KEY } }); }
+  catch(e){
+    if(token) app.innerHTML = `<div class="card"><h1>No pudimos cargar la página</h1><p class="lead">Revisá tu conexión y volvé a abrir el link.</p></div>`;
+    else pedirTelefono('No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.');
     return;
   }
+  if(!r.ok){
+    if(token){ app.innerHTML = `<div class="card"><h1>Este link no funciona</h1><p class="lead">Puede que esté incompleto o que ya no esté activo. Escribinos por WhatsApp y te mandamos uno nuevo.</p></div>`; return; }
+    pedirTelefono('No encontramos ese número entre las niñeras de Parents Break. Probá con el celular que nos diste, o escribinos por WhatsApp.');
+    return;
+  }
+  datos = await r.json();
+  mostrarFormulario();
+}
+async function iniciar(){
+  if(!token){ pedirTelefono(''); return; }
+  await cargarDatos();
+}
+function mostrarFormulario(){
   if(!datos.grupos.length){
     app.innerHTML = `<div class="card"><h1>Hola ${esc(datos.nombre)}!</h1><p class="lead">Por ahora no tenés ninguna zona de afuera de Montevideo cargada, así que no hace falta que marques nada. Si vas a estar en Punta del Este u otra zona, avisanos por WhatsApp.</p></div>`;
     return;
