@@ -580,6 +580,8 @@ async function contratar(candidataId){
     const temporada = leerEditorTemporada('hire-temp', {});
     ninera.temporada = temporada;
     ninera.temporada_actualizada_en = new Date().toISOString();
+    ninera.temporada_fuente = marcaTemp.dataset.tocado==='1' ? 'sistema' : 'formulario';
+    if(cd.fechas_punta) ninera.temporada_comentario = `Del formulario de postulación: "${cd.fechas_punta.trim()}"`;
     const grupoId = Object.keys(temporada)[0];
     const marcoAlgo = grupoId && temporada[grupoId].length>0;
     if(marcoAlgo && !gruposFueraDeZonaStr(ninera.zona).some(g=>g.id===grupoId)){

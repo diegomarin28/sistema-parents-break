@@ -385,6 +385,11 @@ function renderNineraHistorial(id){
 }
 function editarNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
+  // Si le falta la temporada, se pide antes de la edición normal (con "Omitir por ahora").
+  if(n && estadoTemporada(n)!=='ok' && !ninTempOmitidas.has(id) && gruposParaEditor(n).length){
+    abrirPasoTemporada(id);
+    return;
+  }
   const tipos = ['Niñera','Traslados','Ambas'];
   ninEditCandidataCache = n.candidatas || {};
   registrarRenderizadorZona('ed', ()=>editarNinera(id));
@@ -407,17 +412,16 @@ function editarNinera(id){
     </div>
     ${htmlCuentasBancarias('ed', n.cuenta_bancaria)}
     ${checklistZonas('ed', n.zona)}
-    ${gruposFueraDeNinera(n).length ? `
+    ${gruposParaEditor(n).length ? `
     <div class="field">
-      <label>Cuándo está afuera de Montevideo</label>
-      <div class="helper" style="margin:0 0 4px;">Marcá las quincenas en que está en la zona de afuera. Tocá el mes para marcarlo entero. Si cambiaste las zonas recién, guardá y volvé a abrir para ver el calendario de la zona nueva.</div>
-      ${htmlEditorTemporada('ed-temp', gruposFueraDeNinera(n), n.temporada)}
+      <label>Temporada de verano</label>
+      <div class="helper" style="margin:0 0 4px;">Quincenas en que está en Punta del Este. Tocá el mes para marcarlo entero. Lo que no esté marcado cuenta como que está en Montevideo o Canelones.${temporadaCargada(n)?` Última actualización: ${textoFuenteTemporada(n)}.`:''}</div>
+      ${htmlEditorTemporada('ed-temp', gruposParaEditor(n), n.temporada)}
       <span data-temp-guardar="ed-temp" style="display:none;"></span>
       <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
         <button type="button" class="smallbtn" onclick="setTodasQuincenas('ed-temp', true)">Todo el año</button>
-        <button type="button" class="smallbtn" onclick="setTodasQuincenas('ed-temp', false)">Limpiar</button>
+        <button type="button" class="smallbtn" onclick="setTodasQuincenas('ed-temp', false)">No va</button>
       </div>
-      ${tienePropuestaNueva(n) ? `<div class="helper" style="margin:6px 0 0;color:var(--warn);">Mandó sus fechas por el link. Revisalas en el panel "Temporadas fuera de Montevideo".</div>` : ''}
     </div>` : ''}
     <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
     <div class="field">
@@ -559,6 +563,8 @@ async function guardarEdicionNinera(id){
     const nPrev = ninierasItems.find(x=>x.id===id);
     cambios.temporada = leerEditorTemporada('ed-temp', nPrev?.temporada);
     cambios.temporada_actualizada_en = new Date().toISOString();
+    cambios.temporada_fuente = 'sistema';
+    cambios.zona = zonaConTemporada(cambios.zona, cambios.temporada);
   }
   const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
@@ -741,6 +747,26 @@ function gruposFueraDeZonaStr(zonaStr){
   return (zonaGruposCache||[]).filter(g=>g.fuera_de_montevideo && (g.zonas||[]).some(z=>zonas.includes(normaliza(z))));
 }
 function gruposFueraDeNinera(n){ return gruposFueraDeZonaStr(n.zona); }
+// Qué calendarios se le muestran para editar: los de sus zonas de afuera, o si no tiene
+// ninguna (vive en Montevideo/Canelones), todos los grupos de afuera -- para poder marcar
+// que veranea allá.
+function gruposParaEditor(n){
+  const suyos = gruposFueraDeNinera(n);
+  return suyos.length ? suyos : (zonaGruposCache||[]).filter(g=>g.fuera_de_montevideo);
+}
+// Si marcó alguna quincena en un grupo de afuera y su zona no incluye ninguna zona de ese
+// grupo, se le agrega (Punta del Este si está en el grupo) -- si no, nunca aparecería al
+// buscar esa zona. Mismo criterio que la página de la niñera y el alta desde Postulantes.
+function zonaConTemporada(zonaStr, temporada){
+  let zona = (zonaStr||'').trim();
+  (zonaGruposCache||[]).filter(g=>g.fuera_de_montevideo).forEach(g=>{
+    if(!quincenasDeGrupo(temporada, g.id).length) return;
+    if(gruposFueraDeZonaStr(zona).some(x=>x.id===g.id)) return;
+    const agregar = (g.zonas||[]).find(z=>normaliza(z)==='punta del este') || (g.zonas||[])[0];
+    if(agregar) zona = [zona, agregar].filter(Boolean).join('/');
+  });
+  return zona;
+}
 function grupoFueraDeZona(zonaKey){
   return (zonaGruposCache||[]).find(g=>g.fuera_de_montevideo && (g.zonas||[]).some(z=>normaliza(z)===zonaKey)) || null;
 }
@@ -750,15 +776,13 @@ function inicioTemporadaActual(ref=new Date()){
   return new Date(y, 8, 1);
 }
 function temporadaCargada(n){ return !!n.temporada_actualizada_en; }
-// 'na' (no tiene zonas fuera) | 'sin' (nunca se cargó) | 'vieja' (cargada antes del 1 de setiembre) | 'ok'
+// 'sin' (nunca se cargó) | 'vieja' (cargada antes del 1 de setiembre) | 'ok'
+// Se pide a TODAS las niñeras, no solo a las que ya tienen una zona de afuera: una chica de
+// Pocitos puede veranear en Punta y justamente eso es lo que se quiere saber. Confirmar que
+// no va ("No va", ninguna quincena marcada) también cuenta como cargada.
 function estadoTemporada(n){
-  if(!gruposFueraDeNinera(n).length) return 'na';
   if(!temporadaCargada(n)) return 'sin';
   return new Date(n.temporada_actualizada_en) >= inicioTemporadaActual() ? 'ok' : 'vieja';
-}
-function tienePropuestaNueva(n){
-  if(!n.temporada_propuesta || !n.temporada_propuesta_en) return false;
-  return !n.temporada_actualizada_en || new Date(n.temporada_propuesta_en) > new Date(n.temporada_actualizada_en);
 }
 function quincenasDeGrupo(temporada, grupoId){
   const qs = (temporada||{})[grupoId];
@@ -768,8 +792,7 @@ function quincenasDeMeses(meses){ return [...meses].flatMap(m=>[m*2, m*2+1]).sor
 // true | false | null (no se sabe: sin temporada cargada)
 function nineraPresenteEnZona(n, zonaKey, q){
   const grupo = grupoFueraDeZona(zonaKey);
-  // Sin ninguna zona de afuera no hay temporada que mirar: está siempre en sus zonas.
-  if(!gruposFueraDeNinera(n).length) return !grupo;
+  // Sin temporada cargada no se sabe (puede estar veraneando): se muestra igual, marcada.
   if(!temporadaCargada(n)) return null;
   if(grupo) return quincenasDeGrupo(n.temporada, grupo.id).includes(q);
   // Zona de Montevideo/Canelones: está, salvo que esa quincena esté en alguna zona de afuera.
@@ -823,7 +846,7 @@ function htmlEditorTemporada(prefix, grupos, temporada, opts={}){
   }).join('');
 }
 function htmlMiniTemporada(n, focoQs=[]){
-  const grupos = gruposFueraDeNinera(n);
+  const grupos = gruposParaEditor(n);
   if(!grupos.length || !temporadaCargada(n)) return '';
   const foco = new Set(focoQs);
   const qs = new Set(grupos.flatMap(g=>quincenasDeGrupo(n.temporada, g.id)));
@@ -882,85 +905,92 @@ function limpiarFiltroMeses(){ ninFiltroMeses.clear(); pintarFiltroMeses(); filt
 
 /* ---- Badge en la fila de la lista ---- */
 function badgeTemporada(n){
-  if(tienePropuestaNueva(n)) return `<span class="badge accent" style="font-size:10px;padding:2px 8px;">Mandó su temporada</span>`;
   const est = estadoTemporada(n);
   if(est==='sin') return `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin temporada</span>`;
   if(est==='vieja') return `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Temporada sin actualizar</span>`;
   return '';
 }
 
-/* ---- Panel "Temporadas fuera de Montevideo" ---- */
+/* ---- Panel "Temporadas de verano" ----
+   Lista a TODAS las niñeras activas. Por defecto muestra solo las que faltan (sin temporada o
+   de la temporada anterior), que es lo que hay que resolver; "Ver todas" muestra el resto. */
+let ninTempVerTodas = false;
+let ninTempOmitidas = new Set(); // "Omitir por ahora" en Editar: no se vuelve a pedir en esta sesión
 function toggleTemporadasPanel(){ ninTempAbierto = !ninTempAbierto; renderTemporadasPanel(); }
+function toggleTemporadasVerTodas(){ ninTempVerTodas = !ninTempVerTodas; renderTemporadasPanel(); }
 function renderTemporadasPanel(){
   const wrap = document.getElementById('nin-temporadas-wrap');
   if(!wrap) return;
   asegurarEstilosTemporada();
-  const lista = ninierasItems.filter(n=>gruposFueraDeNinera(n).length);
-  if(!lista.length){ wrap.innerHTML = ''; return; }
-  const propuestas = lista.filter(tienePropuestaNueva);
-  const pendientes = lista.filter(n=>!tienePropuestaNueva(n) && estadoTemporada(n)!=='ok');
-  const alDia = lista.filter(n=>!tienePropuestaNueva(n) && estadoTemporada(n)==='ok');
+  if(!(zonaGruposCache||[]).some(g=>g.fuera_de_montevideo)){ wrap.innerHTML = ''; return; }
+  const faltan = ninierasItems.filter(n=>estadoTemporada(n)!=='ok');
+  const alDia = ninierasItems.filter(n=>estadoTemporada(n)==='ok');
   const inicio = inicioTemporadaActual();
-  const resumen = [
-    propuestas.length ? `${propuestas.length} ${propuestas.length===1?'mandó':'mandaron'} sus fechas` : '',
-    pendientes.length ? `${pendientes.length} sin actualizar` : '',
-    `${alDia.length} al día`,
-  ].filter(Boolean).join(', ');
+  const lista = ninTempVerTodas ? [...faltan, ...alDia] : faltan;
   wrap.innerHTML = `
-    <div class="card" style="padding:14px 18px;margin-bottom:14px;${(propuestas.length||pendientes.length)?'border-left:3px solid var(--warn);border-radius:0 12px 12px 0;':''}">
+    <div class="card" style="padding:14px 18px;margin-bottom:14px;${faltan.length?'border-left:3px solid var(--warn);border-radius:0 12px 12px 0;':''}">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;cursor:pointer;" onclick="toggleTemporadasPanel()">
-        <h2 style="margin:0;">Temporadas fuera de Montevideo</h2>
-        <div class="helper" style="margin:0;">${resumen} ${ninTempAbierto?'(tocá para cerrar)':'(tocá para ver)'}</div>
+        <h2 style="margin:0;">Temporadas de verano</h2>
+        <div class="helper" style="margin:0;">${faltan.length ? `${faltan.length} sin temporada, ` : ''}${alDia.length} al día ${ninTempAbierto?'(tocá para cerrar)':'(tocá para ver)'}</div>
       </div>
       ${ninTempAbierto ? `
-        <div class="helper" style="margin:8px 0 4px;">Marcá en qué quincenas está cada una en la zona de afuera. Tocá el mes para marcarlo entero. Lo que no esté marcado cuenta como que está en Montevideo o Canelones. Se pide actualizar cada año desde el 1 de setiembre (esta temporada arrancó el ${inicio.toLocaleDateString('es-UY',{day:'numeric',month:'long',year:'numeric'})}).</div>
-        ${[...propuestas, ...pendientes, ...alDia].map(filaTemporadaPanel).join('')}
+        <div class="helper" style="margin:8px 0 8px;">En qué quincenas está cada una en Punta del Este (o la zona de afuera que corresponda). Lo que no esté marcado cuenta como que está en Montevideo o Canelones. Si no va nunca, guardalo vacío y el aviso se va igual. Se pide actualizar cada año desde el 1 de setiembre (esta temporada arrancó el ${inicio.toLocaleDateString('es-UY',{day:'numeric',month:'long',year:'numeric'})}).</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+          <button type="button" class="smallbtn" onclick="copiarMensajeDifusionTemporada()">Copiar mensaje para difusión</button>
+          <button type="button" class="smallbtn" onclick="toggleTemporadasVerTodas()">${ninTempVerTodas?'Ver solo las que faltan':`Ver todas (${ninierasItems.length})`}</button>
+        </div>
+        ${lista.length ? lista.map(filaTemporadaPanel).join('') : '<div class="empty">Están todas al día.</div>'}
       ` : ''}
     </div>`;
 }
+function textoFuenteTemporada(n){
+  if(!n.temporada_actualizada_en) return '';
+  const f = new Date(n.temporada_actualizada_en).toLocaleDateString('es-UY',{day:'numeric',month:'short',year:'numeric'});
+  const quien = n.temporada_fuente==='ninera' ? 'la cargó ella' : n.temporada_fuente==='formulario' ? 'del formulario de postulación' : 'cargada por ustedes';
+  return `${f}, ${quien}`;
+}
 function filaTemporadaPanel(n){
   const prefix = 'tp-'+n.id;
-  const grupos = gruposFueraDeNinera(n);
+  const grupos = gruposParaEditor(n);
   const est = estadoTemporada(n);
-  const propuesta = tienePropuestaNueva(n);
-  const prop = n.temporada_propuesta || {};
-  const fechaAct = n.temporada_actualizada_en ? new Date(n.temporada_actualizada_en).toLocaleDateString('es-UY',{day:'numeric',month:'short',year:'numeric'}) : null;
-  const estadoTxt = propuesta
-    ? `Mandó sus fechas el ${new Date(n.temporada_propuesta_en).toLocaleDateString('es-UY',{day:'numeric',month:'short'})} — revisalas y aceptalas`
-    : est==='sin' ? 'Nunca se cargó'
-    : est==='vieja' ? `Última actualización: ${fechaAct} (temporada anterior)`
-    : `Actualizada el ${fechaAct}`;
+  const estadoTxt = est==='sin' ? 'Sin temporada'
+    : est==='vieja' ? `Temporada anterior (${textoFuenteTemporada(n)})`
+    : `Al día (${textoFuenteTemporada(n)})`;
   return `
     <div class="temp-row" id="temp-row-${n.id}">
       <div class="temp-row-head">
         <div>
           <div style="font-weight:600;">${n.nombre}</div>
-          <div class="helper" style="margin:0;">${n.zona||''}</div>
-          <div class="helper" style="margin:2px 0 0;color:${(propuesta||est!=='ok')?'var(--warn)':'var(--ink-soft)'};">${estadoTxt}</div>
-          ${propuesta && prop.comentario ? `<div class="helper" style="margin:2px 0 0;">Comentario: "${escaparHtmlTemp(prop.comentario)}"</div>` : ''}
+          <div class="helper" style="margin:0;">${n.zona||'zona s/d'}</div>
+          <div class="helper" style="margin:2px 0 0;color:${est!=='ok'?'var(--warn)':'var(--ink-soft)'};">${estadoTxt}</div>
+          ${n.temporada_comentario ? `<div class="helper" style="margin:2px 0 0;">Comentario: ${escaparHtmlTemp(n.temporada_comentario)}</div>` : ''}
         </div>
         <div class="temp-acciones">
-          ${est==='vieja' && !propuesta ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior('${n.id}')">Repetir lo del año pasado</button>` : ''}
+          ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior('${n.id}')">Repetir lo del año pasado</button>` : ''}
           <button type="button" class="smallbtn" onclick="pedirTemporadaWhatsapp('${n.id}')">Pedirle por WhatsApp</button>
           <button type="button" class="smallbtn" onclick="setTodasQuincenas('${prefix}', true)">Todo el año</button>
-          <button type="button" class="smallbtn" onclick="setTodasQuincenas('${prefix}', false)">Limpiar</button>
+          <button type="button" class="smallbtn" onclick="setTodasQuincenas('${prefix}', false)">No va</button>
         </div>
       </div>
-      ${htmlEditorTemporada(prefix, grupos, propuesta ? (prop.temporada||{}) : n.temporada, {propuesta})}
+      ${htmlEditorTemporada(prefix, grupos, n.temporada)}
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-        ${propuesta
-          ? `<button type="button" class="smallbtn" style="background:var(--accent);color:#fff;border-color:var(--accent);" onclick="guardarTemporadaPanel('${n.id}')">Aceptar estas fechas</button>
-             <button type="button" class="smallbtn" onclick="descartarPropuestaTemporada('${n.id}')">Descartar lo que mandó</button>`
-          : `<button type="button" class="smallbtn" data-temp-guardar="${prefix}" style="display:${est==='ok'?'none':''};background:var(--accent);color:#fff;border-color:var(--accent);" onclick="guardarTemporadaPanel('${n.id}')">${est==='ok'?'Guardar cambios':'Guardar temporada'}</button>`}
+        <button type="button" class="smallbtn" data-temp-guardar="${prefix}" style="display:${est==='ok'?'none':''};background:var(--accent);color:#fff;border-color:var(--accent);" onclick="guardarTemporadaPanel('${n.id}')">${est==='ok'?'Guardar cambios':'Guardar temporada'}</button>
       </div>
     </div>`;
 }
 function escaparHtmlTemp(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 async function guardarTemporadaEnBase(id, temporada, extra={}){
-  const cambios = { temporada, temporada_actualizada_en: new Date().toISOString(), ...extra };
+  const n = ninierasItems.find(x=>x.id===id);
+  const cambios = {
+    temporada,
+    zona: zonaConTemporada(n?.zona, temporada),
+    temporada_actualizada_en: new Date().toISOString(),
+    temporada_fuente: 'sistema',
+    temporada_propuesta: null, temporada_propuesta_en: null,
+    ...extra,
+  };
   const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar la temporada: '+error.message, 'bad'); return false; }
-  const n = ninierasItems.find(x=>x.id===id);
   if(n) Object.assign(n, cambios);
   return true;
 }
@@ -968,27 +998,64 @@ async function guardarTemporadaPanel(id){
   const n = ninierasItems.find(x=>x.id===id);
   if(!n) return;
   const temporada = leerEditorTemporada('tp-'+id, n.temporada);
-  const extra = tienePropuestaNueva(n) ? { temporada_propuesta: null, temporada_propuesta_en: null } : {};
-  if(!(await guardarTemporadaEnBase(id, temporada, extra))) return;
+  if(!(await guardarTemporadaEnBase(id, temporada))) return;
   toast(`Temporada de ${n.nombre.split(' ')[0]} guardada.`);
   refrescarTrasTemporada();
 }
-async function repetirTemporadaAnterior(id){
+async function repetirTemporadaAnterior(id, despues){
   const n = ninierasItems.find(x=>x.id===id);
   if(!n) return;
   // Mismas quincenas que ya tenía -- solo se renueva la fecha de actualización.
-  if(!(await guardarTemporadaEnBase(id, n.temporada || {}))) return;
+  if(!(await guardarTemporadaEnBase(id, n.temporada || {}, { temporada_fuente: n.temporada_fuente || 'sistema' }))) return;
   toast(`Listo: ${n.nombre.split(' ')[0]} repite las mismas fechas este año.`);
   refrescarTrasTemporada();
+  if(typeof despues==='function') despues();
 }
-async function descartarPropuestaTemporada(id){
+/* Mensaje único para mandar por difusión de WhatsApp: el link general pide el celular, así
+   que sirve el mismo para todas. Borrador de texto, a revisar por Pau/Delfi. */
+function linkTemporadaGeneral(){
+  return location.origin + location.pathname.replace(/[^/]*$/, '') + 'temporada.html';
+}
+function mensajeDifusionTemporada(){
+  return `Hola! Te escribimos de Parents Break. Estamos armando la temporada de verano y queremos saber en qué fechas vas a estar en Punta del Este, así te ofrecemos sittings allá o acá según corresponda.\n\nEntrá a este link, poné tu celular y marcá las quincenas (si no vas, también avisanos ahí). Es un minuto:\n\n${linkTemporadaGeneral()}\n\nGracias!`;
+}
+async function copiarMensajeDifusionTemporada(){
+  try{ await navigator.clipboard.writeText(mensajeDifusionTemporada()); toast('Mensaje copiado. Pegalo en la lista de difusión de WhatsApp.'); }
+  catch(e){ abrirModal(`<h2 style="margin:0 0 8px;">Mensaje para difusión</h2><div class="helper">Copialo y pegalo en la lista de difusión.</div><textarea style="width:100%;min-height:180px;">${escaparHtmlTemp(mensajeDifusionTemporada())}</textarea>`); }
+}
+/* Paso previo al abrir "Editar" de una niñera sin temporada: se pide primero, con la opción
+   de omitirlo por ahora (no se vuelve a pedir en esta sesión). */
+function abrirPasoTemporada(id){
   const n = ninierasItems.find(x=>x.id===id);
   if(!n) return;
-  if(!(await confirmarAccion(`¿Descartar las fechas que mandó ${n.nombre.split(' ')[0]}? Queda con la temporada que tenía antes.`, 'Descartar'))) return;
-  const { error } = await sb.from('ninieras').update({ temporada_propuesta: null, temporada_propuesta_en: null }).eq('id', id);
-  if(error){ toast('No se pudo descartar: '+error.message, 'bad'); return; }
-  n.temporada_propuesta = null; n.temporada_propuesta_en = null;
+  asegurarEstilosTemporada();
+  const est = estadoTemporada(n);
+  abrirModal(`
+    <h2 style="margin:0 0 4px;padding-right:32px;">Temporada de ${n.nombre.split(' ')[0]}</h2>
+    <div class="helper" style="margin:0 0 10px;">${est==='vieja'
+      ? `Su temporada es del año pasado (${textoFuenteTemporada(n)}). ¿Sigue igual este verano?`
+      : 'Todavía no sabemos si veranea afuera de Montevideo. Marcá las quincenas en que está en Punta del Este, o dejalo vacío si no va.'}</div>
+    ${htmlEditorTemporada('paso-temp', gruposParaEditor(n), n.temporada)}
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+      ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior('${id}', ()=>editarNinera('${id}'))">Repetir lo del año pasado</button>` : ''}
+      <button type="button" class="smallbtn" onclick="setTodasQuincenas('paso-temp', true)">Todo el año</button>
+      <button type="button" class="smallbtn" onclick="setTodasQuincenas('paso-temp', false)">No va</button>
+      <button type="button" class="smallbtn" onclick="pedirTemporadaWhatsapp('${id}')">Pedirle por WhatsApp</button>
+    </div>
+    <div class="confirmbtns" style="margin-top:16px;">
+      <button class="btn ghost" onclick="omitirPasoTemporada('${id}')">Omitir por ahora</button>
+      <button class="btn primary" onclick="guardarPasoTemporada('${id}')">Guardar y seguir</button>
+    </div>`);
+}
+function omitirPasoTemporada(id){ ninTempOmitidas.add(id); editarNinera(id); }
+async function guardarPasoTemporada(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  if(!n) return;
+  const temporada = leerEditorTemporada('paso-temp', n.temporada);
+  if(!(await guardarTemporadaEnBase(id, temporada))) return;
+  toast(`Temporada de ${n.nombre.split(' ')[0]} guardada.`);
   refrescarTrasTemporada();
+  editarNinera(id);
 }
 function refrescarTrasTemporada(){
   // Solo se repintan el panel y la lista (con su scroll), sin volver a pedir todo a la base.
@@ -997,9 +1064,9 @@ function refrescarTrasTemporada(){
   filtrarNinieras();
   restaurarScrollMainarea(scroll);
 }
-/* Link para que la propia niñera cargue sus fechas desde el celular. Lo que manda
-   queda como propuesta (temporada_propuesta) y recién pasa a la temporada real
-   cuando Pau o Delfi la aceptan en el panel. Borrador de texto, a revisar por ellas. */
+/* Link personal para que la propia niñera cargue sus fechas desde el celular (sin tener que
+   poner su número). Lo que manda se guarda directo como su temporada (función
+   temporada-ninera). Borrador de texto, a revisar por Pau/Delfi. */
 function linkTemporadaNinera(n){
   const base = location.origin + location.pathname.replace(/[^/]*$/, '');
   return `${base}temporada.html?t=${n.temporada_token}`;
