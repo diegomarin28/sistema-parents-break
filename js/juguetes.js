@@ -60,7 +60,7 @@ function filtrarJuguetes(){
     const estadoBadge = j.estado && j.estado!=='disponible' ? `<span class="badge" style="font-size:10px;background:var(--clay-soft);color:var(--clay-text);">${j.estado}</span>` : '';
     return `<div class="card" style="padding:0;overflow:hidden;">
       <div style="height:100px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;overflow:hidden;${j.foto_url?'cursor:zoom-in;':''}" ${j.foto_url?`onclick="abrirLightboxFoto('${j.foto_url}', 'Foto de ${j.nombre}')"`:''}>
-        ${j.foto_url?`<img src="${j.foto_url}" alt="Foto de ${j.nombre}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">`:`<span style="color:var(--accent);font-size:12px;">sin foto</span>`}
+        ${j.foto_url?`<img loading="lazy" decoding="async" src="${j.foto_url}" alt="Foto de ${j.nombre}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">`:`<span style="color:var(--accent);font-size:12px;">sin foto</span>`}
       </div>
       <div style="padding:10px 12px;">
         <div style="font-weight:600;font-size:13px;display:flex;justify-content:space-between;gap:6px;">${j.nombre} ${estadoBadge}</div>

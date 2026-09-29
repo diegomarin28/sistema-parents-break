@@ -225,7 +225,7 @@ function filtrarNinieras(){
   const mostrarTira = filtraPeriodo || (fz && grupoFueraDeZona(fz));
   const filaNinera = n=>`
     <div class="person-row">
-      <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')"`:''}>${n.foto?`<img src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')"`:''}>${n.foto?`<img loading="lazy" decoding="async" src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${n.nombre}${cvEstaDesactualizado(n) ? ` <span style="color:var(--warn);font-weight:600;font-size:12px;">· Actualizar CV</span>` : ''}</div>
         <div class="meta">${n.zona||'zona s/d'}${(() => { const e = calcularEdad(n.candidatas?.fecha_nacimiento); return e!==null ? ' · '+e+' años' : (n.candidatas?.edad ? ' · '+n.candidatas.edad : ''); })()}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>

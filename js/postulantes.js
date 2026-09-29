@@ -163,7 +163,7 @@ async function loadIntake(){
   if(!intakeItems.length){ grid.innerHTML = '<div class="empty">No hay candidatas esperando entrevista.</div>'; return; }
   grid.innerHTML = '<div class="person-list">' + intakeItems.map((c,i)=>`
     <div class="person-row">
-      <div class="av" ${c.foto_url && c.autoriza_foto!==false?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${c.foto_url}', 'Foto de ${c.nombre}')"`:''}>${c.foto_url?`<img src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.textContent='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="av" ${c.foto_url && c.autoriza_foto!==false?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${c.foto_url}', 'Foto de ${c.nombre}')"`:''}>${c.foto_url?`<img loading="lazy" decoding="async" src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.textContent='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${c.nombre} ${c.apellido||''}</div>
         <div class="meta">${c.zona||'zona s/d'} · ${textoEdadCandidata(c)}${c.origen?' · '+c.origen:''}</div>

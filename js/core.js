@@ -11,7 +11,7 @@ function cargarScript(src){
     const s = document.createElement('script');
     s.src = src;
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error('No se pudo cargar '+src));
+    s.onerror = () => { s.remove(); reject(new Error('No se pudo cargar '+src)); }; // se saca para que un reintento lo vuelva a pedir de verdad
     document.head.appendChild(s);
   });
 }
@@ -20,6 +20,20 @@ function asegurarChart(){
   if(window.Chart) return Promise.resolve();
   if(!_chartPromise) _chartPromise = cargarScript('https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js');
   return _chartPromise;
+}
+// jsPDF + autotable: solo se usan para exportar el historial de Sittings a PDF. Antes se
+// cargaban en el <head> de index.html en cada apertura de la app (~127 KB comprimidos que
+// bloqueaban el arranque); ahora se piden recién al abrir "Exportar a PDF". El plugin
+// autotable necesita que jsPDF ya esté cargado, por eso van en orden.
+let _jspdfPromise = null;
+function asegurarJsPDF(){
+  if(window.jspdf?.jsPDF?.API?.autoTable) return Promise.resolve();
+  if(!_jspdfPromise){
+    _jspdfPromise = cargarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      .then(()=>cargarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'))
+      .catch(e=>{ _jspdfPromise = null; throw e; });
+  }
+  return _jspdfPromise;
 }
 let _xlsxPromise = null;
 function asegurarXLSX(){

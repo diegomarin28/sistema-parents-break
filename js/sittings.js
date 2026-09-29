@@ -221,6 +221,7 @@ async function renderSitHistorialCustom(){
    formulario de sitting -- se edita ahí (o tocando la fila en el historial), no acá. */
 let exphistItemsPreview = [];
 function abrirModalExportarHistorialPDF(){
+  asegurarJsPDF().catch(()=>{}); // se va descargando mientras eligen el rango, así "Descargar PDF" es inmediato
   const famSel = document.getElementById('sithist-familia');
   const tipoSel = document.getElementById('sithist-tipo');
   const hoy = todayISO();
@@ -279,8 +280,10 @@ async function generarVistaPreviaHistorialPDF(){
     <button class="btn primary" style="width:100%;margin-top:12px;" onclick="descargarHistorialPDF('${desde}','${hasta}')">Descargar PDF</button>
   `;
 }
-function descargarHistorialPDF(desde, hasta){
+async function descargarHistorialPDF(desde, hasta){
   if(!exphistItemsPreview.length) return;
+  try{ await asegurarJsPDF(); }
+  catch(e){ toast('No se pudo cargar el generador de PDF. Revisá la conexión e intentá de nuevo.', 'bad'); return; }
   const fmtFecha = (iso) => iso ? new Date(iso+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—';
   const famSel = document.getElementById('sithist-familia');
   const famLabel = famSel?.selectedOptions?.[0]?.textContent || 'Todas';

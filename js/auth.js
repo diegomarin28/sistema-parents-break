@@ -37,7 +37,17 @@ async function boot(){
   // Autogenera los sittings de horarios fijos para esta semana si todavía no existen — silencioso, no bloquea el boot.
   if(session && typeof autogenerarSittingsFijosSemana === 'function') autogenerarSittingsFijosSemana();
   sb.auth.onAuthStateChange((event, s) => {
+    const mismaSesionQueAntes = !!(session && s && session.user?.id === s.user?.id);
     session = s;
+    // INITIAL_SESSION llega apenas se suscribe este listener, con la MISMA sesión que ya
+    // trajo getSession() arriba -- y boot() ya pinta la app con esa sesión (renderRoot más
+    // abajo). Antes se volvía a pintar todo: cada apertura de la app cargaba Hoy dos veces
+    // (todas las consultas duplicadas, visto en los logs de Supabase el 29/09/2026).
+    if(event === 'INITIAL_SESSION') return;
+    // Supabase también re-emite SIGNED_IN al volver a la pestaña/app con la sesión ya
+    // abierta. No es un login nuevo: repintar ahí mandaba de vuelta a Hoy y borraba lo que
+    // se estuviera escribiendo. Solo un SIGNED_IN sin sesión previa (login real) repinta.
+    if(event === 'SIGNED_IN' && mismaSesionQueAntes) return;
     // TOKEN_REFRESHED es una renovación silenciosa del token de sesión que pasa sola cada
     // tanto, incluso con la app en foco y en uso -- no cambia qué hay que mostrar en pantalla,
     // así que no se vuelve a pintar nada. Antes SÍ disparaba renderRoot() -> renderApp(), que
