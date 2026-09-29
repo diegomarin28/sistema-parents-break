@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Tu temporada - Parents Break</title>
+<link rel="icon" href="icon-192.png">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+:root{
+  --bg:#F6F5FB; --paper:#FFFFFF; --ink:#312F45; --ink-soft:#6C6A84; --line:#E3E1EE;
+  --accent:#757CBB; --accent-soft:#E7E8F5; --clay:#DF8386; --bad:#AB4B41;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+main{max-width:520px;margin:0 auto;padding:24px 16px 48px;}
+.logo{height:44px;width:auto;display:block;margin:0 0 14px;}
+h1{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:26px;line-height:1.15;margin:0 0 6px;}
+p.lead{color:var(--ink-soft);font-size:14.5px;line-height:1.55;margin:0 0 18px;}
+.grupo{font-family:'Baloo 2',sans-serif;font-weight:600;font-size:18px;margin:18px 0 8px;}
+.atajos{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap;}
+.atajo{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:100px;padding:8px 14px;font:500 13px 'Inter',sans-serif;cursor:pointer;}
+.mes{display:grid;grid-template-columns:96px 1fr 1fr;gap:6px;align-items:center;margin:0 0 6px;}
+.mes-nombre{border:none;background:none;text-align:left;font:600 14px 'Inter',sans-serif;color:var(--ink);padding:10px 0;cursor:pointer;}
+.q{border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);border-radius:10px;padding:11px 6px;font:500 13px 'Inter',sans-serif;cursor:pointer;}
+.q.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+.resumen{background:var(--accent-soft);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5;margin:18px 0 12px;}
+label.com{display:block;font-size:13px;color:var(--ink-soft);margin:14px 0 6px;}
+textarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:14px 'Inter',sans-serif;color:var(--ink);resize:vertical;}
+.enviar{width:100%;border:none;background:var(--accent);color:#fff;border-radius:12px;padding:14px;font:600 15px 'Inter',sans-serif;margin-top:14px;cursor:pointer;}
+.enviar[disabled]{opacity:.6;cursor:default;}
+.error{color:var(--bad);font-size:13.5px;margin-top:10px;}
+.card{background:var(--paper);border-radius:14px;padding:22px 18px;box-shadow:0 1px 4px rgba(49,47,69,.06);}
+</style>
+</head>
+<body>
+<main id="app"><p class="lead">Cargando...</p></main>
+<script>
+const FN_URL = 'https://wvewzamdohrpfhpccvcz.supabase.co/functions/v1/temporada-ninera';
+const API_KEY = 'sb_publishable_NX4E4FfAkwFQSFo4Rgl0Jg_IcebuaaI';
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+const token = new URLSearchParams(location.search).get('t') || '';
+const app = document.getElementById('app');
+let datos = null;
+const seleccion = {}; // grupoId -> Set de quincenas (0-23)
+
+function esc(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function textoQuincenas(set){
+  if(!set.size) return 'No vas a estar';
+  if(set.size===24) return 'Todo el año';
+  const partes = []; let m = 0;
+  while(m<12){
+    if(set.has(m*2) && set.has(m*2+1)){
+      let fin = m;
+      while(fin+1<12 && set.has((fin+1)*2) && set.has((fin+1)*2+1)) fin++;
+      partes.push(fin===m ? MESES[m].toLowerCase() : `${MESES[m].toLowerCase()} a ${MESES[fin].toLowerCase()}`);
+      m = fin+1;
+    } else {
+      if(set.has(m*2)) partes.push(`1ra quincena de ${MESES[m].toLowerCase()}`);
+      if(set.has(m*2+1)) partes.push(`2da quincena de ${MESES[m].toLowerCase()}`);
+      m++;
+    }
+  }
+  return partes.join(', ');
+}
+function pintar(){
+  app.innerHTML = `
+    <div class="card">
+      <img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()">
+      <h1>Hola ${esc(datos.nombre)}!</h1>
+      <p class="lead">Marcá las quincenas en que vas a estar por la zona de afuera. Tocá el nombre del mes para marcarlo entero. Lo que dejes sin marcar lo tomamos como que estás en Montevideo.</p>
+      ${datos.grupos.map(g=>`
+        <div class="grupo">${esc(g.nombre)}</div>
+        <div class="atajos">
+          <button type="button" class="atajo" onclick="todo('${g.id}', true)">Todo el año</button>
+          <button type="button" class="atajo" onclick="todo('${g.id}', false)">Borrar todo</button>
+        </div>
+        ${MESES.map((m,i)=>`
+          <div class="mes">
+            <button type="button" class="mes-nombre" onclick="mes('${g.id}', ${i})">${m}</button>
+            <button type="button" class="q${seleccion[g.id].has(i*2)?' on':''}" aria-pressed="${seleccion[g.id].has(i*2)}" onclick="tq('${g.id}', ${i*2})">1 al 15</button>
+            <button type="button" class="q${seleccion[g.id].has(i*2+1)?' on':''}" aria-pressed="${seleccion[g.id].has(i*2+1)}" onclick="tq('${g.id}', ${i*2+1})">16 a fin de mes</button>
+          </div>`).join('')}
+        <div class="resumen"><b>${esc(g.nombre)}:</b> ${textoQuincenas(seleccion[g.id])}</div>
+      `).join('')}
+      <label class="com" for="comentario">Algo más que nos quieras contar (opcional)</label>
+      <textarea id="comentario" maxlength="500" placeholder="Por ejemplo: en febrero solo puedo de tarde"></textarea>
+      <button type="button" class="enviar" id="enviar" onclick="enviar()">Enviar mis fechas</button>
+      <div class="error" id="error"></div>
+    </div>`;
+}
+function guardarComentario(){ const c = document.getElementById('comentario'); return c ? c.value : ''; }
+function repintar(){ const c = guardarComentario(); pintar(); document.getElementById('comentario').value = c; }
+function tq(g, q){ const s = seleccion[g]; s.has(q) ? s.delete(q) : s.add(q); repintar(); }
+function mes(g, i){ const s = seleccion[g]; const ambas = s.has(i*2) && s.has(i*2+1); [i*2, i*2+1].forEach(q=> ambas ? s.delete(q) : s.add(q)); repintar(); }
+function todo(g, prender){ seleccion[g] = new Set(prender ? Array.from({length:24},(_,i)=>i) : []); repintar(); }
+async function enviar(){
+  const btn = document.getElementById('enviar');
+  const err = document.getElementById('error');
+  err.textContent = '';
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  const temporada = {};
+  Object.keys(seleccion).forEach(g=>{ temporada[g] = [...seleccion[g]].sort((a,b)=>a-b); });
+  try{
+    const r = await fetch(FN_URL, { method:'POST', headers:{'Content-Type':'application/json', apikey:API_KEY}, body: JSON.stringify({ t: token, temporada, comentario: guardarComentario() }) });
+    if(!r.ok) throw new Error();
+    app.innerHTML = `<div class="card"><img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()"><h1>Listo, gracias ${esc(datos.nombre)}!</h1><p class="lead">Ya nos llegaron tus fechas. Si algo cambia, podés volver a abrir este mismo link y mandarlas de nuevo.</p></div>`;
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Enviar mis fechas';
+    err.textContent = 'No se pudo enviar. Revisá tu conexión e intentá de nuevo.';
+  }
+}
+async function iniciar(){
+  try{
+    const r = await fetch(`${FN_URL}?t=${encodeURIComponent(token)}`, { headers:{ apikey:API_KEY } });
+    if(!r.ok) throw new Error(String(r.status));
+    datos = await r.json();
+  }catch(e){
+    app.innerHTML = `<div class="card"><h1>Este link no funciona</h1><p class="lead">Puede que esté incompleto o que ya no esté activo. Escribinos por WhatsApp y te mandamos uno nuevo.</p></div>`;
+    return;
+  }
+  if(!datos.grupos.length){
+    app.innerHTML = `<div class="card"><h1>Hola ${esc(datos.nombre)}!</h1><p class="lead">Por ahora no tenés ninguna zona de afuera de Montevideo cargada, así que no hace falta que marques nada. Si vas a estar en Punta del Este u otra zona, avisanos por WhatsApp.</p></div>`;
+    return;
+  }
+  datos.grupos.forEach(g=>{ seleccion[g.id] = new Set(g.quincenas||[]); });
+  pintar();
+}
+iniciar();
+</script>
+</body>
+</html>
