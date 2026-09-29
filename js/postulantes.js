@@ -525,12 +525,44 @@ function verDetalle(i){
         <div class="field"><label>Zona (confirmar)</label><input type="text" id="hire-zona" value="${cd.zona||''}"></div>
         <div class="field"><label>Foto (URL, opcional)</label><input type="text" id="hire-foto" value="${cd.foto_url||''}" placeholder="link de Drive/Canva"></div>
       </div>
+      <div id="hire-temp-wrap"></div>
       <div class="helper">El precio por hora se define por familia en la sección "Familias".</div>
       <button class="btn primary" onclick="contratar('${cd.id}')">Pasar a Niñeras</button>
     </div>`}
     <div class="actions"><button class="btn danger" onclick="eliminarCandidata('${cd.id}')">Eliminar candidata</button></div>
   `);
   cargarCarsittingSeccion(cd.nombre, 'cg-carsitting', cd.tipo, cd.mail);
+  if(cd.estado!=='contratada') pintarContratarTemporada(cd);
+}
+/* Temporada en Punta del Este al contratar: la respuesta del formulario ya viene traducida a
+   quincenas (candidatas.temporada_quincenas, la arma candidatas-webhook). Se muestra precargada
+   para revisarla acá mismo, y al pasar a Niñeras queda guardada como su temporada -- así la
+   niñera nueva no arranca con el badge de "Sin temporada". Si marcó alguna quincena y su zona
+   no incluye Punta del Este (vive en Pocitos pero veranea allá), se le agrega sola, porque si no
+   nunca aparecería al buscar Punta del Este. */
+function grupoPuntaDelEste(){
+  const fuera = (zonaGruposCache||[]).filter(g=>g.fuera_de_montevideo);
+  return fuera.find(g=>(g.zonas||[]).some(z=>normaliza(z)==='punta del este')) || fuera[0] || null;
+}
+async function pintarContratarTemporada(cd){
+  if(!zonaGruposCache) await cargarZonaGrupos();
+  const wrap = document.getElementById('hire-temp-wrap');
+  const grupo = grupoPuntaDelEste();
+  if(!wrap || !grupo) return;
+  asegurarEstilosTemporada();
+  const qs = Array.isArray(cd.temporada_quincenas) ? cd.temporada_quincenas : null;
+  const texto = (cd.fechas_punta||'').trim();
+  let ayuda;
+  if(texto && qs!==null) ayuda = `En el formulario puso "${escaparHtmlTemp(texto)}". Ya está marcado abajo, revisalo.`;
+  else if(texto) ayuda = `En el formulario puso "${escaparHtmlTemp(texto)}", que no alcanza para saber las fechas. Marcalas si las sabés, o dejalo vacío y pedíselas después por WhatsApp desde Niñeras.`;
+  else ayuda = 'No respondió esta pregunta en el formulario. Marcalas si las sabés.';
+  wrap.innerHTML = `
+    <div class="field" style="margin-top:4px;">
+      <label>Temporada en ${grupo.nombre}</label>
+      <div class="helper" style="margin:0 0 4px;">${ayuda}</div>
+      ${htmlEditorTemporada('hire-temp', [grupo], {[grupo.id]: qs||[]})}
+      <span data-temp-guardar="hire-temp" data-venia="${qs!==null?'1':''}" style="display:none;"></span>
+    </div>`;
 }
 async function contratar(candidataId){
   const c = candidatasItems.find(x=>x.candidatas.id===candidataId);
@@ -542,6 +574,20 @@ async function contratar(candidataId){
   // Si la candidata puso cuenta bancaria en el formulario, se copia sola a la ficha de
   // niñera (ahí es donde vive de verdad, como una cuenta más dentro del array).
   if(cd.cuenta_bancaria) ninera.cuenta_bancaria = [cd.cuenta_bancaria];
+  // Temporada: se guarda si venía del formulario o si se tocó el calendario acá.
+  const marcaTemp = document.querySelector('[data-temp-guardar="hire-temp"]');
+  if(marcaTemp && (marcaTemp.dataset.venia==='1' || marcaTemp.dataset.tocado==='1')){
+    const temporada = leerEditorTemporada('hire-temp', {});
+    ninera.temporada = temporada;
+    ninera.temporada_actualizada_en = new Date().toISOString();
+    const grupoId = Object.keys(temporada)[0];
+    const marcoAlgo = grupoId && temporada[grupoId].length>0;
+    if(marcoAlgo && !gruposFueraDeZonaStr(ninera.zona).some(g=>g.id===grupoId)){
+      const grupo = (zonaGruposCache||[]).find(g=>g.id===grupoId);
+      const zonaAgregar = (grupo?.zonas||[]).find(z=>normaliza(z)==='punta del este') || grupo?.zonas?.[0];
+      if(zonaAgregar) ninera.zona = [ninera.zona, zonaAgregar].filter(z=>(z||'').trim()).join('/');
+    }
+  }
   const { error: e1 } = await sb.from('ninieras').insert(ninera);
   if(e1){ toast('No se pudo contratar: '+e1.message,'bad'); return; }
   const { error: e2 } = await sb.from('candidatas').update({ estado:'contratada' }).eq('id', candidataId);
