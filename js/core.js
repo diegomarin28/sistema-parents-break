@@ -912,12 +912,16 @@ function rangosSolapan(i1, f1, i2, f2){
   const s2 = agendaMinutos(i2), e2 = f2 ? agendaMinutos(f2) : s2+60;
   return s1 < e2 && s2 < e1;
 }
-/* Chequea contra lo ya cargado del día en Agenda (solicitudes confirmadas, fijos, registrados) — sin ir a la base. */
-function chequearDobleReservaAgenda(nineraNombre, horaInicio, horaFin, excluirId){
-  if(!horaInicio) return null;
+/* Chequea contra lo ya cargado en Agenda (solicitudes confirmadas, fijos, registrados) — sin ir a la base.
+   agendaSolicitudes tiene TODA la semana visible (desde el rediseño semanal), así que se filtra por la
+   fecha del sitting que se está registrando: sin este filtro, un fijo de otro día de la semana con
+   el mismo horario (ej. lunes/miércoles/viernes) disparaba un choque falso contra otro día. */
+function chequearDobleReservaAgenda(nineraNombre, fecha, horaInicio, horaFin, excluirId){
+  if(!horaInicio || !fecha) return null;
   const key = normaliza(nineraNombre);
   for(const s of agendaSolicitudes){
-    if(s.id===excluirId || s.estado==='cancelada') continue;
+    if(s.fecha!==fecha) continue;
+    if(s.id===excluirId || s.estado==='cancelada' || s.cancelado) continue;
     const comprometida = s.ninieras.some(n=>normaliza(n.ninera_nombre)===key && n.estado==='confirmada');
     if(!comprometida) continue;
     if(rangosSolapan(horaInicio, horaFin, s.hora_inicio, s.hora_fin)) return s;

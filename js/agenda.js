@@ -701,7 +701,7 @@ async function guardarAsignacionDirecta(solicitudId){
   const warn = document.getElementById('agenda-asignar-warn');
   if(!sel){ warn.innerHTML = '<div class="warnbox">Elegí una niñera.</div>'; return; }
   const s = agendaSolicitudes.find(x=>x.id===solicitudId);
-  const choque = chequearDobleReservaAgenda(sel.dataset.nombre, s?.hora_inicio, s?.hora_fin, solicitudId);
+  const choque = chequearDobleReservaAgenda(sel.dataset.nombre, s?.fecha, s?.hora_inicio, s?.hora_fin, solicitudId);
   if(!(await avisarSiDobleReserva(choque, sel.dataset.nombre, 'Asignar igual'))) return;
   const familia = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(s.familia_nombre));
   if(familia && s?.hora_inicio){
@@ -866,7 +866,7 @@ async function registrarSittingFijoDeHoy(id){
   const horasFrac = (mf-mi)/60;
   const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
   const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
-  const choque = chequearDobleReservaAgenda(a.ninera_nombre, horaIni, horaFin, s.id);
+  const choque = chequearDobleReservaAgenda(a.ninera_nombre, s.fecha, horaIni, horaFin, s.id);
   if(!(await avisarSiDobleReserva(choque, a.ninera_nombre, 'Registrar igual'))) return;
   if(familia){
     const choqueFamilia = await chequearFamiliaYaCubierta(familia.id, s.fecha, horaIni, horaFin, a.ninera_nombre, null);
@@ -981,7 +981,7 @@ async function confirmarReemplazoFijoHoy(id){
   const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
   const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
   const nineraSel = agendaReemplazoNineraSel && normaliza(agendaReemplazoNineraSel.nombre)===normaliza(nineraTxt) ? agendaReemplazoNineraSel : null;
-  const choque = chequearDobleReservaAgenda(nineraTxt, horaIni, horaFin, s.id);
+  const choque = chequearDobleReservaAgenda(nineraTxt, s.fecha, horaIni, horaFin, s.id);
   if(!(await avisarSiDobleReserva(choque, nineraTxt, 'Registrar igual'))) return;
   if(familia){
     const choqueFamilia = await chequearFamiliaYaCubierta(familia.id, s.fecha, horaIni, horaFin, nineraTxt, null);
@@ -1066,7 +1066,7 @@ async function confirmarNinera(solNineraId){
   let sPrevio = null, nPrevio = null;
   for(const sx of agendaSolicitudes){ const nx = sx.ninieras.find(x=>x.id===solNineraId); if(nx){ sPrevio=sx; nPrevio=nx; break; } }
   if(sPrevio && nPrevio){
-    const choque = chequearDobleReservaAgenda(nPrevio.ninera_nombre, sPrevio.hora_inicio, sPrevio.hora_fin, sPrevio.id);
+    const choque = chequearDobleReservaAgenda(nPrevio.ninera_nombre, sPrevio.fecha, sPrevio.hora_inicio, sPrevio.hora_fin, sPrevio.id);
     if(!(await avisarSiDobleReserva(choque, nPrevio.ninera_nombre, 'Confirmar igual'))) return;
   }
   if(!(await sbGuardar(sb.from('solicitud_ninieras').update({estado:'confirmada'}).eq('id', solNineraId), 'la confirmación'))) return;
