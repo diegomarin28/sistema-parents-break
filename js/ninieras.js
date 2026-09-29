@@ -194,7 +194,8 @@ function filtrarNinieras(){
   const ft = document.getElementById('filt-tipo')?.value||'';
   const qsFiltro = quincenasDeMeses(ninFiltroMeses);
   const filtraPeriodo = !!(fz && qsFiltro.length);
-  const cobertura = {}; // id -> 'todo' | 'parte' | 'desconocido' (solo con filtro de período)
+  const cobertura = {}; // id -> 'todo' | 'parte' (solo con filtro de período)
+  let sinDatoOcultas = 0;
   const filtradas = ninierasItems.filter(n => {
     const cd = n.candidatas || {};
     const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia].filter(Boolean).join(' '));
@@ -205,16 +206,18 @@ function filtrarNinieras(){
     if(!filtraPeriodo) return true;
     const c = coberturaPeriodo(n, fz, qsFiltro);
     cobertura[n.id] = c;
+    // Con un período elegido solo se muestran las que confirmaron estar ahí: las que no
+    // tienen temporada cargada se cuentan aparte (abajo del conteo) pero no se listan.
+    if(c==='desconocido'){ sinDatoOcultas++; return false; }
     return c!=='nada';
   });
   const zonaLabel = fz ? (document.getElementById('filt-zona')?.selectedOptions?.[0]?.textContent || fz) : '';
   const mesesTxt = [...ninFiltroMeses].sort((a,b)=>a-b).map(m=>TEMP_MESES_LARGO[m]).join(', ');
   const completas = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]!=='parte') : filtradas;
   const parciales = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]==='parte') : [];
-  const sinDato = filtraPeriodo ? completas.filter(n=>cobertura[n.id]==='desconocido').length : 0;
   let countMsg;
   if(filtraPeriodo){
-    countMsg = `<div class="helper" style="margin:0 0 8px;">${completas.length} en ${zonaLabel} todo ${mesesTxt}${sinDato?` (${sinDato} sin temporada cargada, se muestran igual)`:''}${parciales.length?`, ${parciales.length} solo una parte`:''}</div>`;
+    countMsg = `<div class="helper" style="margin:0 0 8px;">${completas.length} en ${zonaLabel} todo ${mesesTxt}${parciales.length?`, ${parciales.length} solo una parte`:''}.${sinDatoOcultas?(sinDatoOcultas===1?' Hay 1 más con esa zona que todavía no tiene temporada cargada: no se muestra hasta que la cargue.':` Hay ${sinDatoOcultas} más con esa zona que todavía no tienen temporada cargada: no se muestran hasta que la carguen.`):''}</div>`;
   } else {
     countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${ninierasItems.length} niñeras${ninFiltroMeses.size && !fz ? '. Elegí también una zona para filtrar por mes.' : ''}</div>`;
   }
