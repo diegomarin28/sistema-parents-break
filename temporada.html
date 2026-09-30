@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Tu temporada - Parents Break</title>
+<title>Tu temporada - Parents’ Break</title>
 <link rel="icon" href="icon-192.png">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Inter:wght@400;500;600&display=swap');
@@ -75,10 +75,10 @@ function textoQuincenas(set){
 function pintar(){
   app.innerHTML = `
     <div class="card">
-      <img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()">
-      <h1>Hola ${esc(datos.nombre)}!</h1>
+      <img class="logo" src="logo.png" alt="Parents’ Break" onerror="this.remove()">
+      <h1>¡Hola, ${esc(datos.nombre)}!</h1>
       ${datos.aviso ? `<div class="aviso">${esc(datos.aviso)}</div>` : ''}
-      <p class="lead">Marcá las quincenas en que vas a estar por la zona de afuera. Tocá el nombre del mes para marcarlo entero. Lo que dejes sin marcar lo tomamos como que estás en Montevideo.</p>
+      <p class="lead">Marca si estarás o no cada quincena en Punta del Este. Lo que dejes sin marcar lo tomamos como que estarás en Montevideo.</p>
       ${datos.grupos.map(g=>`
         <div class="grupo">${esc(g.nombre)}</div>
         <div class="atajos">
@@ -114,18 +114,18 @@ async function enviar(){
   try{
     const r = await fetch(FN_URL, { method:'POST', headers:{'Content-Type':'application/json', apikey:API_KEY}, body: JSON.stringify({ ...identidad(), temporada, comentario: guardarComentario() }) });
     if(!r.ok) throw new Error();
-    app.innerHTML = `<div class="card"><img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()"><h1>Listo, gracias ${esc(datos.nombre)}!</h1><p class="lead">Ya nos llegaron tus fechas. Si algo cambia, podés volver a abrir este mismo link y mandarlas de nuevo.</p></div>`;
+    app.innerHTML = `<div class="card"><img class="logo" src="logo.png" alt="Parents’ Break" onerror="this.remove()"><h1>¡Listo!</h1><p class="lead">Ya tenemos tus fechas. Si algo cambia, puedes abrir este link y enviarlas nuevamente.</p></div>`;
   }catch(e){
     btn.disabled = false; btn.textContent = 'Enviar mis fechas';
-    err.textContent = 'No se pudo enviar. Revisá tu conexión e intentá de nuevo.';
+    err.textContent = 'No se pudo enviar. Revisa tu conexión e intenta de nuevo.';
   }
 }
 function pedirTelefono(error){
   app.innerHTML = `
     <div class="card">
-      <img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()">
+      <img class="logo" src="logo.png" alt="Parents’ Break" onerror="this.remove()">
       <h1>Tu temporada en Punta del Este</h1>
-      <p class="lead">Queremos saber en qué fechas del año vas a estar por Punta del Este, para ofrecerte sittings allá o acá según corresponda. Primero, poné tu celular (el mismo que nos diste).</p>
+      <p class="lead">Queremos saber en qué fechas del año vas a estar por Punta del Este, para ofrecerte sittings según corresponda. Primero, escribe tu celular (el mismo que nos diste).</p>
       <input class="tel" id="tel" type="tel" inputmode="tel" autocomplete="tel" placeholder="099 123 456" value="${esc(telefono)}" onkeydown="if(event.key==='Enter') buscarTelefono()">
       <button type="button" class="enviar" id="buscar" onclick="buscarTelefono()">Seguir</button>
       <div class="error" id="error">${error||''}</div>
@@ -134,7 +134,7 @@ function pedirTelefono(error){
 async function buscarTelefono(){
   const v = (document.getElementById('tel')?.value || '').trim();
   const err = document.getElementById('error');
-  if(v.replace(/\D/g,'').length < 8){ err.textContent = 'Revisá el número, parece incompleto.'; return; }
+  if(v.replace(/\D/g,'').length < 8){ err.textContent = 'Revisa el número, parece incompleto.'; return; }
   telefono = v;
   const btn = document.getElementById('buscar');
   btn.disabled = true; btn.textContent = 'Buscando...';
@@ -145,17 +145,17 @@ async function cargarDatos(){
   let r;
   try{ r = await fetch(`${FN_URL}?${qs}`, { headers:{ apikey:API_KEY } }); }
   catch(e){
-    if(token) app.innerHTML = `<div class="card"><h1>No pudimos cargar la página</h1><p class="lead">Revisá tu conexión y volvé a abrir el link.</p></div>`;
-    else pedirTelefono('No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.');
+    if(token) app.innerHTML = `<div class="card"><h1>No pudimos cargar la página</h1><p class="lead">Revisa tu conexión y vuelve a abrir el link.</p></div>`;
+    else pedirTelefono('No pudimos conectarnos. Revisa tu conexión e intenta de nuevo.');
     return;
   }
   if(!r.ok){
-    if(token){ app.innerHTML = `<div class="card"><h1>Este link no funciona</h1><p class="lead">Puede que esté incompleto o que ya no esté activo. Escribinos por WhatsApp y te mandamos uno nuevo.</p></div>`; return; }
+    if(token){ app.innerHTML = `<div class="card"><h1>Este link no funciona</h1><p class="lead">Puede que esté incompleto o que ya no esté activo. Escríbenos por WhatsApp y te mandamos uno nuevo.</p></div>`; return; }
     const e = await r.json().catch(()=>({}));
     if(e.error==='telefono_no_encontrado'){ pedirNombre(''); return; }
     pedirTelefono(e.error==='telefono_repetido'
-      ? 'Ese número aparece en más de una ficha. Escribinos por WhatsApp y lo arreglamos.'
-      : 'Revisá el número, parece incompleto.');
+      ? 'Ese número aparece en más de una ficha. Escríbenos por WhatsApp y lo arreglamos.'
+      : 'Revisa el número, parece incompleto.');
     return;
   }
   datos = await r.json();
@@ -163,19 +163,18 @@ async function cargarDatos(){
 }
 // Su celular no está en el sistema (o tenemos otro): se identifica con nombre y apellido.
 const ERRORES_NOMBRE = {
-  falta_apellido: 'Poné tu nombre y tu apellido.',
-  nombre_no_encontrado: 'No encontramos ese nombre entre las niñeras de Parents Break. Escribilo como nos lo diste, o escribinos por WhatsApp.',
-  nombre_ambiguo: 'Hay más de una niñera con ese nombre. Poné tu nombre completo, con los dos apellidos si tenés.',
-  telefono_de_otra: 'Ese celular ya está cargado a nombre de otra niñera. Revisá el número o escribinos por WhatsApp.',
-  telefono_invalido: 'Revisá el número, parece incompleto.',
+  falta_apellido: 'Escribe tu nombre y tu apellido.',
+  nombre_no_encontrado: 'No encontramos ese nombre entre las niñeras de Parents’ Break. Escríbelo como nos lo diste, o escríbenos por WhatsApp.',
+  nombre_ambiguo: 'Hay más de una niñera con ese nombre. Escribe tu nombre completo, con los dos apellidos si tienes.',
+  telefono_de_otra: 'Ese celular ya está cargado a nombre de otra niñera. Revisa el número o escríbenos por WhatsApp.',
+  telefono_invalido: 'Revisa el número, parece incompleto.',
 };
 let nombreEscrito = '';
 function pedirNombre(error){
   app.innerHTML = `
     <div class="card">
-      <img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()">
-      <h1>No encontramos tu celular</h1>
-      <p class="lead">No tenemos el <b>${esc(telefono)}</b> cargado. Decinos tu nombre y apellido y te buscamos por ahí.</p>
+      <img class="logo" src="logo.png" alt="Parents’ Break" onerror="this.remove()">
+      <h1>Poner Nombre y Apellido</h1>
       <input class="nombre" id="nombre" type="text" autocomplete="name" placeholder="Nombre y apellido" value="${esc(nombreEscrito)}" onkeydown="if(event.key==='Enter') buscarNombre()">
       <button type="button" class="enviar" id="buscar" onclick="buscarNombre()">Seguir</button>
       <button type="button" class="secundario" onclick="pedirTelefono('')">Cambiar el celular</button>
@@ -196,16 +195,16 @@ async function buscarNombre(){
   btn.disabled = true; btn.textContent = 'Buscando...';
   let j;
   try{ j = await postNombre('buscar_nombre'); }
-  catch(e){ pedirNombre('No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.'); return; }
+  catch(e){ pedirNombre('No pudimos conectarnos. Revisa tu conexión e intenta de nuevo.'); return; }
   if(j.estado==='tiene_otro'){ preguntarCambio(j); return; }
   if(j.t){ entrarConToken(j); return; }
-  pedirNombre(ERRORES_NOMBRE[j.error] || 'Algo salió mal. Intentá de nuevo en un rato.');
+  pedirNombre(ERRORES_NOMBRE[j.error] || 'Algo salió mal. Intenta de nuevo en un rato.');
 }
 function preguntarCambio(j){
   app.innerHTML = `
     <div class="card">
-      <img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()">
-      <h1>Hola ${esc(j.nombre)}!</h1>
+      <img class="logo" src="logo.png" alt="Parents’ Break" onerror="this.remove()">
+      <h1>¡Hola, ${esc(j.nombre)}!</h1>
       <p class="lead">Tenemos cargado otro celular tuyo, que termina en <b>${esc(j.termina)}</b>. ¿El <b>${esc(telefono)}</b> es tu número nuevo?</p>
       <button type="button" class="enviar" id="si" onclick="confirmarCambio()">Sí, es mi número nuevo</button>
       <button type="button" class="secundario" onclick="pedirTelefono('')">No, pruebo con el otro</button>
@@ -219,13 +218,12 @@ async function confirmarCambio(){
   try{ j = await postNombre('confirmar_cambio'); }catch(e){ j = {}; }
   if(j.t){ entrarConToken(j); return; }
   btn.disabled = false; btn.textContent = 'Sí, es mi número nuevo';
-  document.getElementById('error').textContent = ERRORES_NOMBRE[j.error] || 'No se pudo guardar. Intentá de nuevo.';
+  document.getElementById('error').textContent = ERRORES_NOMBRE[j.error] || 'No se pudo guardar. Intenta de nuevo.';
 }
 // Ya la identificamos: de acá en más se usa su link personal.
 function entrarConToken(j){
   token = j.t;
   datos = j;
-  if(j.estado==='celular_guardado') datos.aviso = 'Listo, guardamos tu celular. La próxima vez te va a reconocer directo.';
   if(j.estado==='cambio_pedido') datos.aviso = 'Anotamos tu número nuevo. Pau o Delfi lo van a confirmar.';
   mostrarFormulario();
 }
@@ -235,7 +233,7 @@ async function iniciar(){
 }
 function mostrarFormulario(){
   if(!datos.grupos.length){
-    app.innerHTML = `<div class="card"><h1>Hola ${esc(datos.nombre)}!</h1><p class="lead">Por ahora no tenés ninguna zona de afuera de Montevideo cargada, así que no hace falta que marques nada. Si vas a estar en Punta del Este u otra zona, avisanos por WhatsApp.</p></div>`;
+    app.innerHTML = `<div class="card"><h1>¡Hola, ${esc(datos.nombre)}!</h1><p class="lead">Por ahora no tienes ninguna zona de afuera de Montevideo cargada, así que no hace falta que marques nada. Si vas a estar en Punta del Este u otra zona, avísanos por WhatsApp.</p></div>`;
     return;
   }
   datos.grupos.forEach(g=>{ seleccion[g.id] = new Set(g.quincenas||[]); });

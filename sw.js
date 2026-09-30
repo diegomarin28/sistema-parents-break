@@ -12,7 +12,7 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
-  const titulo = data.titulo || 'Parents Break';
+  const titulo = data.titulo || 'Parents’ Break';
   const opciones = {
     body: data.mensaje || '',
     icon: 'icon-192.png',
