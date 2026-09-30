@@ -391,6 +391,7 @@ const TIPOS_NOTIF = [
   {tipo:'sin_registrar', label:'Sitting sin registrar', sub:'Ya pasó y falta cargarlo en el sistema', icono:'sittings', defaultPush:false},
   {tipo:'cv_desactualizado', label:'CV de niñera desactualizado', sub:'Cumplió años después de generarlo', icono:'ninieras', defaultPush:true},
   {tipo:'extracto', label:'Falta subir extracto Itaú', sub:'Hace más de 15 días que no se sube uno nuevo', icono:'finanzas', defaultPush:true},
+  {tipo:'temporada', label:'Pedir la temporada de Punta', sub:'Cada 1 de octubre, con el mensaje listo para mandar', icono:'ninieras', defaultPush:true},
 ];
 
 async function cargarNotificaciones(){
@@ -478,6 +479,20 @@ async function cargarNotificaciones(){
     }
   }catch(e){}
 
+  // Recordatorio anual: desde el 1 de octubre, pedirles a las niñeras la temporada de Punta.
+  // Un id por año: queda en la campanita hasta que cada una lo descarta o lo abre.
+  const hoyD = new Date(hoyStr+'T12:00:00');
+  if(hoyD.getMonth() >= 9){
+    items.push({
+      id: 'temporada:'+hoyD.getFullYear(),
+      tipo: 'temporada',
+      titulo: 'Pedir la temporada de Punta',
+      mensaje: 'Mandales a las niñeras el link para que carguen en qué fechas van a estar en Punta del Este.',
+      destino: 'ninieras',
+      accion: 'temporada',
+    });
+  }
+
   notifItems = items;
   await cargarNotifLeidas();
   renderNotifBell();
@@ -549,6 +564,9 @@ async function irANotificacion(id){
   await setModulo(item.destino);
   if(item.abrirId && item.destino==='ninieras' && typeof verNinera==='function'){
     verNinera(item.abrirId);
+  }
+  if(item.accion==='temporada' && typeof abrirRecordatorioTemporada==='function'){
+    abrirRecordatorioTemporada();
   }
 }
 

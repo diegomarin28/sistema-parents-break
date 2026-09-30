@@ -1059,16 +1059,33 @@ async function repetirTemporadaAnterior(id, despues){
   if(typeof despues==='function') despues();
 }
 /* Mensaje único para mandar por difusión de WhatsApp: el link general pide el celular, así
-   que sirve el mismo para todas. Borrador de texto, a revisar por Pau/Delfi. */
+   que sirve el mismo para todas. Texto escrito por Pau (30/09/2026). */
+// La página de temporada vive en Cloudflare Pages (parentsbreak.pages.dev) para que las
+// niñeras no vean la dirección de GitHub.
+const TEMPORADA_URL = 'https://parentsbreak.pages.dev/temporada';
 function linkTemporadaGeneral(){
-  return location.origin + location.pathname.replace(/[^/]*$/, '') + 'temporada.html';
+  return TEMPORADA_URL;
 }
 function mensajeDifusionTemporada(){
-  return `Hola! Te escribimos de Parents’ Break. Estamos armando la temporada de verano y queremos saber en qué fechas vas a estar en Punta del Este, así te ofrecemos sittings allá o acá según corresponda.\n\nEntrá a este link, poné tu celular y marcá las quincenas (si no vas, también avisanos ahí). Es un minuto:\n\n${linkTemporadaGeneral()}\n\nGracias!`;
+  return `¡Hola! Les dejamos este formulario para que puedan establecer las fechas en las que estarán disponibles para trabajar en Punta del Este.\n\n${linkTemporadaGeneral()}\n\nGracias☺️`;
 }
 async function copiarMensajeDifusionTemporada(){
   try{ await navigator.clipboard.writeText(mensajeDifusionTemporada()); toast('Mensaje copiado. Pegalo en la lista de difusión de WhatsApp.'); }
   catch(e){ abrirModal(`<h2 style="margin:0 0 8px;">Mensaje para difusión</h2><div class="helper">Copialo y pegalo en la lista de difusión.</div><textarea style="width:100%;min-height:180px;">${escaparHtmlTemp(mensajeDifusionTemporada())}</textarea>`); }
+}
+/* Recordatorio anual (campanita, cada 1 de octubre): el mensaje listo para mandar por
+   difusión, con el link. WhatsApp no deja abrir una lista de difusión directo desde un link,
+   así que "Enviar por WhatsApp" abre WhatsApp con el texto y ahí se elige la lista. */
+function abrirRecordatorioTemporada(){
+  const faltan = (ninierasItems||[]).filter(n=>estadoTemporada(n)!=='ok').length;
+  abrirModal(`
+    <h2 style="margin:0 0 6px;padding-right:44px;">Pedir la temporada de Punta</h2>
+    <div class="helper" style="margin:0 0 12px;">Mandales este mensaje a las niñeras por la lista de difusión. Lo que carguen se guarda solo en su ficha.${faltan?` Hoy hay ${faltan} sin temporada al día.`:''}</div>
+    <div style="background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;white-space:pre-wrap;font-size:14px;line-height:1.5;">${escaparHtmlTemp(mensajeDifusionTemporada())}</div>
+    <div class="confirmbtns" style="margin-top:16px;">
+      <a class="btn ghost" style="text-decoration:none;text-align:center;" href="https://wa.me/?text=${encodeURIComponent(mensajeDifusionTemporada())}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+      <button class="btn primary" onclick="copiarMensajeDifusionTemporada()">Copiar mensaje</button>
+    </div>`);
 }
 /* Paso previo al abrir "Editar" de una niñera sin temporada: se pide primero, con la opción
    de omitirlo por ahora (no se vuelve a pedir en esta sesión). */
@@ -1115,8 +1132,7 @@ function refrescarTrasTemporada(){
    poner su número). Lo que manda se guarda directo como su temporada (función
    temporada-ninera). Borrador de texto, a revisar por Pau/Delfi. */
 function linkTemporadaNinera(n){
-  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
-  return `${base}temporada.html?t=${n.temporada_token}`;
+  return `${TEMPORADA_URL}?t=${n.temporada_token}`;
 }
 function mensajeTemporadaPara(n){
   const primerNombre = (n.nombre||'').trim().split(' ')[0] || n.nombre;
