@@ -32,6 +32,9 @@ textarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:1
 .enviar[disabled]{opacity:.6;cursor:default;}
 .error{color:var(--bad);font-size:13.5px;margin-top:10px;}
 .card{background:var(--paper);border-radius:14px;padding:22px 18px;box-shadow:0 1px 4px rgba(49,47,69,.06);}
+input.nombre{width:100%;border:1px solid var(--line);border-radius:10px;padding:13px 12px;font:16px 'Inter',sans-serif;color:var(--ink);margin-top:8px;}
+.aviso{background:var(--accent-soft);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5;margin:0 0 14px;}
+.secundario{width:100%;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:12px;padding:13px;font:500 14.5px 'Inter',sans-serif;margin-top:10px;cursor:pointer;}
 input.tel{width:100%;border:1px solid var(--line);border-radius:10px;padding:13px 12px;font:16px 'Inter',sans-serif;color:var(--ink);}
 </style>
 </head>
@@ -41,9 +44,9 @@ input.tel{width:100%;border:1px solid var(--line);border-radius:10px;padding:13p
 const FN_URL = 'https://wvewzamdohrpfhpccvcz.supabase.co/functions/v1/temporada-ninera';
 const API_KEY = 'sb_publishable_NX4E4FfAkwFQSFo4Rgl0Jg_IcebuaaI';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
-// Dos formas de entrar: link personal (?t=...) o el link general de difusión, donde se
-// identifica con su celular (el que tiene cargado en su ficha).
-const token = new URLSearchParams(location.search).get('t') || '';
+// Tres formas de entrar: link personal (?t=...), el link general de difusión donde se
+// identifica con su celular, y si su celular no está cargado, con nombre y apellido.
+let token = new URLSearchParams(location.search).get('t') || '';
 let telefono = '';
 function identidad(){ return token ? { t: token } : { tel: telefono }; }
 const app = document.getElementById('app');
@@ -74,6 +77,7 @@ function pintar(){
     <div class="card">
       <img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()">
       <h1>Hola ${esc(datos.nombre)}!</h1>
+      ${datos.aviso ? `<div class="aviso">${esc(datos.aviso)}</div>` : ''}
       <p class="lead">Marcá las quincenas en que vas a estar por la zona de afuera. Tocá el nombre del mes para marcarlo entero. Lo que dejes sin marcar lo tomamos como que estás en Montevideo.</p>
       ${datos.grupos.map(g=>`
         <div class="grupo">${esc(g.nombre)}</div>
@@ -147,10 +151,82 @@ async function cargarDatos(){
   }
   if(!r.ok){
     if(token){ app.innerHTML = `<div class="card"><h1>Este link no funciona</h1><p class="lead">Puede que esté incompleto o que ya no esté activo. Escribinos por WhatsApp y te mandamos uno nuevo.</p></div>`; return; }
-    pedirTelefono('No encontramos ese número entre las niñeras de Parents Break. Probá con el celular que nos diste, o escribinos por WhatsApp.');
+    const e = await r.json().catch(()=>({}));
+    if(e.error==='telefono_no_encontrado'){ pedirNombre(''); return; }
+    pedirTelefono(e.error==='telefono_repetido'
+      ? 'Ese número aparece en más de una ficha. Escribinos por WhatsApp y lo arreglamos.'
+      : 'Revisá el número, parece incompleto.');
     return;
   }
   datos = await r.json();
+  mostrarFormulario();
+}
+// Su celular no está en el sistema (o tenemos otro): se identifica con nombre y apellido.
+const ERRORES_NOMBRE = {
+  falta_apellido: 'Poné tu nombre y tu apellido.',
+  nombre_no_encontrado: 'No encontramos ese nombre entre las niñeras de Parents Break. Escribilo como nos lo diste, o escribinos por WhatsApp.',
+  nombre_ambiguo: 'Hay más de una niñera con ese nombre. Poné tu nombre completo, con los dos apellidos si tenés.',
+  telefono_de_otra: 'Ese celular ya está cargado a nombre de otra niñera. Revisá el número o escribinos por WhatsApp.',
+  telefono_invalido: 'Revisá el número, parece incompleto.',
+};
+let nombreEscrito = '';
+function pedirNombre(error){
+  app.innerHTML = `
+    <div class="card">
+      <img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()">
+      <h1>No encontramos tu celular</h1>
+      <p class="lead">No tenemos el <b>${esc(telefono)}</b> cargado. Decinos tu nombre y apellido y te buscamos por ahí.</p>
+      <input class="nombre" id="nombre" type="text" autocomplete="name" placeholder="Nombre y apellido" value="${esc(nombreEscrito)}" onkeydown="if(event.key==='Enter') buscarNombre()">
+      <button type="button" class="enviar" id="buscar" onclick="buscarNombre()">Seguir</button>
+      <button type="button" class="secundario" onclick="pedirTelefono('')">Cambiar el celular</button>
+      <div class="error" id="error">${error||''}</div>
+    </div>`;
+  document.getElementById('nombre').focus();
+}
+async function postNombre(accion){
+  const r = await fetch(FN_URL, { method:'POST', headers:{'Content-Type':'application/json', apikey:API_KEY}, body: JSON.stringify({ accion, nombre: nombreEscrito, tel: telefono }) });
+  return r.json().catch(()=>({ error:'error_interno' }));
+}
+async function buscarNombre(){
+  const v = (document.getElementById('nombre')?.value || '').trim();
+  const err = document.getElementById('error');
+  if(v.split(/\s+/).filter(w=>w.length>=2).length < 2){ err.textContent = ERRORES_NOMBRE.falta_apellido; return; }
+  nombreEscrito = v;
+  const btn = document.getElementById('buscar');
+  btn.disabled = true; btn.textContent = 'Buscando...';
+  let j;
+  try{ j = await postNombre('buscar_nombre'); }
+  catch(e){ pedirNombre('No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.'); return; }
+  if(j.estado==='tiene_otro'){ preguntarCambio(j); return; }
+  if(j.t){ entrarConToken(j); return; }
+  pedirNombre(ERRORES_NOMBRE[j.error] || 'Algo salió mal. Intentá de nuevo en un rato.');
+}
+function preguntarCambio(j){
+  app.innerHTML = `
+    <div class="card">
+      <img class="logo" src="logo.png" alt="Parents Break" onerror="this.remove()">
+      <h1>Hola ${esc(j.nombre)}!</h1>
+      <p class="lead">Tenemos cargado otro celular tuyo, que termina en <b>${esc(j.termina)}</b>. ¿El <b>${esc(telefono)}</b> es tu número nuevo?</p>
+      <button type="button" class="enviar" id="si" onclick="confirmarCambio()">Sí, es mi número nuevo</button>
+      <button type="button" class="secundario" onclick="pedirTelefono('')">No, pruebo con el otro</button>
+      <div class="error" id="error"></div>
+    </div>`;
+}
+async function confirmarCambio(){
+  const btn = document.getElementById('si');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  let j;
+  try{ j = await postNombre('confirmar_cambio'); }catch(e){ j = {}; }
+  if(j.t){ entrarConToken(j); return; }
+  btn.disabled = false; btn.textContent = 'Sí, es mi número nuevo';
+  document.getElementById('error').textContent = ERRORES_NOMBRE[j.error] || 'No se pudo guardar. Intentá de nuevo.';
+}
+// Ya la identificamos: de acá en más se usa su link personal.
+function entrarConToken(j){
+  token = j.t;
+  datos = j;
+  if(j.estado==='celular_guardado') datos.aviso = 'Listo, guardamos tu celular. La próxima vez te va a reconocer directo.';
+  if(j.estado==='cambio_pedido') datos.aviso = 'Anotamos tu número nuevo. Pau o Delfi lo van a confirmar.';
   mostrarFormulario();
 }
 async function iniciar(){
