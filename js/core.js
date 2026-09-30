@@ -100,6 +100,36 @@ function zonasNormalizadas(zonaStr){
   return [...[...conocidas.values()].sort((a,b)=>orden.indexOf(a.id)-orden.indexOf(b.id)).map(g=>g.nombre), ...desconocidas.values()];
 }
 function textoZonas(zonaStr){ return zonasNormalizadas(zonaStr).join('/'); }
+// Barrio exacto que marcó (ninieras.barrios, candidatas.zona_barrios/zona_sitting_barrios):
+// solo informativo, todo se busca por zona. Se agrupa por zona y se muestra únicamente para
+// las zonas que tiene hoy ("Punta del Este (José Ignacio, La Barra) · Carrasco (Olivos)").
+// El barrio que se llama igual que su zona no agrega nada y no se repite.
+function barriosPorZona(zonaStr, barriosStr){
+  const res = zonasNormalizadas(zonaStr).map(z=>({zona:z, barrios:[]}));
+  zonasDe(barriosStr).forEach(b=>{
+    const g = grupoDeZona(b);
+    if(!g || claveZona(b)===claveZona(g.nombre)) return;
+    const item = res.find(r=>claveZona(r.zona)===claveZona(g.nombre));
+    if(item && !item.barrios.some(x=>claveZona(x)===claveZona(b))) item.barrios.push(b.trim());
+  });
+  return res;
+}
+function textoZonasConBarrios(zonaStr, barriosStr){
+  return barriosPorZona(zonaStr, barriosStr).map(r=>r.barrios.length ? `${r.zona} (${r.barrios.join(', ')})` : r.zona).join(' · ');
+}
+// Une varios textos de barrios sin repetir (ej. dónde vive + dónde puede hacer sitting).
+// Línea chica "Marcó: Carrasco (Olivos) · ..." para mostrar debajo de un selector de zonas.
+// Vacía si no hay ningún barrio más específico que la zona.
+function htmlBarriosMarcados(zonaStr, barriosStr, prefijo='Barrios que marcó'){
+  const grupos = barriosPorZona(zonaStr, barriosStr).filter(r=>r.barrios.length);
+  if(!grupos.length) return '';
+  return `<div class="helper" style="margin:-6px 0 12px;">${prefijo}: ${grupos.map(r=>`${r.zona} (${r.barrios.join(', ')})`).join(' · ')}</div>`;
+}
+function unirBarrios(...textos){
+  const m = new Map();
+  textos.forEach(t=>zonasDe(t).forEach(b=>{ const k = claveZona(b); if(k && !m.has(k)) m.set(k, b.trim()); }));
+  return [...m.values()].join('/') || null;
+}
 // ¿Comparten alguna zona?
 function mismoGrupoZona(zonaA, zonaB){
   if(!zonaA || !zonaB) return false;

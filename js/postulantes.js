@@ -166,7 +166,7 @@ async function loadIntake(){
       <div class="av" ${c.foto_url && c.autoriza_foto!==false?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${c.foto_url}', 'Foto de ${c.nombre}')"`:''}>${c.foto_url?`<img loading="lazy" decoding="async" src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.textContent='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${c.nombre} ${c.apellido||''}</div>
-        <div class="meta">${c.zona||'zona s/d'} · ${textoEdadCandidata(c)}${c.origen?' · '+c.origen:''}</div>
+        <div class="meta">${textoZonasConBarrios(c.zona, c.zona_barrios)||'zona s/d'} · ${textoEdadCandidata(c)}${c.origen?' · '+c.origen:''}</div>
       </div>
       <div class="badge-slot">
         <span class="badge brand" style="font-size:10px;padding:2px 8px;">${c.tipo||'Niñera'}</span>
@@ -236,7 +236,7 @@ function renderFichaOrigen(){
     </div>`).join('');
   box.innerHTML = `<div class="card card-collapsible">${cardHeaderConColapso('Ficha del formulario')}<div class="card-body">
     <div class="helper">Se puede editar directo — arranca con lo que ella puso en el form.</div>
-    <div class="fichadl">${checklistZonas('ent-zonasitting', c.zona_sitting, 'Zona en la que puede hacer sitting')}${filasTexto}</div>
+    <div class="fichadl">${checklistZonas('ent-zonasitting', c.zona_sitting, 'Zona en la que puede hacer sitting')}${htmlBarriosMarcados(c.zona_sitting, c.zona_sitting_barrios, 'En el formulario marcó')}${filasTexto}</div>
   </div></div>`;
 }
 
@@ -477,7 +477,7 @@ async function cargarGuardadas(){
   cont.innerHTML = candidatasItems.map((c,i)=>{
     const cd = c.candidatas;
     return `<button type="button" class="item" onclick="verDetalle(${i})">
-      <div><div class="name">${cd.nombre} ${cd.estado==='contratada'?'✓':''}</div><div class="meta">${c.fecha||'sin fecha'} · ${cd.zona||'zona s/d'} · ${c.rol||'rol s/d'}</div></div>
+      <div><div class="name">${cd.nombre} ${cd.estado==='contratada'?'✓':''}</div><div class="meta">${c.fecha||'sin fecha'} · ${textoZonasConBarrios(cd.zona, cd.zona_barrios)||'zona s/d'} · ${c.rol||'rol s/d'}</div></div>
       <div class="sc"><div class="n">${Number(c.total).toFixed(1)} / 5</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${cd.estado==='contratada'?'Contratada':c.recomendacion}</span></div>
     </button>`;
   }).join('');
@@ -493,11 +493,11 @@ function verDetalle(i){
   const refsHtml = refs.length ? refs.map(r=>`<div class="q">${r.name||'(sin nombre)'} · ${r.phone||'sin tel'} · ${r.relacion||'—'} ${r.confirmado?'· ✓ confirmada':''}</div>`).join('') : '<div class="helper">Sin referencias.</div>';
   const psicoHtml = c.psico ? PSICO_IMGS.map(img=>`<div class="q"><b>${img.id}:</b> ${c.psico[img.id]||'(sin respuesta anotada)'}</div>`).join('') : '';
   const notasCd = cd.notas_ficha || {};
-  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]||notasCd[f.key]).map(f=>`<div><b>${f.label}</b>${notasCd[f.key]!==undefined ? notasCd[f.key] : (cd[f.key]||'')}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
+  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]||notasCd[f.key]).map(f=>`<div><b>${f.label}</b>${notasCd[f.key]!==undefined ? notasCd[f.key] : (f.key==='zona_sitting' ? textoZonasConBarrios(cd.zona_sitting, cd.zona_sitting_barrios) : (cd[f.key]||''))}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
   abrirModal(`
     <div class="card resultcard">
       <div class="gauge" style="background:conic-gradient(${c.recomendacion==='Recomendada'?'var(--good)':c.recomendacion==='No recomendada'?'var(--bad)':'var(--warn)'} ${c.total/5*100}%, var(--line) 0);"><div class="inner"><div class="num">${Number(c.total).toFixed(1)}</div><div class="max">/ 5</div></div></div>
-      <div><h2 style="font-size:20px;">${cd.nombre}</h2><div class="helper" style="margin:4px 0;">${c.fecha||''} · ${cd.zona||''} · ${c.rol||''} · tel ${cd.telefono||'—'}</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${c.recomendacion}</span></div>
+      <div><h2 style="font-size:20px;">${cd.nombre}</h2><div class="helper" style="margin:4px 0;">${c.fecha||''} · ${textoZonasConBarrios(cd.zona, cd.zona_barrios)} · ${c.rol||''} · tel ${cd.telefono||'—'}</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${c.recomendacion}</span></div>
     </div>
     ${fichaHtml}
     <div id="cg-carsitting"></div>
@@ -514,6 +514,7 @@ function verDetalle(i){
         <div class="field"><label>Foto (URL, opcional)</label><input type="text" id="hire-foto" value="${cd.foto_url||''}" placeholder="link de Drive/Canva"></div>
       </div>
       ${checklistZonas('hire', [cd.zona, cd.zona_sitting].filter(Boolean).join('/'), 'Zonas donde trabaja (confirmar: viene marcado dónde vive y dónde dijo que puede)')}
+      ${htmlBarriosMarcados([cd.zona, cd.zona_sitting].filter(Boolean).join('/'), unirBarrios(cd.zona_barrios, cd.zona_sitting_barrios), 'En el formulario marcó')}
       <div id="hire-temp-wrap"></div>
       <div class="helper">El precio por hora se define por familia en la sección "Familias".</div>
       <button class="btn primary" onclick="contratar('${cd.id}')">Pasar a Niñeras</button>
@@ -563,6 +564,10 @@ async function contratar(candidataId){
   // Si la candidata puso cuenta bancaria en el formulario, se copia sola a la ficha de
   // niñera (ahí es donde vive de verdad, como una cuenta más dentro del array).
   if(cd.cuenta_bancaria) ninera.cuenta_bancaria = [cd.cuenta_bancaria];
+  // Barrios exactos que marcó en el formulario (dónde vive + dónde puede): quedan en su ficha
+  // para ver el detalle ("Punta del Este (José Ignacio)"); se busca y filtra igual por zona.
+  const barriosForm = unirBarrios(cd.zona_barrios, cd.zona_sitting_barrios);
+  if(barriosForm) ninera.barrios = barriosForm;
   // Temporada: se guarda si venía del formulario o si se tocó el calendario acá.
   const marcaTemp = document.querySelector('[data-temp-guardar="hire-temp"]');
   if(marcaTemp && (marcaTemp.dataset.venia==='1' || marcaTemp.dataset.tocado==='1')){

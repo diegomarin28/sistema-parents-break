@@ -34,7 +34,7 @@ function renderNinieras(body){
       <div class="field" style="margin:0;"><label>Buscar (nombre, universidad, idioma...)</label><input type="text" id="filt-nombre" autocomplete="off" placeholder="Escribí para filtrar..." oninput="filtrarNinieras()"></div>
       <div class="field" style="margin:0;"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
     </div>
-    <div class="field" style="margin:12px 0 0;"><label>Zonas (podés marcar varias)</label><div id="filt-zonas-wrap">${htmlFiltroZonas(ninFiltroZonas, 'toggleFiltroZonaNin')}</div></div>
+    <div class="field" style="margin:12px 0 0;"><label>Zonas</label><div id="filt-zonas-wrap">${htmlFiltroZonas(ninFiltroZonas, 'toggleFiltroZonaNin')}</div></div>
     <div class="field" style="margin:12px 0 0;"><label>Cuándo (junto con una zona: quiénes están ahí esos meses)</label><div id="filt-meses-wrap">${htmlFiltroMeses()}</div></div>
     </div>
     <div id="ninierasgrid"></div>
@@ -194,7 +194,7 @@ function filtrarNinieras(){
   let sinDatoOcultas = 0;
   const filtradas = ninierasItems.filter(n => {
     const cd = n.candidatas || {};
-    const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia].filter(Boolean).join(' '));
+    const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia, n.barrios].filter(Boolean).join(' '));
     const matchTexto = !fn || blob.includes(fn);
     const matchZona = coincideFiltroZonas(n.zona, ninFiltroZonas);
     const matchTipo = !ft || (n.tipo||'Niñera')===ft;
@@ -228,7 +228,7 @@ function filtrarNinieras(){
       <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')"`:''}>${n.foto?`<img loading="lazy" decoding="async" src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
         <div class="name">${n.nombre}${cvEstaDesactualizado(n) ? ` <span style="color:var(--warn);font-weight:600;font-size:12px;">· Actualizar CV</span>` : ''}</div>
-        <div class="meta">${n.zona||'zona s/d'}${(() => { const e = calcularEdad(n.candidatas?.fecha_nacimiento); return e!==null ? ' · '+e+' años' : (n.candidatas?.edad ? ' · '+n.candidatas.edad : ''); })()}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
+        <div class="meta">${textoZonasConBarrios(n.zona, n.barrios)||'zona s/d'}${(() => { const e = calcularEdad(n.candidatas?.fecha_nacimiento); return e!==null ? ' · '+e+' años' : (n.candidatas?.edad ? ' · '+n.candidatas.edad : ''); })()}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
         ${mostrarTira ? htmlMiniTemporada(n, qsFiltro) : ''}
       </div>
       <div class="badge-slot">
@@ -313,7 +313,7 @@ async function verNinera(id){
       <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({ninera_id:n.id, ninera_nombre:n.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
     </div>
     ${cvDesactualizado ? `<div class="warnbox" style="margin-bottom:10px;">Cumplió años desde que se generó el CV — convendría rehacerlo.</div>` : ''}
-    <div class="fichadl">${edadRow}${rows||(edadRow?'':'<div>Sin más datos.</div>')}<div><b>Zona</b>${n.zona||'—'}</div><div><b>Teléfono</b>${n.telefono||'—'}</div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${textoCuentasBancarias(n.cuenta_bancaria)}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+    <div class="fichadl">${edadRow}${rows||(edadRow?'':'<div>Sin más datos.</div>')}<div><b>Zona</b>${textoZonasConBarrios(n.zona, n.barrios)||'—'}</div><div><b>Teléfono</b>${n.telefono||'—'}</div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${textoCuentasBancarias(n.cuenta_bancaria)}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
     <div id="vn-carsitting"></div>
     <div id="vn-juguetes"></div>
     <div id="vn-incidentes" style="margin-top:18px;"></div>
@@ -415,6 +415,7 @@ function editarNinera(id){
     </div>
     ${htmlCuentasBancarias('ed', n.cuenta_bancaria)}
     ${checklistZonas('ed', n.zona)}
+    ${htmlBarriosMarcados(n.zona, n.barrios)}
     ${gruposParaEditor(n).length ? `
     <div class="field">
       <label>Temporada de verano</label>
@@ -967,7 +968,7 @@ function filaTemporadaPanel(n){
       <div class="temp-row-head">
         <div>
           <div style="font-weight:600;">${n.nombre}</div>
-          <div class="helper" style="margin:0;">${n.zona||'zona s/d'}</div>
+          <div class="helper" style="margin:0;">${textoZonasConBarrios(n.zona, n.barrios)||'zona s/d'}</div>
           <div class="helper" style="margin:2px 0 0;color:${est!=='ok'?'var(--warn)':'var(--ink-soft)'};">${estadoTxt}</div>
           ${n.temporada_comentario ? `<div class="helper" style="margin:2px 0 0;">Comentario: ${escaparHtmlTemp(n.temporada_comentario)}</div>` : ''}
         </div>
