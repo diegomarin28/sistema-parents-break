@@ -125,8 +125,8 @@ function abrirModalNuevaCandidata(){
     <div class="grid3">
       <div class="field"><label>Nombre</label><input type="text" id="in-nombre"></div>
       <div class="field"><label>Teléfono</label><input type="tel" id="in-tel"></div>
-      <div class="field"><label>Zona</label><input type="text" id="in-zona"></div>
     </div>
+    ${checklistZonas('in', '', 'Zona')}
     <div class="grid3">
       <div class="field"><label>Edad</label><input type="text" id="in-edad"></div>
       <div class="field"><label>Cómo llegó</label><select id="in-origen"><option>Instagram / Form</option><option>Recomendada</option><option>Otro</option></select></div>
@@ -142,7 +142,7 @@ async function addIntake(){
   const nombre = document.getElementById('in-nombre').value.trim();
   if(!nombre){ toast('Falta el nombre.','bad'); return; }
   if(!(await confirmarNombreNuevo(nombre, [...intakeItems, ...candidatasItems], 'niñera'))) return;
-  const item = { nombre, telefono:document.getElementById('in-tel').value, zona:document.getElementById('in-zona').value,
+  const item = { nombre, telefono:document.getElementById('in-tel').value, zona:leerZonasChecklist('in'),
     edad:document.getElementById('in-edad').value, origen:document.getElementById('in-origen').value, experiencia:document.getElementById('in-exp').value,
     tipo:document.getElementById('in-tipo').value, estado:'intake' };
   const { error } = await sb.from('candidatas').insert(item);
@@ -198,7 +198,7 @@ async function agendarDesdeIntake(i){
   await renderModulo(); // espera a que el form de entrevista ya esté armado (preguntas + zonas cargadas)
   document.getElementById('f-nombre').value = (c.nombre||'') + (c.apellido? ' '+c.apellido:'');
   document.getElementById('f-telefono').value = c.telefono||'';
-  document.getElementById('f-zona').value = c.zona||'';
+  setZonasChecklist('f', c.zona||'', 'Zona');
   document.getElementById('f-origen').value = c.origen||'';
   document.getElementById('f-exp-previa').value = c.experiencia||'';
   document.getElementById('f-fecha-nac').value = c.fecha_nacimiento||'';
@@ -244,18 +244,7 @@ function renderFichaOrigen(){
 let entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null };
 async function renderEntrevista(body){
   if(!entrevistaPreguntasCache) await cargarEntrevistaPreguntas();
-  if(!zonaGruposCache) cargarZonaGrupos(); // para el checklist de "zona en la que puede hacer sitting" de más abajo
-  // ninierasItems/familiasItems alimentan obtenerTodasLasZonas() (usado por el checklist) pero
-  // solo se llenan al visitar Niñeras/Familias -- si nunca se entró ahí en esta sesión, el
-  // checklist aparecía vacío aunque sí hubiera zonas cargadas en el sistema.
-  if(!ninierasItems.length || !familiasItems.length){
-    const [{data:n}, {data:f}] = await Promise.all([
-      sb.from('ninieras').select('zona'),
-      sb.from('familias').select('zona'),
-    ]);
-    if(!ninierasItems.length) ninierasItems = n||[];
-    if(!familiasItems.length) familiasItems = f||[];
-  }
+  if(!zonaGruposCache) await cargarZonaGrupos(); // para los selectores de zona de la entrevista
   body.innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
@@ -266,11 +255,11 @@ async function renderEntrevista(body){
         <div class="field"><label>Fecha</label><input type="date" id="f-fecha"></div>
         <div class="field"><label>Entrevistó</label><select id="f-entrevisto"><option value="">Elegir…</option><option ${registradoPorUsuario()==='Paulina G'?'selected':''}>Paulina G</option><option ${registradoPorUsuario()==='Delfina F'?'selected':''}>Delfina F</option><option>Otra</option></select></div>
       </div>
-      <div class="grid3">
+      <div class="grid2">
         <div class="field"><label>Teléfono</label><input type="tel" id="f-telefono"></div>
-        <div class="field"><label>Zona</label><input type="text" id="f-zona"></div>
         <div class="field"><label>Rol pensado</label><select id="f-rol"><option value="">Elegir…</option><option>Turno fijo semanal</option><option>Sittings espontáneos</option><option>Traslados</option><option>Sin definir</option></select></div>
       </div>
+      ${checklistZonas('f', '', 'Zona')}
       <div class="grid2">
         <div class="field"><label>Fecha de nacimiento</label><input type="date" id="f-fecha-nac" oninput="actualizarEdadCandidata()"></div>
         <div class="field"><label>Edad</label><input type="text" id="f-edad-calculada" disabled placeholder="—"></div>
@@ -430,12 +419,12 @@ async function guardarCandidata(){
     extraFicha = { zona_sitting: nuevaZonaSitting || null, notas_ficha: notasFicha };
   }
   if(candidataId){
-    const { error } = await sb.from('candidatas').update({ estado:'entrevistada', telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value, fecha_nacimiento: document.getElementById('f-fecha-nac').value || null, ...extraFicha }).eq('id', candidataId);
+    const { error } = await sb.from('candidatas').update({ estado:'entrevistada', telefono:document.getElementById('f-telefono').value, zona:leerZonasChecklist('f'), fecha_nacimiento: document.getElementById('f-fecha-nac').value || null, ...extraFicha }).eq('id', candidataId);
     if(error){ warnArea.innerHTML = errBox(error); return; }
   } else {
     if(!(await confirmarNombreNuevo(nombre, [...intakeItems, ...candidatasItems], 'niñera'))) return;
     const { data, error } = await sb.from('candidatas').insert({
-      nombre, telefono:document.getElementById('f-telefono').value, zona:document.getElementById('f-zona').value,
+      nombre, telefono:document.getElementById('f-telefono').value, zona:leerZonasChecklist('f'),
       origen:document.getElementById('f-origen').value, experiencia:document.getElementById('f-exp-previa').value,
       fecha_nacimiento: document.getElementById('f-fecha-nac').value || null,
       tipo: entrevistaState.tipo || 'Niñera', estado:'entrevistada', ...extraFicha,
@@ -522,9 +511,9 @@ function verDetalle(i){
     ${cd.estado==='contratada' ? '<div class="okbox">Ya está contratada — figura en la sección Niñeras.</div>' : `
     <div class="card"><h2>Contratar</h2>
       <div class="grid3">
-        <div class="field"><label>Zona (confirmar)</label><input type="text" id="hire-zona" value="${cd.zona||''}"></div>
         <div class="field"><label>Foto (URL, opcional)</label><input type="text" id="hire-foto" value="${cd.foto_url||''}" placeholder="link de Drive/Canva"></div>
       </div>
+      ${checklistZonas('hire', [cd.zona, cd.zona_sitting].filter(Boolean).join('/'), 'Zonas donde trabaja (confirmar: viene marcado dónde vive y dónde dijo que puede)')}
       <div id="hire-temp-wrap"></div>
       <div class="helper">El precio por hora se define por familia en la sección "Familias".</div>
       <button class="btn primary" onclick="contratar('${cd.id}')">Pasar a Niñeras</button>
@@ -569,7 +558,7 @@ async function contratar(candidataId){
   const cd = c.candidatas;
   const ninera = {
     candidata_id: candidataId, nombre:cd.nombre, telefono:cd.telefono, tipo:cd.tipo||'Niñera',
-    zona: document.getElementById('hire-zona').value, foto: document.getElementById('hire-foto').value, notas: c.notas,
+    zona: leerZonasChecklist('hire'), foto: document.getElementById('hire-foto').value, notas: c.notas,
   };
   // Si la candidata puso cuenta bancaria en el formulario, se copia sola a la ficha de
   // niñera (ahí es donde vive de verdad, como una cuenta más dentro del array).
@@ -586,8 +575,7 @@ async function contratar(candidataId){
     const marcoAlgo = grupoId && temporada[grupoId].length>0;
     if(marcoAlgo && !gruposFueraDeZonaStr(ninera.zona).some(g=>g.id===grupoId)){
       const grupo = (zonaGruposCache||[]).find(g=>g.id===grupoId);
-      const zonaAgregar = (grupo?.zonas||[]).find(z=>normaliza(z)==='punta del este') || grupo?.zonas?.[0];
-      if(zonaAgregar) ninera.zona = [ninera.zona, zonaAgregar].filter(z=>(z||'').trim()).join('/');
+      if(grupo) ninera.zona = textoZonas([ninera.zona, grupo.nombre].filter(z=>(z||'').trim()).join('/'));
     }
   }
   const { error: e1 } = await sb.from('ninieras').insert(ninera);

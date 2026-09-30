@@ -1,17 +1,25 @@
 /* ================= FAMILIAS ================= */
 let familiasItems = [];
 let famBusqueda = '';
-let famZonaFiltro = '';
+let famFiltroZonas = new Set(); // claveZona() de las zonas marcadas en el filtro
+function toggleFiltroZonaFam(k, marcada){
+  if(k===null) famFiltroZonas.clear();
+  else if(marcada) famFiltroZonas.add(k); else famFiltroZonas.delete(k);
+  const w = document.getElementById('fam-zonas-filtro');
+  if(w) w.innerHTML = htmlFiltroZonas(famFiltroZonas, 'toggleFiltroZonaFam');
+  renderFamiliasList();
+}
 let famDetalleAbierta = null;
 function renderFamilias(body){
   body.innerHTML = `
     <div id="fam-riesgo-wrap"></div>
     <div id="fam-zonasnuevas-wrap"></div>
-    <div class="card" style="padding:14px 18px;"><div class="grid3">
+    <div class="card" style="padding:14px 18px;"><div class="grid2">
       <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" autocomplete="off" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
-      <div class="field" style="margin:0;"><label>Zona</label><select id="fam-zonafiltro" onchange="famZonaFiltro=this.value;renderFamiliasList();"></select></div>
       <div class="field" style="margin:0;"><button class="btn primary" style="width:100%;margin-top:22px;" onclick="abrirModalNuevaFamilia()">+ Agregar familia</button></div>
-    </div></div>
+    </div>
+    <div class="field" style="margin:12px 0 0;"><label>Zonas (podés marcar varias)</label><div id="fam-zonas-filtro">${htmlFiltroZonas(famFiltroZonas, 'toggleFiltroZonaFam')}</div></div>
+    </div>
     <div id="familiaslist"></div>
   `;
   famDetalleAbierta = null;
@@ -23,9 +31,9 @@ function abrirModalNuevaFamilia(){
     <div class="helper" style="margin-bottom:14px;">El precio es por familia: cuánto le cobramos por hora y cuánto le pagamos a la niñera. El margen se calcula solo.</div>
     <div class="grid3">
       <div class="field"><label>Nombre de la familia</label><input type="text" id="fam-nombre"></div>
-      <div class="field"><label>Zona</label><input type="text" id="fam-zona"></div>
       <div class="field"><label>Teléfono</label><input type="tel" id="fam-telefono"></div>
     </div>
+    ${checklistZonas('fam', '', 'Zona')}
     <div class="grid3">
       <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="fam-cobro"></div>
       <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="fam-pago"></div>
@@ -45,7 +53,7 @@ async function addFamilia(){
   const nombre = document.getElementById('fam-nombre').value.trim();
   if(!nombre){ toast('Falta el nombre de la familia.','bad'); return; }
   if(!(await confirmarNombreNuevo(nombre, familiasItems, 'familia'))) return;
-  const fam = { nombre, zona:document.getElementById('fam-zona').value, telefono:document.getElementById('fam-telefono').value,
+  const fam = { nombre, zona:leerZonasChecklist('fam'), telefono:document.getElementById('fam-telefono').value,
     cobro_hora:document.getElementById('fam-cobro').value||null, pago_hora:document.getElementById('fam-pago').value||null,
     direccion:document.getElementById('fam-direccion').value,
     cuenta_bancaria:leerCuentasBancarias('fam'), notas:document.getElementById('fam-notas').value };
@@ -67,8 +75,8 @@ const FAM_RIESGO_SEMANAS = 6;      // sin sittings hace más de esto = "en riesg
 const FAM_RIESGO_SNOOZE_DIAS = 30; // al marcar "ya la contacté", no volver a avisar por este tiempo
 let famRiesgoAbierto = false;      // arranca cerrado — antes mostraba todas de una, "cartel inmenso"
 async function cargarFamilias(){
-  if(!zonaGruposCache) cargarZonaGrupos(); // para cuando se abra "Editar" y haga falta el checklist agrupado
-  if(!zonasConfirmadasCache) await cargarZonasConfirmadas();
+  // Las zonas se esperan: el filtro, el panel de "barrios sin zona" y el selector de Editar las usan.
+  if(!zonaGruposCache) await cargarZonaGrupos();
   const cont = document.getElementById('familiaslist');
   if(!cont) return; // se puede llamar desde otra pantalla (ej. al quitar una asignación fija desde Agenda) — sin esto, rompía ahí.
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
@@ -104,19 +112,8 @@ async function cargarFamilias(){
   });
   familiasItems = familias.map(f => ({...f, hijos: (f.hijos_familia||[]).slice().sort((a,b)=>a.orden-b.orden), asignaciones: (asignaciones||[]).filter(a=>a.familia_id===f.id)}));
   renderZonasNuevasPanel();
-  // llenar el filtro de zonas agrupando variantes de mayúsculas/tildes/espacios como la misma zona
-  const zonaSel = document.getElementById('fam-zonafiltro');
-  if(zonaSel){
-    const zonaMap = new Map();
-    familiasItems.forEach(f=>{
-      zonasDe(f.zona).forEach(raw=>{
-        const key = normaliza(raw);
-        if(!zonaMap.has(key)) zonaMap.set(key, raw);
-      });
-    });
-    const zonas = [...zonaMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
-    zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(([key,label])=>`<option value="${key}" ${famZonaFiltro===key?'selected':''}>${label}</option>`).join('');
-  }
+  const wZonas = document.getElementById('fam-zonas-filtro');
+  if(wZonas) wZonas.innerHTML = htmlFiltroZonas(famFiltroZonas, 'toggleFiltroZonaFam');
   await cargarConteoIncidentesFamilias();
   renderFamiliasList();
   renderFamiliasEnRiesgo();
@@ -233,7 +230,7 @@ function renderFamiliasList(){
   const q = normaliza(famBusqueda);
   const filtradas = familiasItems.filter(f=>{
     const matchNombre = !q || normaliza(f.nombre).includes(q);
-    const matchZona = !famZonaFiltro || zonasDe(f.zona).some(z=>normaliza(z)===famZonaFiltro);
+    const matchZona = coincideFiltroZonas(f.zona, famFiltroZonas);
     return matchNombre && matchZona;
   });
   const countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${familiasItems.length} familias</div>`;

@@ -76,6 +76,7 @@ function renderApp(){
     window.history.replaceState({}, '', window.location.pathname);
     moduloActivo = irParam;
   }
+  if(!zonaGruposCache) cargarZonaGrupos(); // las zonas se usan en casi todas las pantallas: se piden una sola vez al entrar
   renderModulo();
   cargarNotificaciones();
   suscribirNotifRealtime();

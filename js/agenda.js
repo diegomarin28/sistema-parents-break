@@ -364,10 +364,10 @@ function onAgendaFamiliaInput(){
   mostrarAgendaFamiliaDropdown();
   const val = document.getElementById('agenda-familia').value;
   const f = agendaFamilias.find(x=>normaliza(x.nombre)===normaliza(val));
-  const zonaInput = document.getElementById('agenda-zona');
   const cobroInput = document.getElementById('agenda-cobro');
   if(f){
-    if(zonaInput && !zonaInput.value) zonaInput.value = f.zona||'';
+    // Si todavía no marcaron ninguna zona, se precargan las de la familia elegida.
+    if(f.zona && !leerZonasChecklist('agenda')) setZonasChecklist('agenda', f.zona, 'Zona');
     if(cobroInput && !cobroInput.value && f.cobro_hora) cobroInput.value = f.cobro_hora;
   }
   actualizarAgendaTotal();
@@ -475,11 +475,11 @@ function abrirModalNuevaSolicitud(){
       <button type="button" class="tipobtn" id="agenda-modo-repetir-btn" onclick="onAgendaModoChange('repetir')">Fijo (se repite)</button>
     </div>
     <div id="agenda-bloque-puntual">
-      <div class="grid3">
+      <div class="grid2">
         <div class="field"><label>Tipo</label><select id="agenda-tipo" onchange="onAgendaTipoChange()"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
-        <div class="field"><label>Zona</label><input type="text" id="agenda-zona" placeholder="Pocitos, Carrasco…"></div>
         <div class="field"><label>Fecha</label><input type="date" id="agenda-nueva-fecha" value="${agendaAncla}"></div>
       </div>
+      ${checklistZonas('agenda', '', 'Zona')}
       <div class="grid3">
         <div class="field"><label>Hora inicio</label>${selectHora('agenda-hora-inicio')}</div>
         <div class="field" id="agenda-hora-fin-wrap"><label>Hora fin</label>${selectHora('agenda-hora-fin')}</div>
@@ -529,7 +529,7 @@ async function guardarSolicitud(ev){
 async function guardarSolicitudPuntual(){
   const familiaTxt = document.getElementById('agenda-familia').value.trim();
   const tipo = document.getElementById('agenda-tipo').value;
-  const zona = document.getElementById('agenda-zona').value.trim();
+  const zona = leerZonasChecklist('agenda');
   const fecha = document.getElementById('agenda-nueva-fecha').value;
   const horaInicio = leerHora('agenda-hora-inicio');
   const horaFin = leerHora('agenda-hora-fin');
@@ -632,12 +632,10 @@ async function abrirModalAsignar(solicitudId){
   candidatas.forEach(n=>{
     const key = normaliza(n.nombre);
     if(conteoFamilia[key]>0){ tier1.push({...n, veces:conteoFamilia[key]}); return; }
-    // Zona propia o del mismo grupo (San Nicolás/Olivos/Carrasco cuentan como una sola
-    // zona para esto, aunque el texto sea distinto) -- antes solo entraba el texto exacto.
-    const zonas = (n.zona||'').split('/').map(z=>z.trim()).filter(Boolean);
-    if(s.zona && zonas.some(z => mismoGrupoZona(z, s.zona))){
-      const exacta = zonas.some(z=>normaliza(z)===normaliza(s.zona));
-      tier2.push({...n, cercana: !exacta});
+    // Cubre alguna de las zonas del pedido (todo es por zona: Olivos o San Nicolás ya son
+    // "Carrasco", no hace falta que el texto coincida).
+    if(s.zona && mismoGrupoZona(n.zona, s.zona)){
+      tier2.push({...n, cercana: false});
       return;
     }
     tier3.push({...n, total:conteoTotal[key]||0});

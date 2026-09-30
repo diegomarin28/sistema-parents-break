@@ -16,17 +16,25 @@ function esCumpleHoy(n){
   const d = new Date(fn+'T00:00:00'), hoy = new Date();
   return d.getMonth()===hoy.getMonth() && d.getDate()===hoy.getDate();
 }
+let ninFiltroZonas = new Set(); // claveZona() de las zonas marcadas en el filtro
+function toggleFiltroZonaNin(k, marcada){
+  if(k===null) ninFiltroZonas.clear();
+  else if(marcada) ninFiltroZonas.add(k); else ninFiltroZonas.delete(k);
+  const w = document.getElementById('filt-zonas-wrap');
+  if(w) w.innerHTML = htmlFiltroZonas(ninFiltroZonas, 'toggleFiltroZonaNin');
+  filtrarNinieras();
+}
 function renderNinieras(body){
   body.innerHTML = `
     <div id="nin-cumpleaneras-wrap"></div>
     <div id="nin-zonasnuevas-wrap"></div>
     <div id="nin-temporadas-wrap"></div>
     <div id="nin-utilizacion-wrap"></div>
-    <div class="card" style="padding:14px 18px;"><div class="grid3">
+    <div class="card" style="padding:14px 18px;"><div class="grid2">
       <div class="field" style="margin:0;"><label>Buscar (nombre, universidad, idioma...)</label><input type="text" id="filt-nombre" autocomplete="off" placeholder="Escribí para filtrar..." oninput="filtrarNinieras()"></div>
-      <div class="field" style="margin:0;"><label>Zona</label><select id="filt-zona" onchange="filtrarNinieras()"><option value="">Todas las zonas</option></select></div>
       <div class="field" style="margin:0;"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
     </div>
+    <div class="field" style="margin:12px 0 0;"><label>Zonas (podés marcar varias)</label><div id="filt-zonas-wrap">${htmlFiltroZonas(ninFiltroZonas, 'toggleFiltroZonaNin')}</div></div>
     <div class="field" style="margin:12px 0 0;"><label>Cuándo (junto con una zona: quiénes están ahí esos meses)</label><div id="filt-meses-wrap">${htmlFiltroMeses()}</div></div>
     </div>
     <div id="ninierasgrid"></div>
@@ -61,20 +69,8 @@ async function cargarNinieras(){
   renderTemporadasPanel();
   await cargarUtilizacionNinieras();
   await cargarConteoIncidentesNinieras();
-  // llenar desplegable de zonas: una niñera puede cubrir varias zonas separadas por "/" —
-  // cada zona individual entra como su propia opción, agrupando variantes de mayúsculas/tildes
-  const zonaSel = document.getElementById('filt-zona');
-  if(zonaSel){
-    const zonaMap = new Map();
-    ninierasItems.forEach(n=>{
-      zonasDe(n.zona).forEach(raw=>{
-        const key = normaliza(raw);
-        if(!zonaMap.has(key)) zonaMap.set(key, raw);
-      });
-    });
-    const zonas = [...zonaMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
-    zonaSel.innerHTML = `<option value="">Todas las zonas</option>` + zonas.map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
-  }
+  const wZonas = document.getElementById('filt-zonas-wrap');
+  if(wZonas) wZonas.innerHTML = htmlFiltroZonas(ninFiltroZonas, 'toggleFiltroZonaNin');
   filtrarNinieras();
 }
 const NIN_UTIL_DIAS = 30;
@@ -190,28 +186,32 @@ function filtrarNinieras(){
   const grid = document.getElementById('ninierasgrid');
   if(!grid) return;
   const fn = normaliza(document.getElementById('filt-nombre')?.value||'');
-  const fz = document.getElementById('filt-zona')?.value||'';
+  const hayZonas = ninFiltroZonas.size>0;
   const ft = document.getElementById('filt-tipo')?.value||'';
   const qsFiltro = quincenasDeMeses(ninFiltroMeses);
-  const filtraPeriodo = !!(fz && qsFiltro.length);
+  const filtraPeriodo = !!(hayZonas && qsFiltro.length);
   const cobertura = {}; // id -> 'todo' | 'parte' (solo con filtro de período)
   let sinDatoOcultas = 0;
   const filtradas = ninierasItems.filter(n => {
     const cd = n.candidatas || {};
     const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia].filter(Boolean).join(' '));
     const matchTexto = !fn || blob.includes(fn);
-    const matchZona = !fz || zonasDe(n.zona).some(z=>normaliza(z)===fz);
+    const matchZona = coincideFiltroZonas(n.zona, ninFiltroZonas);
     const matchTipo = !ft || (n.tipo||'Niñera')===ft;
     if(!(matchTexto && matchZona && matchTipo)) return false;
     if(!filtraPeriodo) return true;
-    const c = coberturaPeriodo(n, fz, qsFiltro);
+    // Solo las zonas marcadas que ella tiene (si marcaste Carrasco y Punta del Este y ella
+    // es solo de Carrasco, se mira si está en Carrasco esos meses).
+    const suyas = zonasNormalizadas(n.zona).map(claveZona).filter(k=>ninFiltroZonas.has(k));
+    const c = coberturaPeriodo(n, suyas, qsFiltro);
     cobertura[n.id] = c;
     // Con un período elegido solo se muestran las que confirmaron estar ahí: las que no
     // tienen temporada cargada se cuentan aparte (abajo del conteo) pero no se listan.
     if(c==='desconocido'){ sinDatoOcultas++; return false; }
     return c!=='nada';
   });
-  const zonaLabel = fz ? (document.getElementById('filt-zona')?.selectedOptions?.[0]?.textContent || fz) : '';
+  const zonaLabel = nombresZonasFiltro(ninFiltroZonas).join(' o ');
+  const hayZonaAfuera = [...ninFiltroZonas].some(k=>grupoFueraDeZona(k));
   const mesesTxt = [...ninFiltroMeses].sort((a,b)=>a-b).map(m=>TEMP_MESES_LARGO[m]).join(', ');
   const completas = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]!=='parte') : filtradas;
   const parciales = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]==='parte') : [];
@@ -219,10 +219,10 @@ function filtrarNinieras(){
   if(filtraPeriodo){
     countMsg = `<div class="helper" style="margin:0 0 8px;">${completas.length} en ${zonaLabel} todo ${mesesTxt}${parciales.length?`, ${parciales.length} solo una parte`:''}.${sinDatoOcultas?(sinDatoOcultas===1?' Hay 1 más con esa zona que todavía no tiene temporada cargada: no se muestra hasta que la cargue.':` Hay ${sinDatoOcultas} más con esa zona que todavía no tienen temporada cargada: no se muestran hasta que la carguen.`):''}</div>`;
   } else {
-    countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${ninierasItems.length} niñeras${ninFiltroMeses.size && !fz ? '. Elegí también una zona para filtrar por mes.' : ''}</div>`;
+    countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${ninierasItems.length} niñeras${ninFiltroMeses.size && !hayZonas ? '. Elegí también una zona para filtrar por mes.' : ''}</div>`;
   }
   if(!filtradas.length){ grid.innerHTML = countMsg + '<div class="empty">Ninguna niñera coincide con la búsqueda.</div>'; return; }
-  const mostrarTira = filtraPeriodo || (fz && grupoFueraDeZona(fz));
+  const mostrarTira = filtraPeriodo || hayZonaAfuera;
   const filaNinera = n=>`
     <div class="person-row">
       <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')"`:''}>${n.foto?`<img loading="lazy" decoding="async" src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
@@ -245,7 +245,7 @@ function filtrarNinieras(){
       </div>
     </div>`;
   grid.innerHTML = countMsg + '<div class="person-list">' + completas.map(filaNinera).join('') + '</div>'
-    + (parciales.length ? `<div class="helper" style="margin:16px 0 8px;">Solo parte del período (la tira muestra en qué quincenas está en ${zonaLabel}${grupoFueraDeZona(fz)?'':' — lo pintado es cuándo está afuera'})</div><div class="person-list">${parciales.map(filaNinera).join('')}</div>` : '');
+    + (parciales.length ? `<div class="helper" style="margin:16px 0 8px;">Solo parte del período (la tira muestra en qué quincenas está en ${zonaLabel}${hayZonaAfuera?'':' — lo pintado es cuándo está afuera'})</div><div class="person-list">${parciales.map(filaNinera).join('')}</div>` : '');
 }
 // Sección "Datos de carsitting" reutilizable: busca por nombre (sin importar tildes/mayúsculas)
 // contra TODOS los registros de carsitting_datos, sin depender de si ya está en Niñeras o
@@ -746,8 +746,8 @@ function asegurarEstilosTemporada(){
 
 /* ---- Lógica compartida ---- */
 function gruposFueraDeZonaStr(zonaStr){
-  const zonas = zonasDe(zonaStr).map(normaliza);
-  return (zonaGruposCache||[]).filter(g=>g.fuera_de_montevideo && (g.zonas||[]).some(z=>zonas.includes(normaliza(z))));
+  const ids = new Set(zonasNormalizadas(zonaStr).map(z=>grupoDeZona(z)?.id).filter(Boolean));
+  return (zonaGruposCache||[]).filter(g=>g.fuera_de_montevideo && ids.has(g.id));
 }
 function gruposFueraDeNinera(n){ return gruposFueraDeZonaStr(n.zona); }
 // Qué calendarios se le muestran para editar: los de sus zonas de afuera, o si no tiene
@@ -765,13 +765,13 @@ function zonaConTemporada(zonaStr, temporada){
   (zonaGruposCache||[]).filter(g=>g.fuera_de_montevideo).forEach(g=>{
     if(!quincenasDeGrupo(temporada, g.id).length) return;
     if(gruposFueraDeZonaStr(zona).some(x=>x.id===g.id)) return;
-    const agregar = (g.zonas||[]).find(z=>normaliza(z)==='punta del este') || (g.zonas||[])[0];
-    if(agregar) zona = [zona, agregar].filter(Boolean).join('/');
+    zona = textoZonas([zona, g.nombre].filter(Boolean).join('/'));
   });
   return zona;
 }
 function grupoFueraDeZona(zonaKey){
-  return (zonaGruposCache||[]).find(g=>g.fuera_de_montevideo && (g.zonas||[]).some(z=>normaliza(z)===zonaKey)) || null;
+  const g = grupoDeZona(zonaKey);
+  return g && g.fuera_de_montevideo ? g : null;
 }
 function inicioTemporadaActual(ref=new Date()){
   // Setiembre (mes 8) arranca la temporada nueva -- de setiembre a agosto del año siguiente.
@@ -802,13 +802,16 @@ function nineraPresenteEnZona(n, zonaKey, q){
   return !gruposFueraDeNinera(n).some(g=>quincenasDeGrupo(n.temporada, g.id).includes(q));
 }
 // Para el filtro: 'todo' | 'parte' | 'nada' | 'desconocido'
-function coberturaPeriodo(n, zonaKey, qs){
+// zonaKeys: una clave o una lista (está si está en CUALQUIERA de esas zonas esa quincena).
+function coberturaPeriodo(n, zonaKeys, qs){
   if(!qs.length) return 'todo';
+  const keys = Array.isArray(zonaKeys) ? zonaKeys : [zonaKeys];
+  if(!keys.length) return 'nada';
   let si = 0;
   for(const q of qs){
-    const p = nineraPresenteEnZona(n, zonaKey, q);
-    if(p===null) return 'desconocido';
-    if(p) si++;
+    const ps = keys.map(k=>nineraPresenteEnZona(n, k, q));
+    if(ps.some(p=>p===null)) return 'desconocido';
+    if(ps.some(Boolean)) si++;
   }
   return si===qs.length ? 'todo' : (si>0 ? 'parte' : 'nada');
 }
