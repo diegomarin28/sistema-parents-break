@@ -126,6 +126,15 @@ textarea{resize:vertical;min-height:54px;}
 .flag-row.critical span::after{content:" · crítico";color:var(--bad);font-size:11px;font-weight:600;}
 .refrow{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;margin-bottom:8px;align-items:center;}
 .chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;}
+.zona-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.zona-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--paper);border-radius:100px;padding:6px 12px;font-size:13px;color:var(--ink);cursor:pointer;user-select:none;-webkit-user-select:none;transition:background var(--ease),border-color var(--ease);}
+.zona-chip input{margin:0;width:15px;height:15px;accent-color:var(--accent);cursor:pointer;}
+.zona-chip:has(input:checked){background:var(--accent-soft);border-color:var(--accent);}
+.zona-chip.suelta{border-style:dashed;}
+.zona-chip-nota{font-size:11px;color:var(--warn);}
+.zona-detalle{margin-top:6px;font-size:12px;color:var(--ink-soft);line-height:1.6;}
+.zona-detalle summary{cursor:pointer;font-size:12px;}
+.zona-detalle b{color:var(--ink);font-weight:600;}
 .refrow .chk{gap:6px;}
 .smallbtn{background:none;border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:12.5px;cursor:pointer;color:var(--ink-soft);font-family:'Inter',sans-serif;}
 .smallbtn:hover{border-color:var(--accent);color:var(--accent);}
