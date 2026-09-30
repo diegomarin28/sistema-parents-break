@@ -236,6 +236,7 @@ function filtrarNinieras(){
         ${!n.candidatas?.fecha_nacimiento ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin fecha de nac.</span>` : ''}
         ${ninIncidentesCount[normaliza(n.nombre)] ? `<span class="badge bad" style="font-size:10px;padding:2px 8px;">${ninIncidentesCount[normaliza(n.nombre)]} incidente${ninIncidentesCount[normaliza(n.nombre)]===1?'':'s'}</span>` : ''}
         ${badgeTemporada(n)}
+        ${n.telefono_pendiente ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Celular nuevo por confirmar</span>` : ''}
       </div>
       <div class="rowbtns">
         <button class="smallbtn" onclick="verNinera('${n.id}')">Ver ficha</button>
@@ -312,8 +313,9 @@ async function verNinera(id){
       <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
       <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({ninera_id:n.id, ninera_nombre:n.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
     </div>
+    ${htmlCambioTelefono(n)}
     ${cvDesactualizado ? `<div class="warnbox" style="margin-bottom:10px;">Cumplió años desde que se generó el CV — convendría rehacerlo.</div>` : ''}
-    <div class="fichadl">${edadRow}${rows||(edadRow?'':'<div>Sin más datos.</div>')}<div><b>Zona</b>${textoZonasConBarrios(n.zona, n.barrios)||'—'}</div><div><b>Teléfono</b>${n.telefono||'—'}</div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${textoCuentasBancarias(n.cuenta_bancaria)}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+    <div class="fichadl">${edadRow}${rows||(edadRow?'':'<div>Sin más datos.</div>')}<div><b>Zona</b>${textoZonasConBarrios(n.zona, n.barrios)||'—'}</div><div><b>Teléfono</b><span id="vn-telefono">${n.telefono||'—'}</span></div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${textoCuentasBancarias(n.cuenta_bancaria)}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
     <div id="vn-carsitting"></div>
     <div id="vn-juguetes"></div>
     <div id="vn-incidentes" style="margin-top:18px;"></div>
@@ -363,6 +365,43 @@ async function verNinera(id){
   }
   renderNineraHistorial(n.id);
 }
+// Cambio de celular pedido desde la página de temporada (entró con nombre porque su número
+// no coincidía con el cargado). No se aplica solo: Pau o Delfi lo aceptan o lo descartan.
+function htmlCambioTelefono(n){
+  if(!n || !n.telefono_pendiente) return '';
+  const cuando = n.telefono_pendiente_en ? new Date(n.telefono_pendiente_en).toLocaleDateString('es-UY',{day:'numeric',month:'short'}) : '';
+  return `
+    <div id="cambio-tel-box" style="background:var(--accent-soft);border-radius:12px;padding:12px 14px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div style="font-size:13px;line-height:1.5;">
+        <div style="font-weight:600;">Pidió cambiar su celular${cuando?` el ${cuando}`:''}</div>
+        <div>Nuevo: <span style="font-family:'IBM Plex Mono',monospace;">${n.telefono_pendiente}</span>. Ahora: <span style="font-family:'IBM Plex Mono',monospace;">${n.telefono||'sin celular'}</span></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn ghost" style="padding:7px 14px;font-size:12.5px;" onclick="resolverCambioTelefono('${n.id}', false)">Descartar</button>
+        <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="resolverCambioTelefono('${n.id}', true)">Aceptar</button>
+      </div>
+    </div>`;
+}
+async function resolverCambioTelefono(id, aceptar){
+  const n = ninierasItems.find(x=>x.id===id);
+  if(!n || !n.telefono_pendiente) return;
+  const cambios = { telefono_pendiente: null, telefono_pendiente_en: null };
+  if(aceptar) cambios.telefono = n.telefono_pendiente;
+  const { error } = await sb.from('ninieras').update(cambios).eq('id', id);
+  if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  const nuevo = n.telefono_pendiente;
+  Object.assign(n, cambios);
+  const box = document.getElementById('cambio-tel-box');
+  if(box) box.remove();
+  // Si está en "Editar", el campo de teléfono queda con el número nuevo (si no, al guardar
+  // la edición se volvería a pisar con el viejo).
+  const campo = document.getElementById('ed-telefono');
+  if(campo && aceptar) campo.value = nuevo;
+  const enFicha = document.getElementById('vn-telefono');
+  if(enFicha && aceptar) enFicha.textContent = nuevo;
+  filtrarNinieras();
+  toast(aceptar ? 'Celular actualizado.' : 'Cambio descartado, queda el celular de antes.');
+}
 let nineraHistItems = [];
 function renderNineraHistorial(id){
   const cont = document.getElementById('vn-historial');
@@ -398,6 +437,7 @@ function editarNinera(id){
   registrarRenderizadorZona('ed', ()=>editarNinera(id));
   abrirModal(`
     <h2 style="margin:0 0 12px;">Editar a ${n.nombre}</h2>
+    ${htmlCambioTelefono(n)}
     <div style="margin-bottom:14px;">
       <div id="ed-foto-preview" style="width:100%;height:160px;border-radius:12px;background:var(--bg);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:12px;color:var(--ink-soft);">
         ${n.foto?`<img src="${n.foto}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
