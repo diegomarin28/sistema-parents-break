@@ -687,187 +687,103 @@ function restaurarScrollMainarea(valor){
 
 /* ============================================================
    Lista de cuentas bancarias (columna cuenta_bancaria: text[]).
-   UI repetible para poder cargar más de una cuenta por niñera o familia
-   (ej. cambió de banco, o cobra/paga por dos cuentas distintas) — antes
-   solo se podía guardar una sola.
-   Cada cuenta se sigue guardando como UN string ("Itaú 1234567 (Sucursal
-   Pocitos)") para no tener que migrar la columna — pero ahora se carga con
-   3 campos separados (banco / número / sucursal) en vez de un input libre,
-   mismo criterio que quedó armado en el formulario de postulación.
+   Cada cuenta se guarda como UN string ("Itaú 1234567 (Sucursal Pocitos)") para no
+   migrar la columna, pero se edita con campos separados: banco / número / sucursal.
+
+   Una fila por cuenta, y el estado vive en el propio DOM (no en un mapa aparte).
+   Reemplaza la versión anterior que guardaba un mapa banco -> cuenta, que tenía
+   estos problemas (confirmados con datos reales de la base):
+   - Sin cuentas, el número quedaba deshabilitado: no se podía tipear nada sin
+     antes tocar "+ Agregar otro banco".
+   - Dos cuentas del mismo banco (dos Itaú) se pisaban: al guardar CUALQUIER
+     cambio de la ficha se borraba una en silencio.
+   - Una cuenta guardada sin banco ("1234567") se duplicaba al guardar
+     ("1234567 1234567").
+   - No había forma de cambiar el banco de una cuenta ya cargada.
+   - Un banco "Otro" solo se agregaba apretando Enter.
    ============================================================ */
-const BANCOS_CUENTA = ['Itaú','BROU','Santander','Scotiabank','Prex','BBVA','Mercado Pago','HSBC','Otro'];
-// Separa el string guardado en sus 3 partes, para poder editarlo con los campos separados.
+const BANCOS_CUENTA = ['Itaú','BROU','Santander','Scotiabank','Prex','BBVA','Mercado Pago','HSBC'];
+function normBancoCuenta(b){
+  return String(b||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+}
+// Separa el string guardado en banco / número / sucursal. Tolera los formatos viejos que
+// hay en la base: "Santander - 123", "Santander- 123", "Itau 123" (sin tilde), solo el
+// número sin banco, o texto extra después del número ("... (a nombre de ...)").
 function parsearCuentaBancaria(valor){
   const v = String(valor||'').trim();
   if(!v) return {banco:'', numero:'', sucursal:''};
   const mSuc = v.match(/^(.*?)\s*\(Sucursal\s+(.+)\)\s*$/i);
-  const sinSucursal = mSuc ? mSuc[1].trim() : v;
+  const resto = mSuc ? mSuc[1].trim() : v;
   const sucursal = mSuc ? mSuc[2].trim() : '';
-  const bancoConocido = BANCOS_CUENTA.find(b => b!=='Otro' && sinSucursal.toLowerCase().startsWith(b.toLowerCase()+' '));
-  if(bancoConocido) return {banco:bancoConocido, numero:sinSucursal.slice(bancoConocido.length).trim(), sucursal};
-  // Banco no reconocido en la lista: la última palabra se toma como número, el resto como nombre del banco (va bajo "Otro").
-  const partes = sinSucursal.split(/\s+/);
-  const numero = partes.length>1 ? partes.pop() : '';
-  const banco = partes.join(' ');
-  return {banco, numero: numero || sinSucursal, sucursal};
+  const m = resto.match(/^([^\d]*?)[\s\-–:]*(\d[\s\S]*)$/);
+  // Sin ningún dígito: se deja todo como número para no perder el dato.
+  if(!m) return {banco:'', numero:resto, sucursal};
+  let banco = m[1].replace(/[\s\-–:]+$/,'').trim();
+  const conocido = BANCOS_CUENTA.find(b=>normBancoCuenta(b)===normBancoCuenta(banco));
+  if(conocido) banco = conocido;
+  return {banco, numero:m[2].trim(), sucursal};
 }
-/* Una sola tarjeta por persona: el banco elegido trae su propio número/sucursal guardados
-   (mapa banco -> {numero, sucursal} en memoria, vive en data-mapa del wrap). Cambiar de
-   banco en el desplegable NO borra nada -- muestra lo que esa cuenta ya tenía, y si volvés
-   al banco anterior, vuelve a aparecer su número tal cual estaba. */
-function mapaDesdeListaCuentas(cuentas){
-  const lista = Array.isArray(cuentas) ? cuentas.filter(Boolean) : (cuentas ? [cuentas] : []);
-  const mapa = {};
-  lista.forEach(c=>{
-    const {banco, numero, sucursal} = parsearCuentaBancaria(c);
-    if(banco) mapa[banco] = {numero: numero||'', sucursal: sucursal||''};
-  });
-  return mapa;
-}
-function leerMapaCuentas(prefix){
-  const wrap = document.getElementById(prefix+'-cuentas-wrap');
-  if(!wrap) return {};
-  try{ return JSON.parse(decodeURIComponent(wrap.dataset.mapa)); }catch(e){ return {}; }
-}
-function guardarMapaCuentas(prefix, mapa){
-  document.getElementById(prefix+'-cuentas-wrap').dataset.mapa = encodeURIComponent(JSON.stringify(mapa));
+function htmlFilaCuentaBancaria(cuenta){
+  const {banco, numero, sucursal} = parsearCuentaBancaria(cuenta);
+  const q = s => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const esOtro = !!banco && !BANCOS_CUENTA.includes(banco);
+  return `<div class="cb-fila" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;">
+      <select class="cb-banco" onchange="cambioBancoFilaCuenta(this)" style="flex:1 1 110px;min-width:0;">
+        <option value="" ${!banco?'selected':''}>Banco...</option>
+        ${BANCOS_CUENTA.map(b=>`<option value="${b}" ${b===banco?'selected':''}>${b}</option>`).join('')}
+        <option value="__otro__" ${esOtro?'selected':''}>Otro</option>
+      </select>
+      <input type="text" class="cb-otro" placeholder="Nombre del banco" value="${esOtro?q(banco):''}" style="flex:1 1 110px;min-width:0;${esOtro?'':'display:none;'}">
+      <input type="text" class="cb-numero" placeholder="Número de cuenta" value="${q(numero)}" style="flex:1.4 1 130px;min-width:0;">
+      <input type="text" class="cb-sucursal" placeholder="Sucursal (opcional)" value="${q(sucursal)}" style="flex:1 1 120px;min-width:0;">
+      <button class="smallbtn danger" type="button" style="flex:0 0 auto;" onclick="quitarFilaCuentaBancaria(this)">Quitar</button>
+    </div>`;
 }
 function htmlCuentasBancarias(prefix, cuentas){
-  const mapa = mapaDesdeListaCuentas(cuentas);
-  const bancos = Object.keys(mapa);
-  const bancoInicial = bancos[0] || '';
-  const actual = mapa[bancoInicial] || {numero:'', sucursal:''};
-  const q = s => String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
-  return `<div class="field" id="${prefix}-cuentas-wrap" data-mapa="${encodeURIComponent(JSON.stringify(mapa))}">
+  const lista = Array.isArray(cuentas) ? cuentas.filter(Boolean) : (cuentas ? [cuentas] : []);
+  // Sin cuentas: una fila vacía lista para tipear (no hace falta apretar nada antes).
+  const filas = (lista.length ? lista : ['']).map(htmlFilaCuentaBancaria).join('');
+  return `<div class="field" id="${prefix}-cuentas-wrap">
     <label>Cuenta bancaria</label>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;">
-      <select id="${prefix}-cb-banco" data-banco-previo="${bancoInicial}" onchange="cambiarBancoCuenta('${prefix}')" style="flex:1;min-width:100px;" ${bancos.length?'':'disabled'}>
-        ${bancos.length ? bancos.map(b=>`<option value="${b}" ${b===bancoInicial?'selected':''}>${b}</option>`).join('') : `<option value="">Sin cuentas cargadas</option>`}
-      </select>
-      <input type="text" id="${prefix}-cb-numero" placeholder="Número de cuenta" value="${q(actual.numero)}" style="flex:1;min-width:100px;" oninput="guardarCuentaActualEnMapa('${prefix}')" ${bancos.length?'':'disabled'}>
-      <input type="text" id="${prefix}-cb-sucursal" placeholder="Sucursal (si hace falta)" value="${q(actual.sucursal)}" style="flex:1;min-width:100px;" oninput="guardarCuentaActualEnMapa('${prefix}')" ${bancos.length?'':'disabled'}>
-    </div>
-    <div class="helper" id="${prefix}-cb-sinbanco" style="${bancos.length?'display:none;':''}">Elegí o agregá un banco antes de cargar el número.</div>
-    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;" id="${prefix}-cb-acciones">
-      <button class="smallbtn" type="button" id="${prefix}-cb-addbtn" onclick="agregarBancoNuevoACuenta('${prefix}')">+ Agregar otro banco</button>
-      <button class="smallbtn danger" type="button" id="${prefix}-cb-eliminar" onclick="confirmarQuitarBancoActual('${prefix}')" style="${bancos.length?'':'display:none;'}">Eliminar esta cuenta bancaria</button>
-    </div>
+    <div id="${prefix}-cb-filas">${filas}</div>
+    <button class="smallbtn" type="button" onclick="agregarFilaCuentaBancaria('${prefix}')">+ Agregar otra cuenta</button>
   </div>`;
 }
-// Guarda lo tipeado en número/sucursal, bajo el banco actualmente seleccionado, sin cambiar
-// de banco -- se llama en cada tecla para no perder nada si se cambia de banco después.
-function guardarCuentaActualEnMapa(prefix){
-  const sel = document.getElementById(prefix+'-cb-banco');
-  if(!sel || !sel.value) return;
-  const mapa = leerMapaCuentas(prefix);
-  mapa[sel.value] = {
-    numero: document.getElementById(prefix+'-cb-numero').value.trim(),
-    sucursal: document.getElementById(prefix+'-cb-sucursal').value.trim(),
+function cambioBancoFilaCuenta(sel){
+  const otro = sel.closest('.cb-fila').querySelector('.cb-otro');
+  if(sel.value==='__otro__'){ otro.style.display=''; otro.focus(); }
+  else { otro.style.display='none'; otro.value=''; }
+}
+function agregarFilaCuentaBancaria(prefix){
+  const cont = document.getElementById(prefix+'-cb-filas');
+  cont.insertAdjacentHTML('beforeend', htmlFilaCuentaBancaria(''));
+  cont.lastElementChild.querySelector('.cb-banco').focus();
+}
+function quitarFilaCuentaBancaria(btn){
+  const fila = btn.closest('.cb-fila');
+  const cont = fila.parentElement;
+  const numero = fila.querySelector('.cb-numero').value.trim();
+  const quitar = ()=>{
+    // Si era la única fila, se deja una vacía en su lugar (así siempre hay dónde tipear).
+    if(cont.querySelectorAll('.cb-fila').length>1) fila.remove();
+    else fila.outerHTML = htmlFilaCuentaBancaria('');
   };
-  guardarMapaCuentas(prefix, mapa);
-}
-// Cambiar de banco en el desplegable: guarda lo que había del banco anterior, y carga lo
-// que ya estaba guardado para el banco nuevo (o vacío si es la primera vez que se lo elige).
-function cambiarBancoCuenta(prefix){
-  // OJO: en el momento en que dispara "onchange", sel.value YA es el banco nuevo -- por eso
-  // no se puede usar guardarCuentaActualEnMapa acá (guardaría lo tipeado bajo la clave
-  // equivocada). Hay que guardar explícitamente bajo el banco ANTERIOR (guardado en
-  // data-banco-previo antes de este cambio).
-  const sel = document.getElementById(prefix+'-cb-banco');
-  const bancoAnterior = sel.dataset.bancoPrevio;
-  const mapa = leerMapaCuentas(prefix);
-  if(bancoAnterior){
-    mapa[bancoAnterior] = {
-      numero: document.getElementById(prefix+'-cb-numero').value.trim(),
-      sucursal: document.getElementById(prefix+'-cb-sucursal').value.trim(),
-    };
-    guardarMapaCuentas(prefix, mapa);
-  }
-  const actual = mapa[sel.value] || {numero:'', sucursal:''};
-  document.getElementById(prefix+'-cb-numero').value = actual.numero||'';
-  document.getElementById(prefix+'-cb-sucursal').value = actual.sucursal||'';
-  sel.dataset.bancoPrevio = sel.value;
-}
-function agregarBancoNuevoACuenta(prefix){
-  const mapa = leerMapaCuentas(prefix);
-  const usados = Object.keys(mapa);
-  const disponibles = BANCOS_CUENTA.filter(b=>b!=='Otro' && !usados.includes(b));
-  const btn = document.getElementById(prefix+'-cb-addbtn');
-  btn.outerHTML = `<select id="${prefix}-cb-addsel" onchange="elegirBancoNuevo('${prefix}')" style="flex:1;min-width:120px;">
-    <option value="">Elegí un banco…</option>
-    ${disponibles.map(b=>`<option value="${b}">${b}</option>`).join('')}
-    <option value="__otro__">Otro (escribir nombre)</option>
-  </select>`;
-}
-function elegirBancoNuevo(prefix){
-  const sel = document.getElementById(prefix+'-cb-addsel');
-  const val = sel.value;
-  if(!val) return;
-  if(val==='__otro__'){
-    sel.outerHTML = `<input type="text" id="${prefix}-cb-addotro" placeholder="Nombre del banco — Enter para agregar" style="flex:1;min-width:120px;" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarBancoAlMapa('${prefix}', this.value.trim());}">`;
-    document.getElementById(prefix+'-cb-addotro').focus();
-    return;
-  }
-  agregarBancoAlMapa(prefix, val);
-}
-function agregarBancoAlMapa(prefix, banco){
-  if(!banco) return;
-  guardarCuentaActualEnMapa(prefix);
-  const mapa = leerMapaCuentas(prefix);
-  mapa[banco] = mapa[banco] || {numero:'', sucursal:''};
-  guardarMapaCuentas(prefix, mapa);
-  const bancoSel = document.getElementById(prefix+'-cb-banco');
-  bancoSel.disabled = false;
-  if(bancoSel.querySelector('option[value=""]')) bancoSel.innerHTML = '';
-  bancoSel.insertAdjacentHTML('beforeend', `<option value="${banco}">${banco}</option>`);
-  bancoSel.value = banco;
-  bancoSel.dataset.bancoPrevio = banco;
-  const numeroInput = document.getElementById(prefix+'-cb-numero'), sucursalInput = document.getElementById(prefix+'-cb-sucursal');
-  numeroInput.disabled = false; sucursalInput.disabled = false;
-  numeroInput.value = mapa[banco].numero;
-  sucursalInput.value = mapa[banco].sucursal;
-  document.getElementById(prefix+'-cb-sinbanco').style.display = 'none';
-  document.getElementById(prefix+'-cb-eliminar').style.display = '';
-  numeroInput.focus();
-  // volver a poner el botón de "+ Agregar otro banco" (saca el selector/input temporal)
-  const addsel = document.getElementById(prefix+'-cb-addsel'), addotro = document.getElementById(prefix+'-cb-addotro');
-  (addsel||addotro).outerHTML = `<button class="smallbtn" type="button" id="${prefix}-cb-addbtn" onclick="agregarBancoNuevoACuenta('${prefix}')">+ Agregar otro banco</button>`;
-}
-function confirmarQuitarBancoActual(prefix){
-  const sel = document.getElementById(prefix+'-cb-banco');
-  const banco = sel.value;
-  if(!banco) return;
-  const numero = document.getElementById(prefix+'-cb-numero').value;
-  confirmarAccion(`¿Eliminar la cuenta de ${banco}${numero?' ('+numero+')':''}? Se va a borrar al guardar.`, 'Eliminar').then(ok=>{
-    if(!ok) return;
-    const mapa = leerMapaCuentas(prefix);
-    delete mapa[banco];
-    guardarMapaCuentas(prefix, mapa);
-    sel.querySelector(`option[value="${banco.replace(/"/g,'&quot;')}"]`)?.remove();
-    const restantes = Object.keys(mapa);
-    if(restantes.length){
-      sel.value = restantes[0];
-      sel.dataset.bancoPrevio = restantes[0];
-      document.getElementById(prefix+'-cb-numero').value = mapa[restantes[0]].numero||'';
-      document.getElementById(prefix+'-cb-sucursal').value = mapa[restantes[0]].sucursal||'';
-    } else {
-      sel.innerHTML = `<option value="">Sin cuentas cargadas</option>`;
-      sel.disabled = true;
-      sel.dataset.bancoPrevio = '';
-      const numeroInput = document.getElementById(prefix+'-cb-numero'), sucursalInput = document.getElementById(prefix+'-cb-sucursal');
-      numeroInput.value = ''; numeroInput.disabled = true;
-      sucursalInput.value = ''; sucursalInput.disabled = true;
-      document.getElementById(prefix+'-cb-sinbanco').style.display = '';
-      document.getElementById(prefix+'-cb-eliminar').style.display = 'none';
-    }
-  });
+  if(!numero){ quitar(); return; }
+  confirmarAccion(`¿Quitar la cuenta ${numero}? Se borra al guardar.`, 'Quitar').then(ok=>{ if(ok) quitar(); });
 }
 function leerCuentasBancarias(prefix){
-  guardarCuentaActualEnMapa(prefix); // asegura que lo tipeado en el banco visible quede guardado
-  const mapa = leerMapaCuentas(prefix);
-  return Object.entries(mapa)
-    .filter(([banco, c])=>banco && c.numero)
-    .map(([banco, c])=>`${banco} ${c.numero}${c.sucursal ? ' (Sucursal '+c.sucursal+')' : ''}`);
+  const filas = document.querySelectorAll(`#${prefix}-cb-filas .cb-fila`);
+  const out = [];
+  filas.forEach(f=>{
+    const sel = f.querySelector('.cb-banco').value;
+    const banco = sel==='__otro__' ? f.querySelector('.cb-otro').value.trim() : sel;
+    const numero = f.querySelector('.cb-numero').value.trim();
+    const sucursal = f.querySelector('.cb-sucursal').value.trim();
+    if(!numero) return;
+    const txt = `${banco?banco+' ':''}${numero}${sucursal?' (Sucursal '+sucursal+')':''}`;
+    if(!out.includes(txt)) out.push(txt);
+  });
+  return out;
 }
 // Para mostrar en una ficha (view-only): une las cuentas con · , o '—' si no hay ninguna.
 function textoCuentasBancarias(cuentas){
