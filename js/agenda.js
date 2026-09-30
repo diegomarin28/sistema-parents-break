@@ -80,7 +80,7 @@ function mensajeWA(s, nineraNombre){
   const horario = s.hora_fin ? `${s.hora_inicio.slice(0,5)} a ${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5);
   const tipoTxt = s.tipo==='traslado' ? 'un traslado' : 'un sitting';
   const fechaTxt = new Date(s.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'});
-  return `Hola ${(nineraNombre||'').split(' ')[0]}! Te escribo de Parents Break — ¿podés cubrir ${tipoTxt} con la familia ${s.familia_nombre} el ${fechaTxt} de ${horario}${s.zona?` (zona ${s.zona})`:''}? Avisame si te queda bien.`;
+  return `Hola ${(nineraNombre||'').split(' ')[0]}! Te escribo de Parents’ Break — ¿podés cubrir ${tipoTxt} con la familia ${s.familia_nombre} el ${fechaTxt} de ${horario}${s.zona?` (zona ${s.zona})`:''}? Avisame si te queda bien.`;
 }
 function agendaTelefonoNinera(nombre){
   const n = agendaNinierasBase.find(x=>normaliza(x.nombre)===normaliza(nombre));

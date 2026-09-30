@@ -130,7 +130,7 @@ function semanasDesde(fechaStr){
    (pendiente #10), así que se puede editar antes de copiarlo. */
 function mensajeRiesgoPara(f){
   const primerNombre = (f.nombre||'').trim().split(' ')[0] || f.nombre;
-  return `¡Hola ${primerNombre}! Somos de Parents Break 💛 Hace un tiempo que no coordinamos ningún sitting con ustedes y queríamos saber cómo están. Si necesitan una niñera o un traslado, contanos y lo vemos. Como agradecimiento por seguir confiando en nosotras, tenemos un 5% de descuento para el próximo servicio. ¡Esperamos su mensaje!`;
+  return `¡Hola ${primerNombre}! Somos de Parents’ Break 💛 Hace un tiempo que no coordinamos ningún sitting con ustedes y queríamos saber cómo están. Si necesitan una niñera o un traslado, contanos y lo vemos. Como agradecimiento por seguir confiando en nosotras, tenemos un 5% de descuento para el próximo servicio. ¡Esperamos su mensaje!`;
 }
 function toggleFamRiesgo(){ famRiesgoAbierto = !famRiesgoAbierto; renderFamiliasEnRiesgo(); }
 function renderFamiliasEnRiesgo(){

@@ -54,13 +54,13 @@ function renderCarsittingPendientes(){
   box.innerHTML = cabecera + `
     <div style="margin-top:10px;">
       ${carsittingPendData.map(p=>{
-        const asunto = encodeURIComponent('¡Bienvenida al equipo de traslados de Parents Break!');
+        const asunto = encodeURIComponent('¡Bienvenida al equipo de traslados de Parents’ Break!');
         const primerNombre = (p.nombre||'').split(' ')[0];
-        const cuerpo = encodeURIComponent(`Hola ${primerNombre},\n\n¡Qué alegría contar con vos para hacer traslados con Parents Break! Ya vimos en tu entrevista que tenés licencia de conducir y ganas de sumarte a esta parte del equipo.\n\nPara terminar de darte de alta como carsitter, necesitamos que completes este formulario con los datos de tu auto y algunos datos más:\n\nhttps://forms.gle/J4QXgNJQ8kXMsA4C6\n\nCon esto ya vas a quedar lista para que te empecemos a asignar traslados.\n\nCualquier duda, escribinos.\n\nUn abrazo,\nParents Break`);
+        const cuerpo = encodeURIComponent(`Hola ${primerNombre},\n\n¡Qué alegría contar con vos para hacer traslados con Parents’ Break! Ya vimos en tu entrevista que tenés licencia de conducir y ganas de sumarte a esta parte del equipo.\n\nPara terminar de darte de alta como carsitter, necesitamos que completes este formulario con los datos de tu auto y algunos datos más:\n\nhttps://forms.gle/J4QXgNJQ8kXMsA4C6\n\nCon esto ya vas a quedar lista para que te empecemos a asignar traslados.\n\nCualquier duda, escribinos.\n\nUn abrazo,\nParents’ Break`);
         const mailId = `carp-mail-${p.origen}-${p.id}`;
         const enviadoTxt = p.enviado ? `Último mail enviado: ${new Date(p.enviado).toLocaleDateString('es-UY',{day:'2-digit',month:'short'})}` : 'Todavía no se le mandó nada';
-        const asuntoPersonal = encodeURIComponent('Parents Break');
-        const cuerpoPersonal = encodeURIComponent(`Hola ${primerNombre},\n\n\n\nUn abrazo,\nParents Break`);
+        const asuntoPersonal = encodeURIComponent('Parents’ Break');
+        const cuerpoPersonal = encodeURIComponent(`Hola ${primerNombre},\n\n\n\nUn abrazo,\nParents’ Break`);
         return `<div class="agendarow" style="border-bottom:1px solid var(--line);flex-wrap:wrap;">
           <div>
             <div style="font-weight:600;">${p.nombre} <span class="badge" style="font-size:10px;">${p.origen==='ninera'?'niñera':'candidata'}</span></div>

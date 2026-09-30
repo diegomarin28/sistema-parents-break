@@ -116,7 +116,7 @@ OCTAVA — DOMICILIOS Y JURISDICCIÓN. A todos los efectos derivados del present
 Leído y conforme, se firma en dos ejemplares de un mismo tenor, en el lugar y fecha indicados.
 
 
-Firma conductor/a: _______________________          Firma Parents Break: _______________________
+Firma conductor/a: _______________________          Firma Parents’ Break: _______________________
 Aclaración: {{NOMBRE}}                              Aclaración: _______________________
 C.I.: {{CEDULA}}
 Fecha: {{FECHA}}`,

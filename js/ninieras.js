@@ -163,7 +163,7 @@ function renderUtilizacionNinieras(){
 /* Borrador — igual que el de familias, pendiente de revisión por Pau/Delfi. */
 function mensajeUtilizacionPara(n){
   const primerNombre = (n.nombre||'').trim().split(' ')[0] || n.nombre;
-  return `¡Hola ${primerNombre}! Somos de Parents Break 💛 Hace un tiempo que no te agendamos ningún sitting y queríamos saber cómo estás y si seguís con ganas de tomar changas. ¡Contanos!`;
+  return `¡Hola ${primerNombre}! Somos de Parents’ Break 💛 Hace un tiempo que no te agendamos ningún sitting y queríamos saber cómo estás y si seguís con ganas de tomar changas. ¡Contanos!`;
 }
 function enviarWhatsappNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
@@ -280,11 +280,11 @@ async function cargarCarsittingSeccion(nombre, boxId, tipo, mail){
   // todavía no completó el form -- si hace traslados, ofrecemos mandarle el mail ya armado
   if(tipo==='Traslados' || tipo==='Ambas'){
     const primerNombre = (nombre||'').split(' ')[0];
-    const asunto = encodeURIComponent('¡Bienvenida al equipo de traslados de Parents Break!');
-    const cuerpo = encodeURIComponent(`Hola ${primerNombre},\n\n¡Qué alegría contar con vos para hacer traslados con Parents Break! Ya vimos en tu entrevista que tenés licencia de conducir y ganas de sumarte a esta parte del equipo.\n\nPara terminar de darte de alta como carsitter, necesitamos que completes este formulario con los datos de tu auto y algunos datos más:\n\nhttps://forms.gle/J4QXgNJQ8kXMsA4C6\n\nCon esto ya vas a quedar lista para que te empecemos a asignar traslados.\n\nCualquier duda, escribinos.\n\nUn abrazo,\nParents Break`);
+    const asunto = encodeURIComponent('¡Bienvenida al equipo de traslados de Parents’ Break!');
+    const cuerpo = encodeURIComponent(`Hola ${primerNombre},\n\n¡Qué alegría contar con vos para hacer traslados con Parents’ Break! Ya vimos en tu entrevista que tenés licencia de conducir y ganas de sumarte a esta parte del equipo.\n\nPara terminar de darte de alta como carsitter, necesitamos que completes este formulario con los datos de tu auto y algunos datos más:\n\nhttps://forms.gle/J4QXgNJQ8kXMsA4C6\n\nCon esto ya vas a quedar lista para que te empecemos a asignar traslados.\n\nCualquier duda, escribinos.\n\nUn abrazo,\nParents’ Break`);
     const href = `mailto:${mail||''}?subject=${asunto}&body=${cuerpo}`;
-    const asuntoPersonal = encodeURIComponent('Parents Break');
-    const cuerpoPersonal = encodeURIComponent(`Hola ${primerNombre},\n\n\n\nUn abrazo,\nParents Break`);
+    const asuntoPersonal = encodeURIComponent('Parents’ Break');
+    const cuerpoPersonal = encodeURIComponent(`Hola ${primerNombre},\n\n\n\nUn abrazo,\nParents’ Break`);
     const hrefPersonal = `mailto:${mail||''}?subject=${asuntoPersonal}&body=${cuerpoPersonal}`;
     box.innerHTML = `
       <div style="margin-top:14px;background:var(--accent-soft);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -1064,7 +1064,7 @@ function linkTemporadaGeneral(){
   return location.origin + location.pathname.replace(/[^/]*$/, '') + 'temporada.html';
 }
 function mensajeDifusionTemporada(){
-  return `Hola! Te escribimos de Parents Break. Estamos armando la temporada de verano y queremos saber en qué fechas vas a estar en Punta del Este, así te ofrecemos sittings allá o acá según corresponda.\n\nEntrá a este link, poné tu celular y marcá las quincenas (si no vas, también avisanos ahí). Es un minuto:\n\n${linkTemporadaGeneral()}\n\nGracias!`;
+  return `Hola! Te escribimos de Parents’ Break. Estamos armando la temporada de verano y queremos saber en qué fechas vas a estar en Punta del Este, así te ofrecemos sittings allá o acá según corresponda.\n\nEntrá a este link, poné tu celular y marcá las quincenas (si no vas, también avisanos ahí). Es un minuto:\n\n${linkTemporadaGeneral()}\n\nGracias!`;
 }
 async function copiarMensajeDifusionTemporada(){
   try{ await navigator.clipboard.writeText(mensajeDifusionTemporada()); toast('Mensaje copiado. Pegalo en la lista de difusión de WhatsApp.'); }
@@ -1120,7 +1120,7 @@ function linkTemporadaNinera(n){
 }
 function mensajeTemporadaPara(n){
   const primerNombre = (n.nombre||'').trim().split(' ')[0] || n.nombre;
-  return `Hola ${primerNombre}! Te escribimos de Parents Break. Estamos armando la agenda de la temporada en Punta del Este y queremos saber en qué fechas vas a estar por allá. Nos marcás las quincenas acá? Es un minuto:\n\n${linkTemporadaNinera(n)}\n\nGracias!`;
+  return `Hola ${primerNombre}! Te escribimos de Parents’ Break. Estamos armando la agenda de la temporada en Punta del Este y queremos saber en qué fechas vas a estar por allá. Nos marcás las quincenas acá? Es un minuto:\n\n${linkTemporadaNinera(n)}\n\nGracias!`;
 }
 function pedirTemporadaWhatsapp(id){
   const n = ninierasItems.find(x=>x.id===id);

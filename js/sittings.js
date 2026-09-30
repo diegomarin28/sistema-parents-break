@@ -290,7 +290,7 @@ async function descargarHistorialPDF(desde, hasta){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({orientation:'landscape'});
   doc.setFontSize(14);
-  doc.text('Parents Break — Historial de sittings y traslados', 14, 16);
+  doc.text('Parents’ Break — Historial de sittings y traslados', 14, 16);
   doc.setFontSize(10);
   doc.text(`Del ${fmtFecha(desde)} al ${fmtFecha(hasta)} · Familia: ${famLabel}`, 14, 23);
   const totalCobro = exphistItemsPreview.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
@@ -1013,7 +1013,7 @@ function actualizarPrecioSugeridoTraslado(){
   if(pagoInput && !pagoInput.dataset.tocadoManual){ pagoInput.value = pago; marcarCampoSugerido('sit-pago'); }
   calcSitMargen();
   const detalles = mult>1 ? ` · recargo horario ×${mult}` : '';
-  box.innerHTML = `<div class="helper" style="margin:0;">Precio sugerido según los km${detalles} (margen ${Math.round(margenNinera*100)}% para Parents Break) — ya está cargado arriba, en los campos con el borde punteado. Lo podés editar antes de guardar. <a href="#" onclick="abrirModalTarifaTraslado();return false;">Ajustar tarifa</a></div>`;
+  box.innerHTML = `<div class="helper" style="margin:0;">Precio sugerido según los km${detalles} (margen ${Math.round(margenNinera*100)}% para Parents’ Break) — ya está cargado arriba, en los campos con el borde punteado. Lo podés editar antes de guardar. <a href="#" onclick="abrirModalTarifaTraslado();return false;">Ajustar tarifa</a></div>`;
 }
 function abrirModalTarifaTraslado(){
   const cfg = tarifaTrasladoConfig || {};
@@ -1039,7 +1039,7 @@ function abrirModalTarifaTraslado(){
       <div class="field"><label>Multiplicador</label><input type="number" step="0.01" id="tar-rec2-mult" value="${cfg.rec2_mult??1}"></div>
     </div>
     <div class="field" style="margin-top:6px;"><label>Margen premium (multiplicador fijo)</label><input type="number" step="0.01" id="tar-premium" value="${cfg.margen_premium??1}"></div>
-    <div class="field" style="margin-top:6px;"><label>Margen para Parents Break (% que se descuenta al precio de la niñera)</label><input type="number" step="1" id="tar-margen-ninera" value="${Math.round((cfg.margen_ninera??0.15)*100)}"></div>
+    <div class="field" style="margin-top:6px;"><label>Margen para Parents’ Break (% que se descuenta al precio de la niñera)</label><input type="number" step="1" id="tar-margen-ninera" value="${Math.round((cfg.margen_ninera??0.15)*100)}"></div>
     <div id="tar-warn"></div>
     <button class="btn primary" style="width:100%;margin-top:8px;" onclick="guardarTarifaTraslado()">Guardar tarifa</button>
   `;

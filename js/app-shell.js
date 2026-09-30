@@ -53,7 +53,7 @@ function renderApp(){
       <button class="mobile-menubtn" onclick="toggleSidebarMobile()" aria-label="Abrir menú">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
-      <img src="logo.png" alt="Parents Break — ir a Hoy" class="mobile-topbar-logo" role="button" tabindex="0" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}">
+      <img src="logo.png" alt="Parents’ Break — ir a Hoy" class="mobile-topbar-logo" role="button" tabindex="0" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}">
       <div class="mobile-topbar-user">
         <span class="mobile-topbar-name">${nombreUsuario()}</span>
       </div>
@@ -93,7 +93,7 @@ function renderSidebar(){
   const activeTop = (moduloActivo===null || moduloActivo==='hoy') ? 'hoy' : (MODULOS.some(m=>m.key===moduloActivo) ? moduloActivo : null);
   document.getElementById('sidebar').innerHTML = `
     <div class="sidebar-logo-wrap">
-      <img src="logo.png" alt="Parents Break — ir a Hoy" class="sidebar-logo" role="button" tabindex="0" style="cursor:pointer;" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}">
+      <img src="logo.png" alt="Parents’ Break — ir a Hoy" class="sidebar-logo" role="button" tabindex="0" style="cursor:pointer;" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}">
       <button class="notif-btn desktop" onclick="event.stopPropagation();toggleNotifPanel()" aria-label="Notificaciones" title="Notificaciones">
         ${ICONS.bell}<span class="notif-badge">0</span>
       </button>
@@ -154,7 +154,7 @@ function rangoFechas(desdeISO, hastaISO){
 }
 async function renderDashboard(cont){
   cont.innerHTML = `
-    <div class="homeintro"><div class="eyebrow">Parents Break</div><h1>Hoy · ${fechaHoyLarga()}</h1>
+    <div class="homeintro"><div class="eyebrow">Parents’ Break</div><h1>Hoy · ${fechaHoyLarga()}</h1>
     </div>
     <div class="statrow" id="statrow">
       <div class="statcard" style="cursor:pointer;" onclick="setModulo('rrhh')"><div class="statnum">—</div><div class="statlabel">En proceso</div><div class="statnum-trend" id="trend-proceso"></div></div>

@@ -111,7 +111,7 @@ function renderLogin(){
       <div class="loginbrand">
         <div class="blob blob-a"></div>
         <div class="blob blob-b"></div>
-        <img src="logo.png" alt="Parents Break" class="loginbrand-logo">
+        <img src="logo.png" alt="Parents’ Break" class="loginbrand-logo">
         <h1>El día a día de tu equipo, en un solo lugar.</h1>
         <p>Candidatas, entrevistas, niñeras activas y tarifas por familia — todo conectado, sin planillas sueltas.</p>
       </div>
@@ -227,7 +227,7 @@ function renderPantallaBiometrica(modo){
       <div class="loginbrand">
         <div class="blob blob-a"></div>
         <div class="blob blob-b"></div>
-        <img src="logo.png" alt="Parents Break" class="loginbrand-logo">
+        <img src="logo.png" alt="Parents’ Break" class="loginbrand-logo">
         <h1>Un paso más.</h1>
         <p>${modo==='registrar' ? 'Confirmá tu identidad con Face ID o Touch ID para terminar de entrar. Solo hace falta la primera vez en cada dispositivo.' : 'Confirmá con Face ID o Touch ID para terminar de entrar en este dispositivo.'}</p>
       </div>
@@ -384,7 +384,7 @@ function renderCambioPasswordObligatorio(){
       <div class="loginbrand">
         <div class="blob blob-a"></div>
         <div class="blob blob-b"></div>
-        <img src="logo.png" alt="Parents Break" class="loginbrand-logo">
+        <img src="logo.png" alt="Parents’ Break" class="loginbrand-logo">
         <h1>Un paso más.</h1>
         <p>Por seguridad, la primera vez que entrás tenés que cambiar la contraseña genérica por una propia. Después de esto no te lo vuelve a pedir.</p>
       </div>
@@ -439,7 +439,7 @@ function renderNuevaContrasena(){
       <div class="loginbrand">
         <div class="blob blob-a"></div>
         <div class="blob blob-b"></div>
-        <img src="logo.png" alt="Parents Break" class="loginbrand-logo">
+        <img src="logo.png" alt="Parents’ Break" class="loginbrand-logo">
         <h1>El día a día de tu equipo, en un solo lugar.</h1>
         <p>Candidatas, entrevistas, niñeras activas y tarifas por familia — todo conectado, sin planillas sueltas.</p>
       </div>
