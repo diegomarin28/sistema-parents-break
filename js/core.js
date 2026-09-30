@@ -721,6 +721,9 @@ function parsearCuentaBancaria(valor){
   let banco = m[1].replace(/[\s\-–:]+$/,'').trim();
   const conocido = BANCOS_CUENTA.find(b=>normBancoCuenta(b)===normBancoCuenta(banco));
   if(conocido) banco = conocido;
+  // Si lo que viene antes del número no parece un nombre de banco (solo letras y espacios),
+  // no se parte: se deja el texto entero como número para no alterarlo al guardar.
+  else if(banco && !/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .]*$/.test(banco)) return {banco:'', numero:resto, sucursal};
   return {banco, numero:m[2].trim(), sucursal};
 }
 function htmlFilaCuentaBancaria(cuenta){
