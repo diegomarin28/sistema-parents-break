@@ -18,7 +18,7 @@ function renderFamilias(body){
       <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" autocomplete="off" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
       <div class="field" style="margin:0;"><button class="btn primary" style="width:100%;margin-top:22px;" onclick="abrirModalNuevaFamilia()">+ Agregar familia</button></div>
     </div>
-    <div class="field" style="margin:12px 0 0;"><label>Zonas (podés marcar varias)</label><div id="fam-zonas-filtro">${htmlFiltroZonas(famFiltroZonas, 'toggleFiltroZonaFam')}</div></div>
+    <div class="field" style="margin:12px 0 0;"><label>Zonas</label><div id="fam-zonas-filtro">${htmlFiltroZonas(famFiltroZonas, 'toggleFiltroZonaFam')}</div></div>
     </div>
     <div id="familiaslist"></div>
   `;
