@@ -1,0 +1,13 @@
+{
+  "name": "sistema-parents-break",
+  "private": true,
+  "description": "Pruebas automáticas del sistema de Parents Break. La app en sí no usa npm ni tiene build: esto es solo para correr los tests.",
+  "scripts": {
+    "test": "playwright test",
+    "test:static": "playwright test tests/estatico.spec.js",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
