@@ -216,12 +216,25 @@ function actualizarEdadCandidata(){
   const edad = calcularEdad(inp.value);
   out.value = edad!==null ? `${edad} años` : '';
 }
+/* Bloques del formulario público en la entrevista (05/10/2026, E6). Son los mismos campos que
+   manda el formulario (candidatas-webhook) y en el mismo orden; nombre, teléfono, zona y fecha
+   de nacimiento van arriba, en "Datos de la entrevista". Se muestran SIEMPRE: precargados y
+   editables si completó el formulario, vacíos y editables si no (cargada a mano, o entrevista
+   que arranca de cero), para completarlos durante la charla. */
+const CAMPOS_FORM_ENTREVISTA = ['disponibilidad','bachillerato','experiencia','universidad','cocina','idiomas','licencia','mail','cambia_panales','dispone_traslados','disponible_tipo','fechas_punta','trabaja_actualmente','capacitacion_extra','primeros_auxilios','comentarios','cuenta_bancaria'];
+// De formularios viejos (ya no se preguntan): aparecen solo si la candidata tiene el dato.
+const CAMPOS_FORM_VIEJOS = ['edad','patologias'];
+function camposFichaEntrevista(c){
+  const etiqueta = k => k==='cuenta_bancaria' ? 'Cuenta bancaria (banco, número y sucursal)' : (FICHA_CAMPOS.find(f=>f.key===k)?.label || k);
+  const datos = datosFichaCandidata(c);
+  return [...CAMPOS_FORM_ENTREVISTA, ...CAMPOS_FORM_VIEJOS.filter(k=>datos[k])].map(key=>({key, label:etiqueta(key)}));
+}
 function renderFichaOrigen(){
   const box = document.getElementById('fichaOrigenBox');
   if(!box) return;
   registrarRenderizadorZona('ent-zonasitting', renderFichaOrigen);
-  const c = entrevistaState.fichaOrigen;
-  if(!c){ box.innerHTML=''; return; }
+  const c = entrevistaState.fichaOrigen || {};
+  const completoForm = /form/i.test(c.origen||'');
   const notas = c.notas_ficha || {};
   // "Zona en la que puede hacer sitting" es la única categórica de verdad acá (mismo listado
   // de zonas que ya usan Niñeras/Familias) — se edita con el mismo checklist reusable, así el
@@ -229,14 +242,14 @@ function renderFichaOrigen(){
   // ítem, que arranca con lo que ella escribió (o con lo último que se guardó en una
   // entrevista anterior) y se puede seguir escribiendo o editar directo ahí mismo — no hay
   // un texto fijo separado de la caja para agregar más.
-  const campos = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','zona_sitting','fecha_nacimiento'].includes(f.key));
+  const campos = camposFichaEntrevista(c);
   const filasTexto = campos.map(f=>`
     <div class="fichadl-row">
-      <label>${f.label}</label>
-      <textarea id="ent-nota-${f.key}" placeholder="Sin dato del form — se puede escribir acá">${escaparHtml(notas[f.key]!==undefined ? notas[f.key] : c[f.key])}</textarea>
+      <label>${escaparHtml(f.label)}</label>
+      <textarea id="ent-nota-${f.key}" placeholder="${completoForm ? 'Sin dato del form — se puede escribir acá' : 'Completalo durante la entrevista'}">${escaparHtml(notas[f.key]!==undefined ? notas[f.key] : c[f.key])}</textarea>
     </div>`).join('');
   box.innerHTML = `<div class="card card-collapsible">${cardHeaderConColapso('Ficha del formulario')}<div class="card-body">
-    <div class="helper">Se puede editar directo — arranca con lo que ella puso en el form.</div>
+    <div class="helper">${completoForm ? 'Se puede editar directo — arranca con lo que ella puso en el form.' : 'No completó el formulario: estos son los mismos campos, para completarlos en la entrevista.'}</div>
     <div class="fichadl">${checklistZonas('ent-zonasitting', c.zona_sitting, 'Zona en la que puede hacer sitting')}${htmlBarriosMarcados(c.zona_sitting, c.zona_sitting_barrios, 'En el formulario marcó')}${filasTexto}</div>
   </div></div>`;
 }
@@ -407,18 +420,19 @@ async function guardarCandidata(){
   PSICO_IMGS.forEach(img=>{ const el = document.querySelector(`[data-psico="${img.id}"]`); psico[img.id]= el?el.value:''; });
 
   let candidataId = entrevistaState.candidataId;
-  // Si hay ficha de origen (vino de un form ya completado), guardamos también la zona de
-  // sitting expandida (checklist) y lo que se haya agregado en cada ítem durante la entrevista.
-  let extraFicha = {};
-  if(entrevistaState.fichaOrigen){
-    const nuevaZonaSitting = leerZonasChecklist('ent-zonasitting');
-    const notasFicha = {};
-    FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','zona_sitting','fecha_nacimiento'].includes(f.key)).forEach(f=>{
-      const val = document.getElementById(`ent-nota-${f.key}`)?.value.trim();
-      if(val) notasFicha[f.key] = val;
-    });
-    extraFicha = { zona_sitting: nuevaZonaSitting || null, notas_ficha: notasFicha };
-  }
+  // Ficha del formulario: la zona de sitting (checklist) y lo que se escribió en cada campo.
+  // Si la candidata ya existía (formulario o carga a mano), lo editado va a notas_ficha y su
+  // respuesta original queda intacta. Si la entrevista arrancó de cero, no hay respuesta
+  // original: los valores van directo a sus campos.
+  const nuevaZonaSitting = leerZonasChecklist('ent-zonasitting');
+  const valoresFicha = {};
+  camposFichaEntrevista(entrevistaState.fichaOrigen||{}).forEach(f=>{
+    const val = document.getElementById(`ent-nota-${f.key}`)?.value.trim();
+    if(val) valoresFicha[f.key] = val;
+  });
+  const extraFicha = candidataId
+    ? { zona_sitting: nuevaZonaSitting || null, notas_ficha: valoresFicha }
+    : { ...valoresFicha, zona_sitting: nuevaZonaSitting || null };
   if(candidataId){
     const { error } = await sb.from('candidatas').update({ estado:'entrevistada', telefono:document.getElementById('f-telefono').value, zona:leerZonasChecklist('f'), fecha_nacimiento: document.getElementById('f-fecha-nac').value || null, ...extraFicha }).eq('id', candidataId);
     if(error){ warnArea.innerHTML = errBox(error); return; }
@@ -426,9 +440,11 @@ async function guardarCandidata(){
     if(!(await confirmarNombreNuevo(nombre, [...intakeItems, ...candidatasItems], 'niñera'))) return;
     const { data, error } = await sb.from('candidatas').insert({
       nombre, telefono:document.getElementById('f-telefono').value, zona:leerZonasChecklist('f'),
-      origen:document.getElementById('f-origen').value, experiencia:document.getElementById('f-exp-previa').value,
+      origen:document.getElementById('f-origen').value,
       fecha_nacimiento: document.getElementById('f-fecha-nac').value || null,
       tipo: entrevistaState.tipo || 'Niñera', estado:'entrevistada', ...extraFicha,
+      // "Experiencia previa (resumen)" de arriba manda; si quedó vacía, la del bloque del form.
+      experiencia: document.getElementById('f-exp-previa').value || valoresFicha.experiencia || null,
     }).select().single();
     if(error){ warnArea.innerHTML = errBox(error); return; }
     candidataId = data.id;
@@ -494,7 +510,7 @@ function verDetalle(i){
   const refsHtml = refs.length ? refs.map(r=>`<div class="q">${escaparHtml(r.name||'(sin nombre)')} · ${escaparHtml(r.phone||'sin tel')} · ${escaparHtml(r.relacion||'—')} ${r.confirmado?'· ✓ confirmada':''}</div>`).join('') : '<div class="helper">Sin referencias.</div>';
   const psicoHtml = c.psico ? PSICO_IMGS.map(img=>`<div class="q"><b>${img.id}:</b> ${escaparHtml(c.psico[img.id]||'(sin respuesta anotada)')}</div>`).join('') : '';
   const notasCd = cd.notas_ficha || {};
-  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]||notasCd[f.key]).map(f=>`<div><b>${f.label}</b>${escaparHtml(notasCd[f.key]!==undefined ? notasCd[f.key] : (f.key==='zona_sitting' ? textoZonasConBarrios(cd.zona_sitting, cd.zona_sitting_barrios) : cd[f.key]))}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
+  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]||notasCd[f.key]).map(f=>`<div><b>${f.label}</b>${escaparHtml(notasCd[f.key]!==undefined ? notasCd[f.key] : (f.key==='zona_sitting' ? textoZonasConBarrios(cd.zona_sitting, cd.zona_sitting_barrios) : cd[f.key]))}</div>`).join('')}${datosFichaCandidata(cd).cuenta_bancaria ? `<div><b>Cuenta bancaria</b>${escaparHtml(datosFichaCandidata(cd).cuenta_bancaria)}</div>` : ''}${FICHA_CAMPOS.some(f=>cd[f.key]||notasCd[f.key]) || datosFichaCandidata(cd).cuenta_bancaria ? '' : '<div>Sin datos.</div>'}</div></div>`;
   abrirModal(`
     <div class="card resultcard">
       <div class="gauge" style="background:conic-gradient(${c.recomendacion==='Recomendada'?'var(--good)':c.recomendacion==='No recomendada'?'var(--bad)':'var(--warn)'} ${c.total/5*100}%, var(--line) 0);"><div class="inner"><div class="num">${Number(c.total).toFixed(1)}</div><div class="max">/ 5</div></div></div>
@@ -564,7 +580,8 @@ async function contratar(candidataId){
   };
   // Si la candidata puso cuenta bancaria en el formulario, se copia sola a la ficha de
   // niñera (ahí es donde vive de verdad, como una cuenta más dentro del array).
-  if(cd.cuenta_bancaria) ninera.cuenta_bancaria = [cd.cuenta_bancaria];
+  const cuentaFicha = datosFichaCandidata(cd).cuenta_bancaria; // la del form, o la corregida en la entrevista
+  if(cuentaFicha) ninera.cuenta_bancaria = [cuentaFicha];
   // Barrios exactos que marcó en el formulario (dónde vive + dónde puede): quedan en su ficha
   // para ver el detalle ("Punta del Este (José Ignacio)"); se busca y filtra igual por zona.
   const barriosForm = unirBarrios(cd.zona_barrios, cd.zona_sitting_barrios);

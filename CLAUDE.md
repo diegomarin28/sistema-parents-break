@@ -84,6 +84,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
 - `tests/arranque.spec.js`: pantalla de carga, error si no carga supabase-js, "Entrando…".
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
+- `tests/entrevista.spec.js`: bloques del formulario en la entrevista y datos corregidos en la
+  ficha de la niñera.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -122,6 +124,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   corre un día, usar `asignacionVigenteEn(a, fecha)` (core.js).
 - Finanzas: el resultado del mes se calcula sobre lo facturado; cobrado/pagado solo dicen si
   la plata ya entró o salió (error E1, 05/10/2026).
+- Candidatas: lo corregido en la entrevista vive en `notas_ficha` y pisa la respuesta del
+  formulario; para mostrar datos de una candidata/niñera usar `datosFichaCandidata()` (core.js).
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 
