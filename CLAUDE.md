@@ -86,6 +86,7 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
 - `tests/entrevista.spec.js`: bloques del formulario en la entrevista y datos corregidos en la
   ficha de la niñera.
+- `tests/conciliacion.spec.js`: conciliación con el extracto (tildadas, dudosas, confirmar).
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).

@@ -27,7 +27,7 @@ async function renderFinanzas(cont){
     </div>
     <div class="card" id="fin-conciliar-wrap">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-        <div><h2 style="margin:0;">Conciliar cobros con extracto Itaú</h2><div class="helper" style="margin:2px 0 0;">Subí el estado de cuenta (.xls, .xlsx o .csv) y el sistema matchea los créditos contra la cuenta bancaria de cada familia, para no tener que marcar "cobrado" sitting por sitting.</div></div>
+        <div><h2 style="margin:0;">Conciliar con el extracto Itaú</h2><div class="helper" style="margin:2px 0 0;">Subí el estado de cuenta (.xls, .xlsx o .csv): el sistema busca los créditos de cada familia y las transferencias a cada niñera por su cuenta bancaria, y te propone qué marcar como cobrado o pagado. Nada se marca sin que lo confirmes.</div></div>
       </div>
       <div id="fin-extracto-aviso"></div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
@@ -559,14 +559,16 @@ function bucketLabelFecha(bucketKey, frecuencia, trabajaFinde=true){
   if(frecuencia==='semanal') return `Semana del ${fmtFechaCortaFin(bucketKey)} al ${fmtFechaCortaFin(finDeSemanaDesde(bucketKey, trabajaFinde))}`;
   return fmtFechaCortaFin(bucketKey);
 }
-async function cargarPorCobrarPorPagar(){
+// Pendientes de cobro y de pago agrupados como en Por cobrar / Por pagar (familia o niñera +
+// período según su frecuencia). Lo usan esas dos listas y la conciliación con el extracto.
+async function calcularPendientesAgrupados(){
   const [{data:pendCobrar}, {data:pendPagar}, {data:fams}, {data:nins}, {data:asigs}] = await Promise.all([
     sb.from('sittings_traslados').select('id,familia_id,familia_nombre,fecha,cobro_familia').eq('cobrado', false).gt('cobro_familia', 0),
     // Por pagar solo muestra lo que ya pasó (05/10/2026, E7): un sitting cargado por
     // adelantado aparecía como para pagar y se le pagó a una niñera antes de que ocurriera.
     // Entra recién el día del sitting.
     sb.from('sittings_traslados').select('id,familia_id,familia_nombre,ninera_id,ninera_nombre,fecha,pago_ninera,asignacion_id').eq('pagado', false).gt('pago_ninera', 0).lte('fecha', todayISO()),
-    sb.from('familias').select('id,nombre,frecuencia_cobro'),
+    sb.from('familias').select('id,nombre,frecuencia_cobro,cuenta_bancaria'),
     sb.from('ninieras').select('id,nombre,cuenta_bancaria'),
     sb.from('asignaciones').select('*, familias(nombre)'),
   ]);
@@ -582,16 +584,10 @@ async function cargarPorCobrarPorPagar(){
     const frec = r.familia_id ? (famFrecPorId[r.familia_id]||'mensual') : (famFrecPorNombre[normaliza(r.familia_nombre)]||'mensual');
     const bucket = bucketKeyFecha(r.fecha, frec);
     const key = (r.familia_id||normaliza(r.familia_nombre))+'|'+bucket;
-    if(!gruposCobrar[key]) gruposCobrar[key] = {nombre:r.familia_nombre, frec, bucket, total:0, ids:[]};
+    if(!gruposCobrar[key]) gruposCobrar[key] = {nombre:r.familia_nombre, familia_id:r.familia_id||null, frec, bucket, total:0, ids:[]};
     gruposCobrar[key].total += Number(r.cobro_familia)||0;
     gruposCobrar[key].ids.push(r.id);
   });
-  const listaCobrar = Object.values(gruposCobrar)
-    // Igual criterio que en Por pagar: un cobro semanal recién se muestra cuando esa
-    // semana ya terminó, para no mostrar un total que todavía le faltan días por sumar.
-    .filter(g => g.frec!=='semanal' || finDeSemanaDesde(g.bucket) < todayISO())
-    .sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
-
   const gruposPagar = {};
   (pendPagar||[]).forEach(r=>{
     // La frecuencia depende del trabajo, no de la niñera: si es una relación fija con esa familia, se junta semanal; si es puntual, se paga aparte por día.
@@ -599,11 +595,20 @@ async function cargarPorCobrarPorPagar(){
     const bucket = bucketKeyFecha(r.fecha, frec);
     const info = r.ninera_id ? ninInfoPorId[r.ninera_id] : ninInfoPorNombre[normaliza(r.ninera_nombre)];
     const key = (r.ninera_id||normaliza(r.ninera_nombre))+'|'+bucket;
-    if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuenta:(info?.cuenta_bancaria&&info.cuenta_bancaria.length)?info.cuenta_bancaria.join(' · '):''};
+    if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuenta:(info?.cuenta_bancaria&&info.cuenta_bancaria.length)?info.cuenta_bancaria.join(' · '):''};
     gruposPagar[key].total += Number(r.pago_ninera)||0;
     gruposPagar[key].ids.push(r.id);
   });
-  const listaPagar = Object.values(gruposPagar)
+  return { gruposCobrar:Object.values(gruposCobrar), gruposPagar:Object.values(gruposPagar), fams:fams||[], nins:nins||[] };
+}
+async function cargarPorCobrarPorPagar(){
+  const { gruposCobrar, gruposPagar } = await calcularPendientesAgrupados();
+  const listaCobrar = gruposCobrar
+    // Igual criterio que en Por pagar: un cobro semanal recién se muestra cuando esa
+    // semana ya terminó, para no mostrar un total que todavía le faltan días por sumar.
+    .filter(g => g.frec!=='semanal' || finDeSemanaDesde(g.bucket) < todayISO())
+    .sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
+  const listaPagar = gruposPagar
     // Un fijo se agrupa por semana completa -- si esa semana todavía no terminó, mostrar
     // el total ahora sería mostrar un pago a mitad de armar (le falta lo que falta cobrar
     // esos días). Se muestra recién cuando termina la semana: sábado pasado para la mayoría
@@ -827,11 +832,78 @@ function detectarColumnasExtracto(filas){
     const fila = filas[i].map(norm);
     const iFecha = fila.findIndex(c=>c.includes('fecha'));
     const iCredito = fila.findIndex(c=>c.includes('credito') || c.includes('haber'));
+    const iDebito = fila.findIndex(c=>c.includes('debito') || c==='debe');
     const iConcepto = fila.findIndex(c=>c.includes('concepto') || c.includes('descripcion') || c.includes('referencia') || c.includes('detalle'));
-    if(iFecha>-1 && iCredito>-1) return { header:i, iFecha, iCredito, iConcepto: iConcepto>-1?iConcepto:iFecha+1 };
+    if(iFecha>-1 && iCredito>-1) return { header:i, iFecha, iCredito, iDebito, iConcepto: iConcepto>-1?iConcepto:iFecha+1 };
   }
   return null;
 }
+/* Conciliación con marcar cobrado / pagado (05/10/2026). El extracto ya no marca nada solo
+   ni con un botón directo: cada coincidencia trae una casilla, las seguras vienen tildadas y
+   las dudosas destildadas y con el motivo a la vista. Recién al confirmar (con el detalle y el
+   total) se marca. Seguras: la cuenta del extracto es de una sola familia (o niñera) y el
+   monto coincide con lo pendiente. Dudosas: monto distinto, el mismo monto en varios
+   períodos o varias familias, cuenta cargada en más de una ficha, o sin cuenta en el
+   concepto (CAMBIOS, VARIOS...) donde solo coincide el monto. Pagos a niñeras: igual, con
+   los débitos del extracto y la cuenta de cada niñera, y se confirman con el mismo detalle
+   de "Marcar pagado" (E3). */
+let concPropuestas = { cobro:[], pago:[] };
+function mapaPorCuenta(fichas){
+  const mapa = {};
+  (fichas||[]).forEach(f=>{
+    const cuentas = Array.isArray(f.cuenta_bancaria) ? f.cuenta_bancaria : (f.cuenta_bancaria ? [f.cuenta_bancaria] : []);
+    cuentas.forEach(cta=>{
+      // La cuenta se guarda como texto libre ("Itaú 0012345 (Sucursal 3)"): se usa el número largo.
+      const d = extraerCuentaDeTexto(cta) || soloDigitos(cta);
+      if(!d) return;
+      [d, d.replace(/^0+/,'')].forEach(k=>{ if(!k) return; (mapa[k] = mapa[k] || new Map()).set(f.id, f); });
+    });
+  });
+  return cuenta => {
+    if(!cuenta) return [];
+    const out = new Map();
+    [cuenta, cuenta.replace(/^0+/,'')].forEach(k=>{ (mapa[k]||new Map()).forEach((f,id)=>out.set(id,f)); });
+    return [...out.values()];
+  };
+}
+// Propuestas para un conjunto de movimientos del extracto ya agrupados (por ficha y período).
+function proponerCoincidencias(movsAgrupados, gruposPend, claveFicha){
+  const props = [];
+  const sinCoincidencia = [];
+  const casi = (a,b)=>Math.abs(a-b) < 1;
+  const anteriores = (fecha, g)=> g.bucket.slice(0,10) <= fecha; // el período empezó antes del movimiento
+  movsAgrupados.forEach(m=>{
+    const detalleExtracto = m.movs.map(x=>`${fmtFechaCortaFin(x.fecha)} ${x.concepto||'(sin concepto)'}`).join(' · ');
+    if(m.fichas.length===1){
+      const fichaId = m.fichas[0].id;
+      const delaFicha = gruposPend.filter(g=>g[claveFicha]===fichaId && anteriores(m.fecha, g));
+      const exactos = delaFicha.filter(g=>casi(g.total, m.total));
+      const suma = delaFicha.reduce((t,g)=>t+g.total, 0);
+      if(exactos.length===1){
+        props.push({ grupos:exactos, extracto:m.total, detalleExtracto, tildada:true, motivo:null });
+      } else if(exactos.length>1){
+        exactos.forEach(g=>props.push({ grupos:[g], extracto:m.total, detalleExtracto, tildada:false, motivo:`El mismo monto coincide con ${exactos.length} períodos: elegí cuál` }));
+      } else if(delaFicha.length>1 && casi(suma, m.total)){
+        props.push({ grupos:delaFicha, extracto:m.total, detalleExtracto, tildada:true, motivo:null, nota:'Pagó varios períodos juntos' });
+      } else if(delaFicha.length){
+        const ultimo = delaFicha.slice().sort((a,b)=>b.bucket.localeCompare(a.bucket))[0];
+        props.push({ grupos:[ultimo], extracto:m.total, detalleExtracto, tildada:false, motivo:`Monto distinto: el extracto dice ${plataFin(m.total)} y lo pendiente es ${plataFin(ultimo.total)}` });
+      } else {
+        sinCoincidencia.push({ ...m, motivo:`${m.fichas[0].nombre} no tiene nada pendiente de antes de esa fecha` });
+      }
+      return;
+    }
+    // Sin ficha identificada (o la cuenta está en varias fichas): solo puede coincidir el monto.
+    const candidatos = gruposPend.filter(g=>casi(g.total, m.total) && anteriores(m.fecha, g) && (!m.fichas.length || m.fichas.some(f=>f.id===g[claveFicha])));
+    if(!candidatos.length){ sinCoincidencia.push({ ...m, motivo: m.cuenta ? 'La cuenta no está cargada en ninguna ficha' : 'Sin cuenta en el concepto y ningún pendiente con ese monto' }); return; }
+    const motivo = m.fichas.length>1 ? `La cuenta está cargada en ${m.fichas.length} fichas: elegí cuál`
+      : candidatos.length>1 ? `Sin cuenta en el extracto y el mismo monto coincide con ${candidatos.length} pendientes: elegí cuál`
+      : 'Sin cuenta en el extracto (ej. CAMBIOS): coincide solo el monto';
+    candidatos.forEach(g=>props.push({ grupos:[g], extracto:m.total, detalleExtracto, tildada:false, motivo }));
+  });
+  return { props, sinCoincidencia };
+}
+function plataFin(n){ return '$'+Number(n||0).toLocaleString('es-UY', {maximumFractionDigits:2}); }
 async function procesarExtractoConciliacion(){
   const input = document.getElementById('fin-conciliar-file');
   const box = document.getElementById('fin-conciliar-resultado');
@@ -844,106 +916,167 @@ async function procesarExtractoConciliacion(){
   const cols = detectarColumnasExtracto(filas);
   if(!cols){ box.innerHTML = '<div class="empty">No encontré columnas de Fecha y Crédito en el archivo. Revisá que sea el extracto tal cual lo exporta Itaú.</div>'; return; }
 
-  const creditos = [];
+  const creditos = [], debitos = [];
   for(let i=cols.header+1;i<filas.length;i++){
     const f = filas[i];
     if(!f || !f.length) continue;
-    const monto = parseMontoExtracto(f[cols.iCredito]);
-    if(!monto) continue;
     const fecha = parseFechaExtracto(f[cols.iFecha]);
     if(!fecha) continue;
     const concepto = String(f[cols.iConcepto]||'');
-    creditos.push({ fecha, monto, concepto, cuenta: extraerCuentaDeTexto(concepto) });
+    const mov = { fecha, concepto, cuenta: extraerCuentaDeTexto(concepto) };
+    const credito = parseMontoExtracto(f[cols.iCredito]);
+    if(credito) creditos.push({ ...mov, monto:credito });
+    const debito = cols.iDebito>-1 ? Math.abs(parseMontoExtracto(f[cols.iDebito])) : 0;
+    if(debito) debitos.push({ ...mov, monto:debito });
   }
-  if(!creditos.length){ box.innerHTML = '<div class="empty">No encontré movimientos de crédito en el archivo.</div>'; return; }
+  if(!creditos.length && !debitos.length){ box.innerHTML = '<div class="empty">No encontré movimientos en el archivo.</div>'; return; }
 
-  const [{data:fams}, {data:pend}] = await Promise.all([
-    sb.from('familias').select('id,nombre,frecuencia_cobro,cuenta_bancaria'),
-    sb.from('sittings_traslados').select('id,familia_id,familia_nombre,fecha,cobro_familia').eq('cobrado', false).gt('cobro_familia', 0),
-  ]);
-  const famPorCuenta = {};
-  (fams||[]).forEach(f=>{
-    const cuentas = Array.isArray(f.cuenta_bancaria) ? f.cuenta_bancaria : (f.cuenta_bancaria ? [f.cuenta_bancaria] : []);
-    cuentas.forEach(cta=>{
-      const d = soloDigitos(cta);
-      if(!d) return;
-      famPorCuenta[d] = f;
-      famPorCuenta[d.replace(/^0+/,'')] = f;
+  const { gruposCobrar, gruposPagar, fams, nins } = await calcularPendientesAgrupados();
+  const famsDeCuenta = mapaPorCuenta(fams);
+  const ninsDeCuenta = mapaPorCuenta(nins);
+  const famFrec = {}; fams.forEach(f=>{ famFrec[f.id] = f.frecuencia_cobro || 'mensual'; });
+
+  // Créditos: los de una misma familia en el mismo período se suman (pagó en dos transferencias).
+  const agrupar = (movs, fichasDe, periodo) => {
+    const g = {};
+    let sueltos = 0; // sin ficha identificada: cada movimiento va solo
+    movs.forEach(c=>{
+      const fichas = fichasDe(c.cuenta);
+      const clave = fichas.length===1 ? fichas[0].id+'|'+periodo(fichas[0], c.fecha) : 'suelto|'+(sueltos++);
+      if(!g[clave]) g[clave] = { fichas, cuenta:c.cuenta, fecha:c.fecha, total:0, movs:[] };
+      g[clave].total += c.monto; g[clave].movs.push(c);
+      if(c.fecha > g[clave].fecha) g[clave].fecha = c.fecha;
     });
-  });
-  const famFrecPorId = {}; (fams||[]).forEach(f=>{ famFrecPorId[f.id] = f.frecuencia_cobro || 'mensual'; });
+    return Object.values(g);
+  };
+  const credAgr = agrupar(creditos, famsDeCuenta, (f, fecha)=>bucketKeyFecha(fecha, famFrec[f.id]||'mensual'));
+  // Débitos sin cuenta de una niñera son gastos cualquiera: no se proponen ni se listan.
+  const debIdentificados = debitos.filter(d=>ninsDeCuenta(d.cuenta).length);
+  const debAgr = agrupar(debIdentificados, ninsDeCuenta, (n, fecha)=>fecha);
 
-  // Agrupar créditos identificados por familia+bucket (según la frecuencia de cobro de esa familia)
-  const grupCred = {};
-  const sinIdentificar = [];
-  creditos.forEach(c=>{
-    const fam = c.cuenta ? (famPorCuenta[c.cuenta] || famPorCuenta[c.cuenta.replace(/^0+/,'')]) : null;
-    if(!fam){ sinIdentificar.push(c); return; }
-    const frec = famFrecPorId[fam.id] || 'mensual';
-    const bucket = bucketKeyFecha(c.fecha, frec);
-    const key = fam.id+'|'+bucket;
-    if(!grupCred[key]) grupCred[key] = { familia:fam, frec, bucket, total:0 };
-    grupCred[key].total += c.monto;
-  });
-
-  // Agrupar pendientes de cobro por familia+bucket, con la misma lógica de bucket que "Por cobrar"
-  const grupPend = {};
-  (pend||[]).forEach(r=>{
-    if(!r.familia_id) return;
-    const frec = famFrecPorId[r.familia_id] || 'mensual';
-    const bucket = bucketKeyFecha(r.fecha, frec);
-    const key = r.familia_id+'|'+bucket;
-    if(!grupPend[key]) grupPend[key] = { total:0, ids:[] };
-    grupPend[key].total += Number(r.cobro_familia)||0;
-    grupPend[key].ids.push(r.id);
-  });
-
-  const matches = [];
-  Object.keys(grupCred).forEach(key=>{
-    const cred = grupCred[key];
-    const pendG = grupPend[key];
-    if(!pendG) return; // la familia cobró algo pero no tiene sittings pendientes de marcar acá — nada que hacer
-    matches.push({ familia:cred.familia.nombre, bucket:cred.bucket, frec:cred.frec, totalExtracto:cred.total, totalPendiente:pendG.total, ids:pendG.ids, exacto: Math.abs(cred.total-pendG.total)<1 });
-  });
-  matches.sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.familia.localeCompare(b.familia));
-
-  const exactos = matches.filter(m=>m.exacto);
-  const conDiferencia = matches.filter(m=>!m.exacto);
+  const cobros = proponerCoincidencias(credAgr, gruposCobrar.filter(g=>g.familia_id), 'familia_id');
+  const pagos = proponerCoincidencias(debAgr, gruposPagar.filter(g=>g.ninera_id), 'ninera_id');
+  const conCodigo = (lista, tipo) => lista.map((p,i)=>({ ...p, i, tipo,
+    ids: [...new Set(p.grupos.flatMap(g=>g.ids))],
+    pendiente: p.grupos.reduce((t,g)=>t+g.total,0),
+    nombre: p.grupos[0].nombre,
+    periodo: p.grupos.map(g=>bucketLabelFecha(g.bucket, g.frec, g.finde)).join(' + '),
+    hecha:false }));
+  concPropuestas = { cobro: conCodigo(cobros.props, 'cobro'), pago: conCodigo(pagos.props, 'pago') };
 
   await sbGuardar(sb.from('app_config').upsert({ id:'ultima_conciliacion_cobros', valor:{archivo:file.name}, actualizado_at:new Date().toISOString() }), 'la marca de conciliación');
   actualizarFinanzasBadge();
   cargarAvisoExtracto();
 
-  const filaMatch = m => `
-    <div class="agendarow" style="border-bottom:1px solid var(--line);">
-      <div>
-        <div style="font-weight:600;">${escaparHtml(m.familia)}</div>
-        <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(m.bucket, m.frec)}${m.exacto?'':` · extracto $${m.totalExtracto.toLocaleString('es-UY')} vs pendiente $${m.totalPendiente.toLocaleString('es-UY')}`}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${m.totalPendiente.toLocaleString('es-UY')}</span>
-        <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(m.ids)}, 'cobrado'))">Marcar cobrado</button>
-      </div>
-    </div>`;
-
+  const seguras = l => l.filter(p=>!p.motivo).length;
+  const nSeguras = seguras(concPropuestas.cobro)+seguras(concPropuestas.pago);
+  const nDudosas = concPropuestas.cobro.length+concPropuestas.pago.length-nSeguras;
+  const plural = (n, uno, varios) => `${n} ${n===1?uno:varios}`;
+  const sinCoincidencia = [...cobros.sinCoincidencia.map(x=>({...x, tipo:'Crédito'})), ...pagos.sinCoincidencia.map(x=>({...x, tipo:'Débito'}))];
   box.innerHTML = `
-    <div class="helper" style="margin-bottom:10px;">${creditos.length} créditos leídos del extracto · ${exactos.length} coinciden exacto con cobros pendientes · ${conDiferencia.length} con diferencia · ${sinIdentificar.length} sin cuenta identificable.</div>
-    ${exactos.length ? `
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h3 style="margin:10px 0 4px;">Coinciden exacto</h3>
-        <button class="btn primary" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(exactos.flatMap(m=>m.ids))}, 'cobrado'))">Marcar todo como cobrado (${exactos.length})</button>
-      </div>
-      ${exactos.map(filaMatch).join('')}` : ''}
-    ${conDiferencia.length ? `<h3 style="margin:14px 0 4px;">Con diferencia — revisar antes de marcar</h3>${conDiferencia.map(filaMatch).join('')}` : ''}
-    ${sinIdentificar.length ? `
-      <h3 style="margin:14px 0 4px;">Sin cuenta identificable — revisar a mano</h3>
-      <div class="helper" style="margin-bottom:6px;">Movimientos tipo "CAMBIOS"/"VARIOS" u otros sin número de cuenta reconocible en el concepto.</div>
-      ${sinIdentificar.map(c=>`<div class="agendarow" style="border-bottom:1px solid var(--line);">
-        <div>${fmtFechaCortaFin(c.fecha)} · ${escaparHtml(c.concepto||'(sin concepto)')}</div>
-        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${c.monto.toLocaleString('es-UY')}</span>
+    <div class="helper" style="margin-bottom:10px;">${plural(creditos.length, 'crédito leído', 'créditos leídos')} del extracto${debIdentificados.length ? ` y ${plural(debIdentificados.length, 'pago a niñeras', 'pagos a niñeras')}` : ''} · ${plural(nSeguras, 'coincidencia segura (tildada)', 'coincidencias seguras (tildadas)')} · ${plural(nDudosas, 'dudosa (sin tildar, revisala)', 'dudosas (sin tildar, revisalas)')} · ${sinCoincidencia.length} sin coincidencia. Nada se marca hasta que confirmes.</div>
+    ${seccionConciliacion('cobro', 'Cobros de familias', 'Marcar cobrado lo tildado')}
+    ${seccionConciliacion('pago', 'Pagos a niñeras', 'Marcar pagado lo tildado')}
+    ${sinCoincidencia.length ? `
+      <h3 style="margin:14px 0 4px;">Sin coincidencia — revisar a mano</h3>
+      ${sinCoincidencia.map(c=>`<div class="agendarow" style="border-bottom:1px solid var(--line);">
+        <div>${escaparHtml(c.tipo)} · ${c.movs.map(x=>`${fmtFechaCortaFin(x.fecha)} · ${escaparHtml(x.concepto||'(sin concepto)')}`).join('<br>')}<div class="helper" style="margin:2px 0 0;">${escaparHtml(c.motivo)}</div></div>
+        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${plataFin(c.total)}</span>
       </div>`).join('')}` : ''}
-    ${(!exactos.length && !conDiferencia.length && !sinIdentificar.length) ? '<div class="empty">No hay nada para conciliar en este extracto.</div>' : ''}
+    ${(!concPropuestas.cobro.length && !concPropuestas.pago.length && !sinCoincidencia.length) ? '<div class="empty">No hay nada para conciliar en este extracto.</div>' : ''}
   `;
+  actualizarTotalesConciliacion();
+}
+function seccionConciliacion(tipo, titulo, textoBoton){
+  const lista = concPropuestas[tipo];
+  if(!lista.length) return '';
+  return `<div class="conc-seccion" data-conc-seccion="${tipo}">
+    <h3 style="margin:14px 0 4px;">${titulo}</h3>
+    ${lista.map(p=>`
+      <label class="conc-fila${p.motivo?' conc-dudosa':''}" data-conc-fila="${tipo}-${p.i}">
+        <input type="checkbox" data-conc="${tipo}" data-i="${p.i}" ${p.tildada?'checked':''} onchange="actualizarTotalesConciliacion()">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;">${escaparHtml(p.nombre)}${p.nota?` <span class="helper" style="margin:0;">· ${escaparHtml(p.nota)}</span>`:''}</div>
+          <div class="helper" style="margin:2px 0 0;">${escaparHtml(p.periodo)} · en el extracto: ${escaparHtml(p.detalleExtracto)}</div>
+          ${p.motivo ? `<div class="conc-motivo">${escaparHtml(p.motivo)}</div>` : ''}
+        </div>
+        <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;white-space:nowrap;">${plataFin(p.pendiente)}</span>
+      </label>`).join('')}
+    <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+      <button class="btn primary" id="conc-btn-${tipo}" onclick="conGuardado(this, ()=>confirmarConciliacion(${argJs(tipo)}))">${textoBoton}</button>
+    </div>
+  </div>`;
+}
+function tildadasConciliacion(tipo){
+  return [...document.querySelectorAll(`input[data-conc="${tipo}"]:checked:not(:disabled)`)].map(el=>concPropuestas[tipo][Number(el.dataset.i)]).filter(Boolean);
+}
+function actualizarTotalesConciliacion(){
+  ['cobro','pago'].forEach(tipo=>{
+    const btn = document.getElementById('conc-btn-'+tipo);
+    if(!btn || btn.dataset.guardando) return;
+    const sel = tildadasConciliacion(tipo);
+    const ids = new Set(sel.flatMap(p=>p.ids));
+    const total = sel.reduce((t,p)=>t+p.pendiente,0);
+    btn.disabled = !ids.size;
+    btn.textContent = `${tipo==='cobro'?'Marcar cobrado':'Marcar pagado'} lo tildado (${sel.length} · ${plataFin(total)})`;
+  });
+}
+// Nunca se marca sin confirmar: cobros con este detalle; pagos con el de "Marcar pagado" (E3).
+async function confirmarConciliacion(tipo){
+  const sel = tildadasConciliacion(tipo);
+  if(!sel.length){ toast('No hay nada tildado.', 'bad'); return; }
+  const ids = [...new Set(sel.flatMap(p=>p.ids))];
+  if(tipo==='cobro' && !(await confirmarCobrosConciliacion(sel))) return;
+  if(tipo==='pago' && !(await confirmarPagoSittings(ids))) return;
+  const { error } = await sb.from('sittings_traslados').update({[tipo==='cobro'?'cobrado':'pagado']:true}).in('id', ids);
+  if(error){ toast('No se pudo marcar: '+error.message, 'bad'); return; }
+  sel.forEach(p=>{
+    p.hecha = true;
+    const fila = document.querySelector(`[data-conc-fila="${tipo}-${p.i}"]`);
+    const cb = fila?.querySelector('input');
+    if(cb){ cb.checked = false; cb.disabled = true; }
+    fila?.classList.add('conc-hecha');
+  });
+  // Otras propuestas que apuntaban a esos mismos sittings (opciones de una dudosa) ya no aplican.
+  concPropuestas[tipo].forEach(p=>{
+    if(!p.hecha && p.ids.some(id=>ids.includes(id))){
+      const cb = document.querySelector(`[data-conc-fila="${tipo}-${p.i}"] input`);
+      if(cb){ cb.checked = false; cb.disabled = true; }
+    }
+  });
+  toast(tipo==='cobro' ? `Marcado como cobrado (${sel.length}).` : `Marcado como pagado (${sel.length}).`);
+  refrescarFinanzasCompleto();
+  setTimeout(actualizarTotalesConciliacion, 0);
+}
+function confirmarCobrosConciliacion(sel){
+  const total = sel.reduce((t,p)=>t+p.pendiente,0);
+  return new Promise(resolve=>{
+    const overlay = document.createElement('div');
+    overlay.className = 'confirmoverlay';
+    overlay.innerHTML = `
+      <div class="confirmbox wide" role="dialog" aria-label="Confirmar cobros">
+        <h2 style="margin:0 0 4px;">Confirmar cobros</h2>
+        <div class="helper" style="margin:0 0 12px;">Se van a marcar como cobrados todos los sittings de estos períodos.</div>
+        <div id="cobro-detalle">
+          ${sel.map(p=>`<div class="pago-fila">
+            <div style="min-width:0;"><div style="font-weight:600;">${escaparHtml(p.nombre)}</div>
+            <div class="helper" style="margin:2px 0 0;">${escaparHtml(p.periodo)} · ${p.ids.length} ${p.ids.length===1?'registro':'registros'}${p.motivo?' · dudosa, elegida a mano':''}</div></div>
+            <div class="pago-monto">${plataFin(p.pendiente)}</div>
+          </div>`).join('')}
+          <div class="pago-fila pago-total-fila"><div style="font-weight:700;">Total</div><div class="pago-monto" id="cobro-total" style="font-weight:700;">${plataFin(total)}</div></div>
+        </div>
+        <div class="confirmbtns">
+          <button class="btn ghost" id="cobro-cancelar">Cancelar</button>
+          <button class="btn primary" id="cobro-confirmar">Confirmar cobro</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(()=>overlay.classList.add('show'));
+    const cerrar = ok => { overlay.classList.remove('show'); setTimeout(()=>overlay.remove(), 180); resolve(ok); };
+    overlay.addEventListener('click', e=>{ if(e.target===overlay) cerrar(false); });
+    overlay.querySelector('#cobro-cancelar').addEventListener('click', ()=>cerrar(false));
+    overlay.querySelector('#cobro-confirmar').addEventListener('click', ()=>cerrar(true));
+  });
 }
 
 async function cargarJuguetesDeNinera(nombre){
