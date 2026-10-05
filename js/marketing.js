@@ -103,7 +103,7 @@ async function guardarEdicionFechaMarketing(id){
 }
 async function togglePublicadoMarketing(id, val){
   const { error } = await sb.from('fechas_marketing').update({publicado: val}).eq('id', id);
-  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); cargarMarketing(); return; } // la casilla vuelve a lo guardado
   cargarMarketing();
 }
 async function eliminarFechaMarketing(id){

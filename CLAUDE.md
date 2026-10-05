@@ -88,6 +88,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   ficha de la niñera.
 - `tests/conciliacion.spec.js`: conciliación con el extracto (tildadas, dudosas, confirmar) y
   lectores por formato. Los extractos de los tests son inventados: nunca uno real, ni recortado.
+- `tests/exploratorio.spec.js`: punta a punta, celular 390px, datos raros, base vacía, navegar
+  rápido, dos usuarias a la vez (Realtime simulado: `estado.emitirRealtime`), totales.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -115,6 +117,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   anterior (`abrirModalTerminarFijo`, agenda.js).
 - No repintar la app entera ante eventos de auth ni al volver de segundo plano: ya causó
   pérdida de entrevistas (ver comentarios en auth.js y bootstrap.js).
+- Realtime tampoco repinta lo que se está escribiendo: RR.HH. en Entrevista y Finanzas usan
+  recarga liviana (`RT_RECARGA_LIVIANA`, agenda.js); con un modal abierto el cambio se aplica al
+  cerrarlo.
 - Una función global nueva no puede repetir el nombre de otra en ningún archivo.
 - Escape (05/10/2026): helpers únicos en core.js. `escaparHtml()` para texto y atributos,
   `argJs()` para pasar un dato a un handler inline (`f(${argJs(x)})`, nunca `'${x}'`) y

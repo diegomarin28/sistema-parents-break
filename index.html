@@ -368,6 +368,8 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
   .agendarow{flex-wrap:wrap;row-gap:4px;}
 }
 .confirmbox.wide{max-width:640px;max-height:88vh;overflow-y:auto;}
+/* Nombres muy largos sin espacios (05/10/2026): que corten la línea en vez de estirar la ficha. */
+.confirmbox h2,.confirmbox .helper,.confirmbox td,.person-list .name,.agendarow{overflow-wrap:anywhere;}
 .pago-fila{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
 .pago-fila .pago-monto{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
 .conc-fila{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink);}

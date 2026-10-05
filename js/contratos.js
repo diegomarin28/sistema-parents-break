@@ -238,7 +238,9 @@ async function cargarContratos(){
 }
 async function cambiarEstadoContrato(id, estado){
   const { error } = await sb.from('contratos').update({estado}).eq('id', id);
-  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+  // Si falla, se vuelve a pintar con lo guardado: el selector no puede quedar mostrando un
+  // estado que no se guardó (testing exploratorio, 05/10/2026).
+  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); cargarContratos(); return; }
   toast('Estado actualizado.');
   cargarContratos();
 }

@@ -162,6 +162,7 @@ async function guardarGastoGeneral(){
   const concepto = document.getElementById('fin-gasto-concepto').value.trim();
   const monto = Number(document.getElementById('fin-gasto-monto').value)||0;
   if(!fecha || !concepto || !monto){ toast('Faltan fecha, concepto o monto.', 'bad'); return; }
+  if(monto < 0){ toast('El monto no puede ser negativo.', 'bad'); return; }
   const { error } = await sb.from('gastos_generales').insert({fecha, concepto, monto});
   if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
   cerrarModal();
@@ -196,6 +197,7 @@ async function guardarEdicionGasto(id){
     monto: Number(document.getElementById('ed-gasto-monto').value)||0,
   };
   if(!cambios.fecha || !cambios.concepto){ toast('Faltan fecha o concepto.','bad'); return; }
+  if(cambios.monto < 0){ toast('El monto no puede ser negativo.','bad'); return; }
   const { error } = await sb.from('gastos_generales').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   cerrarModal();
@@ -230,6 +232,7 @@ async function guardarGastoFijo(){
   const monto = Number(document.getElementById('ff-monto').value)||0;
   const desde = document.getElementById('ff-desde').value || todayISO();
   if(!concepto || !monto){ toast('Faltan concepto o monto.','bad'); return; }
+  if(monto < 0){ toast('El monto no puede ser negativo.','bad'); return; }
   const { error } = await sb.from('gastos_fijos').insert({concepto, monto, desde, notas: document.getElementById('ff-notas').value || null});
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   cerrarModal();
@@ -260,6 +263,7 @@ async function guardarEdicionGastoFijo(id){
     notas: document.getElementById('ef-notas').value || null,
   };
   if(!cambios.concepto || !cambios.desde){ toast('Faltan concepto o fecha.','bad'); return; }
+  if(cambios.monto < 0){ toast('El monto no puede ser negativo.','bad'); return; }
   const { error } = await sb.from('gastos_fijos').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   cerrarModal();
@@ -268,7 +272,7 @@ async function guardarEdicionGastoFijo(id){
 }
 async function toggleGastoFijo(id, activo){
   const { error } = await sb.from('gastos_fijos').update({activo}).eq('id', id);
-  if(error){ toast('No se pudo actualizar: '+error.message,'bad'); return; }
+  if(error){ toast('No se pudo actualizar: '+error.message,'bad'); cargarFinanzas(); return; } // la casilla vuelve a lo guardado
   cargarFinanzas();
 }
 async function eliminarGastoFijo(id){
