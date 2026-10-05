@@ -500,6 +500,27 @@ create table public.asignaciones_pausas (
   constraint asignaciones_pausas_rango_check CHECK ((hasta >= desde))
 );
 
+-- Saldo a favor (07/10/2026): ajustes que se suman (positivo) o descuentan (negativo) en el
+-- próximo cobro de una familia o pago de una niñera. "aplicado" es cuánto ya se usó.
+create table public.ajustes_saldo (
+  id uuid default gen_random_uuid() not null,
+  sujeto text not null,
+  familia_id uuid,
+  ninera_id uuid,
+  nombre text not null,
+  monto numeric not null,
+  motivo text not null,
+  fecha date default ((now() at time zone 'America/Montevideo')::date) not null,
+  aplicado numeric default 0 not null,
+  aplicaciones jsonb default '[]'::jsonb not null,
+  creado_por text,
+  created_at timestamp with time zone default now() not null,
+  constraint ajustes_saldo_pkey PRIMARY KEY (id),
+  constraint ajustes_saldo_sujeto_check CHECK ((((sujeto = 'familia'::text) AND (familia_id IS NOT NULL)) OR ((sujeto = 'ninera'::text) AND (ninera_id IS NOT NULL)))),
+  constraint ajustes_saldo_monto_check CHECK ((monto <> (0)::numeric)),
+  constraint ajustes_saldo_aplicado_check CHECK (((aplicado >= (0)::numeric) AND (aplicado <= abs(monto))))
+);
+
 -- Historial de cambios de sittings_traslados (lo escribe el trigger sittings_historial_trg).
 create table public.sittings_historial (
   id bigint generated always as identity primary key,
@@ -607,6 +628,8 @@ alter table public.juguetes_movimientos add constraint juguetes_movimientos_jugu
 alter table public.ninieras add constraint ninieras_candidata_id_fkey FOREIGN KEY (candidata_id) REFERENCES candidatas(id) ON DELETE SET NULL;
 alter table public.resenas_ninieras add constraint resenas_ninieras_ninera_id_fkey FOREIGN KEY (ninera_id) REFERENCES ninieras(id) ON DELETE SET NULL;
 alter table public.asignaciones_pausas add constraint asignaciones_pausas_asignacion_id_fkey FOREIGN KEY (asignacion_id) REFERENCES asignaciones(id) ON DELETE CASCADE;
+alter table public.ajustes_saldo add constraint ajustes_saldo_familia_id_fkey FOREIGN KEY (familia_id) REFERENCES familias(id);
+alter table public.ajustes_saldo add constraint ajustes_saldo_ninera_id_fkey FOREIGN KEY (ninera_id) REFERENCES ninieras(id);
 alter table public.sittings_traslados add constraint sittings_traslados_asignacion_id_fkey FOREIGN KEY (asignacion_id) REFERENCES asignaciones(id) ON DELETE SET NULL;
 alter table public.sittings_traslados add constraint sittings_traslados_familia_id_fkey FOREIGN KEY (familia_id) REFERENCES familias(id) ON DELETE SET NULL;
 alter table public.sittings_traslados add constraint sittings_traslados_ninera_id_fkey FOREIGN KEY (ninera_id) REFERENCES ninieras(id) ON DELETE SET NULL;
@@ -634,6 +657,8 @@ CREATE UNIQUE INDEX ninieras_temporada_token_key ON public.ninieras USING btree 
 CREATE INDEX idx_resenas_ninera_id ON public.resenas_ninieras USING btree (ninera_id);
 CREATE INDEX idx_resenas_ninera_nombre ON public.resenas_ninieras USING btree (ninera_nombre);
 CREATE INDEX idx_asignaciones_pausas ON public.asignaciones_pausas USING btree (asignacion_id, desde, hasta);
+CREATE INDEX idx_ajustes_saldo_familia ON public.ajustes_saldo USING btree (familia_id) WHERE (familia_id IS NOT NULL);
+CREATE INDEX idx_ajustes_saldo_ninera ON public.ajustes_saldo USING btree (ninera_id) WHERE (ninera_id IS NOT NULL);
 CREATE UNIQUE INDEX sittings_fijo_dia_automatico ON public.sittings_traslados USING btree (asignacion_id, fecha) WHERE generado_automatico;
 CREATE INDEX idx_sittings_previstos ON public.sittings_traslados USING btree (estado, fecha) WHERE (estado = 'previsto'::text);
 CREATE INDEX idx_sittings_asignacion_fecha ON public.sittings_traslados USING btree (asignacion_id, fecha) WHERE (asignacion_id IS NOT NULL);
@@ -688,6 +713,7 @@ alter table public.respaldo_zonas_20260930 enable row level security;
 alter table public.sittings_historial enable row level security;
 alter table public.sittings_traslados enable row level security;
 alter table public.asignaciones_pausas enable row level security;
+alter table public.ajustes_saldo enable row level security;
 alter table public.respaldo_sittings_traslados_20261006 enable row level security;
 alter table public.solicitud_ninieras enable row level security;
 alter table public.solicitudes enable row level security;
@@ -774,6 +800,8 @@ create policy resenas_ninieras_authenticated_all on public.resenas_ninieras as p
 create policy sittings_historial_leer on public.sittings_historial as permissive for select to authenticated
   using (true);
 create policy solo_autenticados_todo on public.asignaciones_pausas as permissive for all to public
+  using ((select auth.role()) = 'authenticated') with check ((select auth.role()) = 'authenticated');
+create policy solo_autenticados_todo on public.ajustes_saldo as permissive for all to public
   using ((select auth.role()) = 'authenticated') with check ((select auth.role()) = 'authenticated');
 create policy sittings_traslados_authenticated_all on public.sittings_traslados as permissive for all to public
   using ((( SELECT auth.role() AS role) = 'authenticated'::text))
@@ -1060,6 +1088,7 @@ grant execute on function public.generar_previstos_fijos(integer) to authenticat
 alter publication supabase_realtime add table public.app_config;
 alter publication supabase_realtime add table public.asignaciones;
 alter publication supabase_realtime add table public.asignaciones_pausas;
+alter publication supabase_realtime add table public.ajustes_saldo;
 alter publication supabase_realtime add table public.candidatas;
 alter publication supabase_realtime add table public.carsitting_datos;
 alter publication supabase_realtime add table public.contratos;

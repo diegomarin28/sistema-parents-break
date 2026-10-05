@@ -318,6 +318,7 @@ function verFamilia(id){
     ${f.cuenta_bancaria && f.cuenta_bancaria.length ? `<div class="helper">Cuenta: ${escaparHtml(textoCuentasBancarias(f.cuenta_bancaria))}</div>` : ''}
     ${f.notas?`<div class="helper">${escaparHtml(f.notas)}</div>`:''}
     ${historialHtml}
+    <div id="fam-saldo" style="margin-top:14px;"></div>
     <div id="fam-incidentes" style="margin-top:14px;"></div>
     <div class="card-section-title">Niñeras asignadas</div>
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
@@ -341,6 +342,7 @@ function verFamilia(id){
     </div>
     <button class="smallbtn" onclick="conGuardado(this, ()=>addAsignacion(${argJs(f.id)}))">+ Asignar niñera</button>`);
   renderIncidentesEnFicha('fam-incidentes', 'familia', f.id, f.nombre);
+  pintarSaldoEnFicha('fam-saldo', 'familia', f.id, f.nombre);
 }
 function editarFamilia(id){
   const f = familiasItems.find(x=>x.id===id);
