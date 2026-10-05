@@ -347,3 +347,40 @@ test.describe('Hoy: confirmados automáticamente y sin registrar', () => {
     verificarLimpio(e);
   });
 });
+
+test.describe('pausas desde la ficha de la familia', () => {
+  test('se ven, se quitan y se puede pausar desde la ficha', async ({ page }) => {
+    const d = datosActivos();
+    d.asignaciones_pausas = [
+      { id: 'b1000000-0000-4000-8000-000000000001', asignacion_id: ID.aFijo, desde: '2026-10-12', hasta: '2026-10-16', motivo: 'Vacaciones', creado_por: 'Prueba', created_at: '2026-10-01T00:00:00Z' },
+      { id: 'b1000000-0000-4000-8000-000000000002', asignacion_id: ID.aFijo, desde: '2026-09-01', hasta: '2026-09-05', motivo: 'Vieja', creado_por: 'Prueba', created_at: '2026-08-20T00:00:00Z' },
+    ];
+    const e = await abrirApp(page, { datos: d });
+    await irAModulo(page, 'familias');
+    await page.evaluate(id => verFamilia(id), ID.fUno);
+    const ficha = page.locator('#editmodal');
+    await expect(ficha.locator('.fam-pausa')).toHaveCount(1); // la que ya pasó no se muestra
+    await expect(ficha.locator('.fam-pausa')).toContainText(/Pausado del 12\/10 al 16\/10 · Vacaciones/);
+    await expect(ficha.locator('button', { hasText: /^Pausar$/ })).toHaveCount(1);
+    await ficha.locator('button', { hasText: 'Quitar pausa' }).click();
+    await page.locator('#confirm-si').click();
+    await expect(page.locator('.toaststack .toast').last()).toContainText('Pausa quitada');
+    const [borrado] = escrituras(e, 'asignaciones_pausas', 'DELETE');
+    expect(borrado.params).toEqual({ id: 'eq.b1000000-0000-4000-8000-000000000001' });
+    expect(llamadasProceso(e)).toHaveLength(1);
+
+    await page.evaluate(id => verFamilia(id), ID.fUno);
+    await page.locator('#editmodal button', { hasText: /^Pausar$/ }).click();
+    await expect(page.locator('#editmodal')).toContainText('Pausar el fijo');
+    verificarLimpio(e);
+  });
+
+  test('apagado: la ficha no ofrece pausar', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'familias');
+    await page.evaluate(id => verFamilia(id), ID.fUno);
+    await expect(page.locator('#editmodal button', { hasText: 'Terminar' })).toHaveCount(1);
+    await expect(page.locator('#editmodal button', { hasText: /^Pausar$/ })).toHaveCount(0);
+    verificarLimpio(e);
+  });
+});

@@ -71,6 +71,7 @@ async function addFamilia(){
 let famResenaPorNinera = {};
 let famHistorialPorFamilia = {};
 let famUltimaActividad = {};
+let famPausas = []; // pausas de los fijos (vacaciones), solo con los fijos automáticos activados
 const FAM_RIESGO_SEMANAS = 6;      // sin sittings hace más de esto = "en riesgo"
 const FAM_RIESGO_SNOOZE_DIAS = 30; // al marcar "ya la contacté", no volver a avisar por este tiempo
 let famRiesgoAbierto = false;      // arranca cerrado — antes mostraba todas de una, "cartel inmenso"
@@ -82,14 +83,16 @@ async function cargarFamilias(){
   if(!cont) return; // se puede llamar desde otra pantalla (ej. al quitar una asignación fija desde Agenda) — sin esto, rompía ahí.
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const necesitaNinieras = !ninierasItems.length;
-  const [{data:familias, error}, {data:asignaciones}, {data:sittings}, {data:resenas}, ninierasRes] = await Promise.all([
+  const [{data:familias, error}, {data:asignaciones}, {data:sittings}, {data:resenas}, ninierasRes, pausas] = await Promise.all([
     sb.from('familias').select('*, hijos_familia(*)').order('nombre'),
     sb.from('asignaciones').select('*'),
     sinPrevistos(sb.from('sittings_traslados').select('familia_nombre,ninera_nombre,fecha')),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
     necesitaNinieras ? sb.from('ninieras').select('nombre') : Promise.resolve({data:null}),
+    cargarPausasFijos(),
   ]);
   if(error){ cont.innerHTML = errBox(error); return; }
+  famPausas = pausas || [];
   if(necesitaNinieras && ninierasRes?.data) ninierasItems = ninierasRes.data;
   famResenaPorNinera = {};
   (resenas||[]).forEach(r=>{
@@ -261,6 +264,7 @@ function renderFamiliasList(){
     </div>`;
   }).join('') + '</div>';
 }
+function fmtFechaPausa(iso){ return new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'}); }
 function verFamilia(id){
   const f = familiasItems.find(x=>x.id===id);
   if(!f) return;
@@ -273,7 +277,11 @@ function verFamilia(id){
   const filaAsig = a=>{
     const dias = (a.dias||[]).join(' ');
     const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : '—';
-    return `<tr><td>${escaparHtml(a.ninera_nombre)}</td><td>${tipoAsignacion(a)==='traslado'?'Traslado':'Sitting'} · ${dias||'—'} · ${horario}<div class="helper" style="margin:2px 0 0;">${textoVigencia(a)}</div></td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalVigenciaAsignacion(${argJs(a.id)})">Vigencia</button>${asignacionTerminada(a, hoyFam) ? '' : `<button class="smallbtn danger" onclick="abrirModalTerminarFijo(${argJs(a.id)})">Terminar</button>`}</div></td></tr>`;
+    const terminado = asignacionTerminada(a, hoyFam);
+    // Pausas (vacaciones) de este fijo que todavía no terminaron: se ven y se quitan acá
+    // también, no solo desde la Agenda (06/10/2026).
+    const pausasHtml = famPausas.filter(p=>p.asignacion_id===a.id && p.hasta >= hoyFam).map(p=>`<div class="helper fam-pausa" style="margin:2px 0 0;">Pausado del ${fmtFechaPausa(p.desde)} al ${fmtFechaPausa(p.hasta)}${p.motivo?' · '+escaparHtml(p.motivo):''} <button class="smallbtn" onclick="conGuardado(this, ()=>quitarPausaFijo(${argJs(p.id)}))">Quitar pausa</button></div>`).join('');
+    return `<tr><td>${escaparHtml(a.ninera_nombre)}</td><td>${tipoAsignacion(a)==='traslado'?'Traslado':'Sitting'} · ${dias||'—'} · ${horario}<div class="helper" style="margin:2px 0 0;">${textoVigencia(a)}</div>${pausasHtml}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalVigenciaAsignacion(${argJs(a.id)})">Vigencia</button>${terminado || !fijosAutomaticosActivos ? '' : `<button class="smallbtn" onclick="abrirModalPausarFijo(${argJs(a.id)})">Pausar</button>`}${terminado ? '' : `<button class="smallbtn danger" onclick="abrirModalTerminarFijo(${argJs(a.id)})">Terminar</button>`}</div></td></tr>`;
   };
   const ordenAsig = (x,y)=>(y.vigente_desde||'').localeCompare(x.vigente_desde||'');
   const asigRows = (f.asignaciones||[]).filter(a=>!asignacionTerminada(a, hoyFam)).sort(ordenAsig).map(filaAsig).join('');

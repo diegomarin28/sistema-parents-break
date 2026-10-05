@@ -1383,6 +1383,7 @@ async function guardarPausaFijo(asigId){
   const fmt = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
   toast(`Fijo pausado del ${fmt(desde)} al ${fmt(hasta)}.`);
   if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
+  if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
   await revisarPrevistosEditadosFueraDelFijo([asigId]);
 }
 async function quitarPausaFijo(pausaId){
@@ -1393,6 +1394,7 @@ async function quitarPausaFijo(pausaId){
   await sincronizarPrevistosFijos();
   toast('Pausa quitada.');
   if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
+  if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
 }
 /* Días previstos que alguien cambió a mano (un horario distinto, un reemplazo, un "no va")
    y que, después de cambiar el fijo, ya no le corresponden: el fijo terminó, cambió de
