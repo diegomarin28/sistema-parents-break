@@ -3,7 +3,7 @@ let finMes = null;
 async function renderFinanzas(cont){
   finMes = finMes || currentMonthStr();
   cont.innerHTML = moduloHeader('Finanzas') + `
-    <div class="helper">Ingresos y pagos a niñeras vienen automáticos desde Sittings &amp; traslados, pero recién entran al balance cuando se marcan como cobrados o pagados (en Por cobrar / Por pagar, o con Editar en cada movimiento). Los demás gastos del negocio (alquiler, insumos, etc.) se cargan acá a mano. Los cobros se pueden conciliar automáticamente subiendo el extracto de Itaú, más abajo.</div>
+    <div class="helper">Ingresos y pagos a niñeras vienen automáticos desde Sittings &amp; traslados. El resultado del mes se calcula sobre lo facturado (lo que se trabajó), aunque todavía no se haya cobrado; lo cobrado se muestra aparte como la plata que ya entró. Los demás gastos del negocio (alquiler, insumos, etc.) se cargan acá a mano. Los cobros se pueden conciliar subiendo el extracto de Itaú, más abajo.</div>
     <div class="mesbar">
       <div class="mesnav">
         <button onclick="cambiarFinMesRel(-1)" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
@@ -12,10 +12,10 @@ async function renderFinanzas(cont){
       </div>
       <button class="btn primary" onclick="abrirModalNuevoGasto()">+ Registrar gasto</button>
     </div>
-    <div class="summary3" id="fin-summary"></div>
+    <div class="summary4" id="fin-summary"></div>
     <div class="card" id="fin-balance-wrap">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-        <div><h2 style="margin:0;">Balance de varios meses</h2><div class="helper" style="margin:2px 0 0;">Lo cobrado y lo pagado mes a mes, para ver la tendencia y no solo la foto de un mes.</div></div>
+        <div><h2 style="margin:0;">Balance de varios meses</h2><div class="helper" style="margin:2px 0 0;">Lo facturado y los costos de cada mes (pagos a niñeras y gastos), para ver la tendencia y no solo la foto de un mes.</div></div>
         <select id="fin-balance-rango" onchange="cargarBalanceMultiMes(Number(this.value))" style="width:auto;">
           <option value="3">Últimos 3 meses</option>
           <option value="6" selected>Últimos 6 meses</option>
@@ -279,15 +279,21 @@ async function eliminarGastoFijo(id){
 }
 // Relaciones fijas (esa niñera trabaja fijo para esa familia): por id y por nombre, para no
 // perder casos viejos sin id cargado. Se usa tanto acá como en Por cobrar/Por pagar.
+// Desde el 05/10/2026 cuenta la vigencia: un sitting es "de un fijo" si en SU fecha había un
+// fijo de esa niñera con esa familia (antes, al cambiar la niñera de un fijo, los sittings
+// viejos de la niñera anterior dejaban de contar como fijos).
 function construirEsTrabajoFijo(asigs){
-  const fijoSet = new Set();
+  const porClave = new Map();
+  const agregar = (k, a) => { if(!porClave.has(k)) porClave.set(k, []); porClave.get(k).push(a); };
   (asigs||[]).forEach(a=>{
-    if(a.ninera_id && a.familia_id) fijoSet.add(a.ninera_id+'|'+a.familia_id);
-    fijoSet.add(normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||''));
+    if(a.ninera_id && a.familia_id) agregar(a.ninera_id+'|'+a.familia_id, a);
+    agregar(normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||''), a);
   });
+  const vigenteEn = (k, fecha) => (porClave.get(k)||[]).some(a=>!fecha || asignacionVigenteEn(a, fecha));
   return function esTrabajoFijo(r){
-    if(r.ninera_id && r.familia_id && fijoSet.has(r.ninera_id+'|'+r.familia_id)) return true;
-    return fijoSet.has(normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||''));
+    if(r.asignacion_id) return true;
+    if(r.ninera_id && r.familia_id && vigenteEn(r.ninera_id+'|'+r.familia_id, r.fecha)) return true;
+    return vigenteEn(normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||''), r.fecha);
   };
 }
 // Cierre de semana para "Por pagar": por defecto los fijos cierran el sábado (así se les
@@ -296,7 +302,9 @@ function construirEsTrabajoFijo(asigs){
 // total. Se arma por niñera a partir de sus asignaciones (asig.dias, códigos D/L/M/X/J/V/S).
 function construirTrabajaFinde(asigs){
   const diasPorNinera = {};
+  const hoy = todayISO();
   (asigs||[]).forEach(a=>{
+    if(asignacionTerminada(a, hoy)) return;
     const key = normaliza(a.ninera_nombre||'');
     if(!key) return;
     (a.dias||[]).forEach(d=>{ (diasPorNinera[key] ||= new Set()).add(d); });
@@ -316,6 +324,22 @@ function filtrarFijosSemanaIncompleta(sits, esTrabajoFijo){
   const hoy = todayISO();
   return (sits||[]).filter(r => !esTrabajoFijo(r) || finDeSemanaDesde(lunesDeSemana(r.fecha)) < hoy);
 }
+/* Números del resumen del mes (ver comentario en cargarFinanzas). */
+function resumenFinancieroMes(sitsTodos, gastosNegocio){
+  const suma = (lista, campo, cond=()=>true) => (lista||[]).filter(cond).reduce((s,r)=>s+(Number(r[campo])||0), 0);
+  const facturado = suma(sitsTodos, 'cobro_familia');
+  const costoNinieras = suma(sitsTodos, 'pago_ninera');
+  const gastos = Number(gastosNegocio)||0;
+  return {
+    facturado,
+    costoNinieras,
+    gastos,
+    cobrado: suma(sitsTodos, 'cobro_familia', r=>r.cobrado),
+    porCobrar: suma(sitsTodos, 'cobro_familia', r=>!r.cobrado),
+    porPagar: suma(sitsTodos, 'pago_ninera', r=>!r.pagado),
+    resultado: facturado - costoNinieras - gastos,
+  };
+}
 async function cargarFinanzas(){
   const chartReady = asegurarChart(); // en paralelo, no bloquea el resto de Finanzas
   const summary = document.getElementById('fin-summary');
@@ -329,7 +353,7 @@ async function cargarFinanzas(){
     sb.from('gastos_generales').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('*').order('concepto'),
     sb.from('familias').select('id,nombre,zona'),
-    sb.from('asignaciones').select('familia_id,ninera_id,ninera_nombre,familias(nombre)'),
+    sb.from('asignaciones').select('*, familias(nombre)'),
   ]);
   // Si se navegó a otro módulo mientras esperábamos estos datos, no seguir —
   // evita escribir sobre una pantalla que ya no está (mismo caso que "Hoy").
@@ -371,35 +395,47 @@ async function cargarFinanzas(){
       }).join('') + (totalFijos>0 ? `<div class="helper" style="margin-top:8px;">Total fijos aplicados a ${monthLabel(finMes)}: <b>$${totalFijos.toLocaleString('es-UY')}</b></div>` : '');
     }
   }
-  // Criterio de caja: un cobro entra al balance recién cuando está marcado como cobrado, y un
-  // pago a niñera recién cuando está marcado como pagado. Lo pendiente se muestra aparte, abajo
-  // del balance, pero no se suma. Se usa sitsRaw (sin el filtro de semana incompleta de los
-  // fijos): si la plata ya entró o ya salió, cuenta aunque la semana no haya terminado.
+  // Criterio (05/10/2026): el resultado del mes se calcula sobre lo FACTURADO (lo que se
+  // trabajó en el mes), no sobre lo marcado como cobrado. Entre el 29/09 y el 05/10 fue al
+  // revés y Finanzas mostró una pérdida que no existía: casi todo setiembre figuraba pagado a
+  // las niñeras pero sin marcar como cobrado a las familias (error E1). Lo cobrado se muestra
+  // aparte, como la plata que ya entró. Las cinco cifras salen de los mismos sittings (todo lo
+  // registrado en el mes), así siempre se cumple facturado = cobrado + por cobrar. El margen por
+  // familia/zona/tipo sigue esperando a que termine la semana de los fijos (renderMargen).
   finSitsTodosDelMes = sitsRaw || [];
-  const ingresos = finSitsTodosDelMes.filter(r=>r.cobrado).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
-  const egresosNinieras = finSitsTodosDelMes.filter(r=>r.pagado).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
-  const pendienteCobro = finSitsTodosDelMes.filter(r=>!r.cobrado).reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
-  const pendientePago = finSitsTodosDelMes.filter(r=>!r.pagado).reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
-  const egresosGenerales = (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos;
+  const res = resumenFinancieroMes(finSitsTodosDelMes, (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos);
+  const egresosNinieras = res.costoNinieras;
+  const egresosGenerales = res.gastos;
   const egresos = egresosNinieras + egresosGenerales;
+  const fmt = n => '$'+Math.round(n).toLocaleString('es-UY');
   summary.innerHTML = `
-    <div class="summarycard"><div class="statlabel">Cobrado de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${ingresos.toLocaleString('es-UY')}</div></div>
-    <div class="summarycard"><div class="statlabel">Gastos pagados de ${monthLabel(finMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--clay-text);">$${egresos.toLocaleString('es-UY')}</div></div>
-    <div class="summarycard" style="border-left:3px solid var(--accent);"><div class="statlabel">Balance</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${(ingresos-egresos).toLocaleString('es-UY')}</div></div>
-    ${(pendienteCobro||pendientePago) ? `<div class="helper" style="grid-column:1/-1;margin:0;">Todavía sin entrar al balance: $${pendienteCobro.toLocaleString('es-UY')} por cobrar y $${pendientePago.toLocaleString('es-UY')} por pagar de ${monthLabel(finMes)}. Entran cuando se marcan como cobrados o pagados.</div>` : ''}
+    <div class="summarycard"><div class="statlabel">Facturado de ${monthLabel(finMes)}</div><div class="statnum" id="fin-facturado" style="font-size:19px;margin-top:3px;">${fmt(res.facturado)}</div></div>
+    <div class="summarycard"><div class="statlabel">Cobrado (plata que ya entró)</div><div class="statnum" id="fin-cobrado" style="font-size:19px;margin-top:3px;color:var(--good);">${fmt(res.cobrado)}</div></div>
+    <div class="summarycard"><div class="statlabel">Por cobrar</div><div class="statnum" id="fin-porcobrar" style="font-size:19px;margin-top:3px;color:var(--warn);">${fmt(res.porCobrar)}</div></div>
+    <div class="summarycard"><div class="statlabel">Por pagar a niñeras</div><div class="statnum" id="fin-porpagar" style="font-size:19px;margin-top:3px;color:var(--clay-text);">${fmt(res.porPagar)}</div></div>
+    <div class="summarycard fin-resultado" style="grid-column:1/-1;border-left:3px solid ${res.resultado>=0?'var(--good)':'var(--bad)'};">
+      <div class="statlabel">Resultado de ${monthLabel(finMes)}</div>
+      <div class="statnum" id="fin-resultado" style="font-size:21px;margin-top:3px;color:${res.resultado>=0?'var(--good)':'var(--bad)'};">${fmt(res.resultado)}</div>
+      <div class="helper" style="margin:4px 0 0;">Facturado ${fmt(res.facturado)} − pagos a niñeras ${fmt(res.costoNinieras)} − gastos del negocio ${fmt(res.gastos)}. Se calcula sobre lo facturado: un cobro sin marcar no lo cambia.</div>
+    </div>
   `;
+
   const chartCard = document.getElementById('fin-breakdown-card');
   if(chartCard){
     await chartReady;
+    // Mientras se descargaba Chart.js se pudo haber salido de Finanzas (auditoría 04/10/2026).
+    const canvasBreakdown = document.getElementById('finBreakdownChart');
+    const legendBreakdown = document.getElementById('fin-breakdown-legend');
+    if(!canvasBreakdown || !legendBreakdown) return;
     if(egresos>0 && window.Chart){
       chartCard.style.display = '';
       if(finBreakdownChart){ finBreakdownChart.destroy(); finBreakdownChart = null; }
-      finBreakdownChart = new Chart(document.getElementById('finBreakdownChart'), {
+      finBreakdownChart = new Chart(canvasBreakdown, {
         type:'doughnut',
         data:{ labels:['Pagos a niñeras','Gastos generales'], datasets:[{ data:[Math.round(egresosNinieras), Math.round(egresosGenerales)], backgroundColor:['#757CBB','#DF8386'], borderWidth:0 }] },
         options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, cutout:'62%' }
       });
-      document.getElementById('fin-breakdown-legend').innerHTML = `
+      legendBreakdown.innerHTML = `
         <span><span class="chartdot" style="background:#757CBB;"></span>Pagos a niñeras · $${Math.round(egresosNinieras).toLocaleString('es-UY')}</span>
         <span><span class="chartdot" style="background:#DF8386;"></span>Gastos generales · $${Math.round(egresosGenerales).toLocaleString('es-UY')}</span>`;
     } else {
@@ -416,7 +452,7 @@ async function cargarFinanzas(){
   });
   movs.sort((a,b)=> b.fecha.localeCompare(a.fecha));
   if(!movs.length){ movsBox.innerHTML = `<div class="empty">No hay movimientos cargados en ${monthLabel(finMes)} todavía.</div>`; return; }
-  movsBox.innerHTML = `<h2>Movimientos de ${monthLabel(finMes)}</h2><div class="helper">Los marcados como sin cobrar o sin pagar todavía no suman al balance.</div>` + movs.map(mv=>{
+  movsBox.innerHTML = `<h2>Movimientos de ${monthLabel(finMes)}</h2><div class="helper">Los marcados como sin cobrar o sin pagar cuentan en el resultado del mes; la etiqueta solo avisa que esa plata todavía no entró o no salió.</div>` + movs.map(mv=>{
     const fechaFmt = new Date(mv.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
     const colorMonto = mv.pendiente ? 'var(--ink-soft)' : (mv.monto>0?'var(--good)':'var(--clay-text)');
     return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
@@ -446,7 +482,7 @@ async function cargarBalanceMultiMes(nMeses){
   const [y,m] = meses[meses.length-1].split('-').map(Number);
   const hasta = new Date(y, m, 1).toISOString().slice(0,10);
   const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}] = await Promise.all([
-    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera,cobrado,pagado').gte('fecha', desde).lt('fecha', hasta),
+    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('monto,desde,activo'),
   ]);
@@ -456,9 +492,10 @@ async function cargarBalanceMultiMes(nMeses){
   (sits||[]).forEach(r=>{
     const mes = r.fecha.slice(0,7);
     if(!porMes[mes]) return;
-    // Mismo criterio de caja que el resumen del mes: solo lo ya cobrado / ya pagado.
-    if(r.cobrado) porMes[mes].ingresos += Number(r.cobro_familia)||0;
-    if(r.pagado) porMes[mes].gastos += Number(r.pago_ninera)||0;
+    // Mismo criterio que el resumen del mes: lo facturado y lo que corresponde pagar a
+    // las niñeras por ese mes, esté o no marcado como cobrado / pagado.
+    porMes[mes].ingresos += Number(r.cobro_familia)||0;
+    porMes[mes].gastos += Number(r.pago_ninera)||0;
   });
   (gastos||[]).forEach(g=>{
     const mes = g.fecha.slice(0,7);
@@ -487,7 +524,7 @@ async function cargarBalanceMultiMes(nMeses){
     finBalanceChart = new Chart(canvas, {
       type:'bar',
       data:{ labels, datasets:[
-        { label:'Ingresos', data:dataIngresos, backgroundColor:'#6FAE8C', borderRadius:4 },
+        { label:'Facturado', data:dataIngresos, backgroundColor:'#6FAE8C', borderRadius:4 },
         { label:'Gastos', data:dataGastos, backgroundColor:'#DF8386', borderRadius:4 },
       ]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom'}}, scales:{ y:{ ticks:{ callback:v=>'$'+Number(v).toLocaleString('es-UY') } } } }
@@ -497,9 +534,9 @@ async function cargarBalanceMultiMes(nMeses){
   const totalGastos = dataGastos.reduce((s,v)=>s+v,0);
   if(wrap){
     wrap.innerHTML = `
-      <div class="summarycard"><div class="statlabel">Ingresos (${nMeses} meses)</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${totalIngresos.toLocaleString('es-UY')}</div></div>
-      <div class="summarycard"><div class="statlabel">Gastos (${nMeses} meses)</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--clay-text);">$${totalGastos.toLocaleString('es-UY')}</div></div>
-      <div class="summarycard" style="border-left:3px solid var(--accent);"><div class="statlabel">Balance del período</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${(totalIngresos-totalGastos).toLocaleString('es-UY')}</div></div>
+      <div class="summarycard"><div class="statlabel">Facturado (${nMeses} meses)</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${totalIngresos.toLocaleString('es-UY')}</div></div>
+      <div class="summarycard"><div class="statlabel">Costos (${nMeses} meses)</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--clay-text);">$${totalGastos.toLocaleString('es-UY')}</div></div>
+      <div class="summarycard" style="border-left:3px solid var(--accent);"><div class="statlabel">Resultado del período</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${(totalIngresos-totalGastos).toLocaleString('es-UY')}</div></div>
     `;
   }
 }
@@ -533,10 +570,10 @@ function bucketLabelFecha(bucketKey, frecuencia, trabajaFinde=true){
 async function cargarPorCobrarPorPagar(){
   const [{data:pendCobrar}, {data:pendPagar}, {data:fams}, {data:nins}, {data:asigs}] = await Promise.all([
     sb.from('sittings_traslados').select('id,familia_id,familia_nombre,fecha,cobro_familia').eq('cobrado', false).gt('cobro_familia', 0),
-    sb.from('sittings_traslados').select('id,familia_id,familia_nombre,ninera_id,ninera_nombre,fecha,pago_ninera').eq('pagado', false).gt('pago_ninera', 0),
+    sb.from('sittings_traslados').select('id,familia_id,familia_nombre,ninera_id,ninera_nombre,fecha,pago_ninera,asignacion_id').eq('pagado', false).gt('pago_ninera', 0),
     sb.from('familias').select('id,nombre,frecuencia_cobro'),
     sb.from('ninieras').select('id,nombre,cuenta_bancaria'),
-    sb.from('asignaciones').select('familia_id,ninera_id,ninera_nombre,dias,familias(nombre)'),
+    sb.from('asignaciones').select('*, familias(nombre)'),
   ]);
   const famFrecPorId = {}; const famFrecPorNombre = {};
   (fams||[]).forEach(f=>{ famFrecPorId[f.id] = f.frecuencia_cobro || 'mensual'; famFrecPorNombre[normaliza(f.nombre)] = f.frecuencia_cobro || 'mensual'; });
@@ -663,7 +700,7 @@ function editarMovimientoSitting(id){
       <label class="chk"><input type="checkbox" id="fin-mov-cobrado" ${r.cobrado?'checked':''}> Ya se cobró</label>
       <label class="chk"><input type="checkbox" id="fin-mov-pagado" ${r.pagado?'checked':''}> Ya se le pagó</label>
     </div>
-    <div class="helper" style="margin-top:10px;">Solo lo marcado como cobrado o pagado suma al balance.</div>
+    <div class="helper" style="margin-top:10px;">Marcar cobrado o pagado no cambia el resultado del mes: solo indica si la plata ya entró o ya salió.</div>
     <div id="fin-mov-warn"></div>
     <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="editarRegistroDesdeAgenda('${r.id}')">Cambiar horario, familia o niñera</button>
     <div class="confirmbtns">

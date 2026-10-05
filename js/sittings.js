@@ -426,7 +426,47 @@ function sitFormHTML(){
       <button class="btn primary" onclick="guardarSitting()">${sitEditId ? 'Guardar cambios' : 'Guardar registro'}</button>
       <div style="margin-left:auto;align-self:center;font-size:13px;color:var(--ink-soft);">Margen: <b id="sit-margen" style="color:var(--good);font-family:'IBM Plex Mono',monospace;">$0</b></div>
     </div>
+    ${sitEditId ? `<div id="sit-historial-box" style="margin-top:12px;"><button type="button" class="smallbtn" onclick="verHistorialSitting('${sitEditId}')">Historial de cambios</button></div>` : ''}
   `;
+}
+/* Historial de cambios de un sitting (05/10/2026): quién cambió qué y cuándo. Lo escribe un
+   trigger en la base (sittings_historial); acá solo se lee. Empieza a registrarse desde que se
+   corre la migración, así que lo anterior no aparece. */
+const HIST_CAMPOS = {
+  fecha:'Fecha', tipo:'Tipo', familia_nombre:'Familia', ninera_nombre:'Niñera', hora_inicio:'Hora inicio', hora_fin:'Hora fin',
+  termina_dia_siguiente:'Termina al día siguiente', cobro_familia:'Cobro', pago_ninera:'Pago a la niñera', cobrado:'Cobrado',
+  pagado:'Pagado', cancelado:'Cancelado', notas:'Notas', km:'Km', origen:'Origen', destino:'Destino', registrado_por:'Registró',
+};
+function valorHistorial(v){
+  if(v===null || v===undefined || v==='') return '—';
+  if(v===true) return 'Sí';
+  if(v===false) return 'No';
+  return escaparHtml(v);
+}
+async function verHistorialSitting(id){
+  const box = document.getElementById('sit-historial-box');
+  if(!box) return;
+  box.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando historial…</div>';
+  const { data, error } = await sb.from('sittings_historial').select('*').eq('sitting_id', id).order('cuando', {ascending:false});
+  if(!document.getElementById('sit-historial-box')) return;
+  if(error){
+    const sinTabla = error.code==='PGRST205' || error.code==='42P01' || /sittings_historial/.test(error.message||'');
+    box.innerHTML = `<div class="helper">${sinTabla ? 'El historial de cambios todavía no está activado en la base.' : 'No se pudo cargar el historial: '+escaparHtml(error.message)}</div>`;
+    return;
+  }
+  if(!data || !data.length){ box.innerHTML = '<div class="helper">Sin cambios registrados desde que se activó el historial.</div>'; return; }
+  box.innerHTML = '<div class="card-section-title">Historial de cambios</div>' + data.map(h=>{
+    const cuando = new Date(h.cuando).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+    let detalle = '';
+    if(h.accion==='alta') detalle = 'Creó el registro.';
+    else if(h.accion==='baja') detalle = 'Borró el registro.';
+    else detalle = Object.entries(h.cambios||{}).filter(([k])=>HIST_CAMPOS[k])
+      .map(([k,c])=>`${HIST_CAMPOS[k]}: ${valorHistorial(c.antes)} → ${valorHistorial(c.despues)}`).join('<br>') || 'Cambios internos (vínculos).';
+    return `<div class="agendarow" style="border-bottom:1px solid var(--line);align-items:flex-start;">
+      <div><div style="font-weight:600;">${escaparHtml(h.usuario||'(sin usuario)')}</div><div class="helper" style="margin:2px 0 0;">${cuando}</div></div>
+      <div style="font-size:13px;text-align:right;">${detalle}</div>
+    </div>`;
+  }).join('');
 }
 function sitCamposTipoHTML(){
   if(sitTipo==='sitting'){
@@ -1310,9 +1350,10 @@ async function guardarSitting(){
       if(!seguirFijo){
         toast('Registro guardado, la asignación fija no se creó.');
       } else {
-      const { error: errAsig } = await sb.from('asignaciones').insert({
-        familia_id: registro.familia_id, ninera_nombre: nineraNombre,
+      const { error: errAsig } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p), {
+        familia_id: registro.familia_id, ninera_nombre: nineraNombre, ninera_id: registro.ninera_id || null,
         dias, hora_inicio: registro.hora_inicio, hora_fin: registro.hora_fin,
+        tipo: registro.tipo || 'sitting', vigente_desde: registro.fecha || todayISO(),
       });
       if(errAsig) toast('El registro se guardó, pero la asignación fija falló: '+errAsig.message, 'bad');
       else toast('Registro guardado y asignación fija creada.');

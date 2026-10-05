@@ -44,7 +44,7 @@ function datosBase() {
       { id: ID.nCarla, candidata_id: null, nombre: 'Carla Ejemplo', telefono: '098000003', zona: 'Pocitos', tipo: 'Ambas', foto: null, cv_url: null, notas: null, activa: true, created_at: '2026-09-01T00:00:00Z', cuenta_bancaria: [], carsitting_mail_enviado_at: null, cv_generado_en: null, temporada: null, temporada_actualizada_en: null, temporada_propuesta: null, temporada_propuesta_en: null, temporada_token: '60000000-0000-4000-8000-000000000003', temporada_fuente: null, temporada_comentario: null, barrios: null, telefono_pendiente: null, telefono_pendiente_en: null },
     ],
     asignaciones: [
-      { id: ID.aFijo, familia_id: ID.fUno, ninera_id: null, ninera_nombre: 'Ana Ficticia', cobro_hora: null, pago_hora: null, created_at: '2026-09-01T00:00:00Z', dias: ['L', 'X'], hora_inicio: '16:00:00', hora_fin: '19:00:00' },
+      { id: ID.aFijo, familia_id: ID.fUno, ninera_id: ID.nAna, ninera_nombre: 'Ana Ficticia', cobro_hora: null, pago_hora: null, created_at: '2026-09-01T00:00:00Z', dias: ['L', 'X'], hora_inicio: '16:00:00', hora_fin: '19:00:00', vigente_desde: '2026-09-01', vigente_hasta: null, tipo: 'sitting' },
     ],
     sittings_traslados: [
       sitting('70000000-0000-4000-8000-000000000001', '2026-09-14', { cobrado: true, pagado: true }),

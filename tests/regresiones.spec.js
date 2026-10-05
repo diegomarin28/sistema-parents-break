@@ -38,9 +38,7 @@ test.describe('E1: conciliación con extracto Itaú', () => {
   test('el resumen del mes deja ver el total facturado, no solo lo marcado como cobrado', async ({ page }) => {
     // Causa real de E1: desde el 29/09 el "ingreso" del mes es solo lo marcado cobrado.
     // Setiembre en los datos ficticios: facturado 3.870 (1.140 x 3 + 450), cobrado 1.140.
-    // Cómo mostrarlo es decisión de producto (pendiente); este test solo pide que el total
-    // facturado del mes esté a la vista en el resumen.
-    test.fail(true, 'E1: pendiente de decisión y del PR 2');
+    // Desde el PR 2 el resumen muestra Facturado / Cobrado / Por cobrar / Por pagar.
     const e = await abrirApp(page);
     await irAModulo(page, 'finanzas');
     await verMes(page, '2026-09');
@@ -57,7 +55,6 @@ test.describe('E2: cambio de niñera en un fijo', () => {
     .map(s => `${s.fecha} ${s.ninieras[0].ninera_nombre}`));
 
   test('cambiar la niñera de un fijo no hace aparecer a la nueva en las semanas anteriores', async ({ page }) => {
-    test.fail(true, 'E2: se arregla en el PR 2');
     // Ana hacía el fijo (lunes y miércoles) y quedó registrado el 14 y el 16/09.
     // Se cambia la niñera a Carla desde la semana del 05/10.
     const e = await abrirApp(page);
@@ -78,9 +75,8 @@ test.describe('E2: cambio de niñera en un fijo', () => {
   });
 
   test('un fijo no se proyecta en fechas anteriores a que empiece', async ({ page }) => {
-    test.fail(true, 'E2: las asignaciones no tienen fecha de inicio todavía (PR 2)');
     const datos = datosBase();
-    // Fijo de Carla creado el 02/10, vigente desde el 29/09 (columna propuesta para el PR 2).
+    // Fijo de Carla creado el 02/10, vigente desde el 29/09.
     datos.asignaciones = [{ ...datos.asignaciones[0], ninera_nombre: 'Carla Ejemplo', created_at: '2026-10-02T12:00:00Z', vigente_desde: '2026-09-29' }];
     const e = await abrirApp(page, { datos });
     await irAModulo(page, 'agenda');
