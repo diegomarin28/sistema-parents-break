@@ -80,6 +80,7 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   resultado).
 - `tests/guardados.spec.js`: doble toque, base que falla o sin conexión, cerrar el modal a mitad
   del guardado, terminar un fijo desde una fecha.
+- `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -118,6 +119,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   corre un día, usar `asignacionVigenteEn(a, fecha)` (core.js).
 - Finanzas: el resultado del mes se calcula sobre lo facturado; cobrado/pagado solo dicen si
   la plata ya entró o salió (error E1, 05/10/2026).
+- Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
+  siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 
 ## Pendientes conocidos
 - Plan de PRs acordado el 04/10/2026: fix E1/E2, fechas (todayISO), escape de HTML,

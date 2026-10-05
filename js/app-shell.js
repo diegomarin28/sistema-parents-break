@@ -126,7 +126,7 @@ async function actualizarFinanzasBadge(){
   if(!dot) return;
   const [{data:cfg}, {data:pend}] = await Promise.all([
     sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle(),
-    sb.from('sittings_traslados').select('id').eq('pagado', false).gt('pago_ninera', 0).limit(1),
+    sb.from('sittings_traslados').select('id').eq('pagado', false).gt('pago_ninera', 0).lte('fecha', todayISO()).limit(1),
   ]);
   const diasSinExtracto = cfg?.actualizado_at ? (Date.now() - new Date(cfg.actualizado_at).getTime()) / 86400000 : Infinity;
   const hayAviso = diasSinExtracto > 7 || (pend && pend.length > 0);

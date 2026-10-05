@@ -562,7 +562,10 @@ function bucketLabelFecha(bucketKey, frecuencia, trabajaFinde=true){
 async function cargarPorCobrarPorPagar(){
   const [{data:pendCobrar}, {data:pendPagar}, {data:fams}, {data:nins}, {data:asigs}] = await Promise.all([
     sb.from('sittings_traslados').select('id,familia_id,familia_nombre,fecha,cobro_familia').eq('cobrado', false).gt('cobro_familia', 0),
-    sb.from('sittings_traslados').select('id,familia_id,familia_nombre,ninera_id,ninera_nombre,fecha,pago_ninera,asignacion_id').eq('pagado', false).gt('pago_ninera', 0),
+    // Por pagar solo muestra lo que ya pasó (05/10/2026, E7): un sitting cargado por
+    // adelantado aparecía como para pagar y se le pagó a una niñera antes de que ocurriera.
+    // Entra recién el día del sitting.
+    sb.from('sittings_traslados').select('id,familia_id,familia_nombre,ninera_id,ninera_nombre,fecha,pago_ninera,asignacion_id').eq('pagado', false).gt('pago_ninera', 0).lte('fecha', todayISO()),
     sb.from('familias').select('id,nombre,frecuencia_cobro'),
     sb.from('ninieras').select('id,nombre,cuenta_bancaria'),
     sb.from('asignaciones').select('*, familias(nombre)'),
@@ -659,10 +662,69 @@ function renderPorPagar(lista){
   `;
 }
 async function marcarGrupoResuelto(ids, campo){
+  if(campo==='pagado' && !(await confirmarPagoSittings(ids))) return;
   const { error } = await sb.from('sittings_traslados').update({[campo]:true}).in('id', ids);
   if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
   toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
   refrescarFinanzasCompleto();
+}
+/* Confirmación antes de marcar pagado (05/10/2026, E3). Un "Marcar pagado" apurado no se
+   puede ver después qué incluía: se muestra cada sitting (niñera, familia, fecha, horario y
+   monto) y el total, con Cancelar / Confirmar. Sirve para un sitting solo o para un grupo de
+   Por pagar. montosNuevos pisa el monto guardado cuando se está editando ese movimiento.
+   Devuelve true solo si se confirma. */
+async function confirmarPagoSittings(ids, montosNuevos={}){
+  const { data, error } = await sb.from('sittings_traslados')
+    .select('id,tipo,familia_nombre,ninera_nombre,fecha,hora_inicio,hora_fin,termina_dia_siguiente,pago_ninera')
+    .in('id', ids);
+  if(error){ toast('No se pudo leer el detalle del pago: '+error.message, 'bad'); return false; }
+  const filas = (data||[]).map(r=>({...r, monto: r.id in montosNuevos ? Number(montosNuevos[r.id])||0 : Number(r.pago_ninera)||0}))
+    .sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||'') || (a.hora_inicio||'').localeCompare(b.hora_inicio||''));
+  if(!filas.length){ toast('Esos registros ya no existen. Actualizá la pantalla.', 'bad'); return false; }
+  const total = filas.reduce((s,r)=>s+r.monto, 0);
+  const hoy = todayISO();
+  const futuros = filas.filter(r=>r.fecha > hoy).length;
+  const ninieras = [...new Set(filas.map(r=>r.ninera_nombre||'(sin niñera)'))];
+  const fmtF = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'short',day:'2-digit',month:'2-digit'}) : '—';
+  const horario = r => r.hora_inicio ? `${r.hora_inicio.slice(0,5)}${r.hora_fin?'–'+r.hora_fin.slice(0,5):''}${r.termina_dia_siguiente?' (+1 día)':''}` : 'sin horario';
+  const plata = n => '$'+Number(n).toLocaleString('es-UY', {maximumFractionDigits:2}); // sin redondear: hay pagos con centavos
+  return new Promise(resolve=>{
+    const overlay = document.createElement('div');
+    overlay.className = 'confirmoverlay';
+    overlay.innerHTML = `
+      <div class="confirmbox wide" role="dialog" aria-label="Confirmar pago">
+        <h2 style="margin:0 0 4px;">Confirmar pago${ninieras.length===1 ? ' a '+escaparHtml(ninieras[0]) : ''}</h2>
+        <div class="helper" style="margin:0 0 12px;">Revisá que esté todo antes de marcarlo como pagado.</div>
+        ${futuros ? `<div class="warnbox" style="margin-bottom:10px;">Ojo: ${futuros===1?'uno de estos sittings todavía no ocurrió':futuros+' de estos sittings todavía no ocurrieron'}.</div>` : ''}
+        <div id="pago-detalle">
+          ${filas.map(r=>`<div class="pago-fila"${r.fecha>hoy?' style="color:var(--clay-text);"':''}>
+            <div style="min-width:0;">
+              <div style="font-weight:600;">${escaparHtml(r.familia_nombre||'—')}${r.tipo==='traslado'?' <span class="helper" style="margin:0;">(traslado)</span>':''}</div>
+              <div class="helper" style="margin:2px 0 0;">${escaparHtml(r.ninera_nombre||'—')} · ${fmtF(r.fecha)} · ${horario(r)}</div>
+            </div>
+            <div class="pago-monto">${plata(r.monto)}</div>
+          </div>`).join('')}
+          <div class="pago-fila pago-total-fila">
+            <div style="font-weight:700;">Total (${filas.length} ${filas.length===1?'registro':'registros'})</div>
+            <div class="pago-monto" id="pago-total" style="font-weight:700;">${plata(total)}</div>
+          </div>
+        </div>
+        <div class="confirmbtns">
+          <button class="btn ghost" id="pago-cancelar">Cancelar</button>
+          <button class="btn primary" id="pago-confirmar">Confirmar pago</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(()=>overlay.classList.add('show'));
+    function cerrar(ok){
+      overlay.classList.remove('show');
+      setTimeout(()=>overlay.remove(), 180);
+      resolve(ok);
+    }
+    overlay.addEventListener('click', e=>{ if(e.target===overlay) cerrar(false); });
+    overlay.querySelector('#pago-cancelar').addEventListener('click', ()=>cerrar(false));
+    overlay.querySelector('#pago-confirmar').addEventListener('click', ()=>cerrar(true));
+  });
 }
 /* Todo lo que depende de cobrado/pagado se recarga junto -- si no, el balance queda
    desfasado de Por cobrar / Por pagar hasta salir y volver a entrar a Finanzas. */
@@ -715,6 +777,8 @@ async function guardarMovimientoSitting(id){
     cobrado: document.getElementById('fin-mov-cobrado').checked,
     pagado: document.getElementById('fin-mov-pagado').checked,
   };
+  const antes = finSitsTodosDelMes.find(x=>x.id===id);
+  if(cambios.pagado && !antes?.pagado && !(await confirmarPagoSittings([id], {[id]: pago}))) return;
   const { error } = await sb.from('sittings_traslados').update(cambios).eq('id', id);
   if(error){ if(warn) warn.innerHTML = errBox(error); return; }
   cerrarModal();
