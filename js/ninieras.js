@@ -193,7 +193,7 @@ function filtrarNinieras(){
   const cobertura = {}; // id -> 'todo' | 'parte' (solo con filtro de período)
   let sinDatoOcultas = 0;
   const filtradas = ninierasItems.filter(n => {
-    const cd = n.candidatas || {};
+    const cd = datosFichaCandidata(n.candidatas);
     const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia, n.barrios].filter(Boolean).join(' '));
     const matchTexto = !fn || blob.includes(fn);
     const matchZona = coincideFiltroZonas(n.zona, ninFiltroZonas);
@@ -298,7 +298,7 @@ async function cargarCarsittingSeccion(nombre, boxId, tipo, mail){
 }
 async function verNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
-  const cd = n.candidatas || {};
+  const cd = datosFichaCandidata(n.candidatas);
   const edadCalculada = calcularEdad(cd.fecha_nacimiento);
   // Si hay fecha de nacimiento cargada, la edad calculada pisa al texto viejo ("19 años")
   // en la lista de campos — así nunca se muestran las dos ni queda la vieja dando vueltas.
@@ -474,7 +474,7 @@ function editarNinera(id){
     return;
   }
   const tipos = ['Niñera','Traslados','Ambas'];
-  ninEditCandidataCache = n.candidatas || {};
+  ninEditCandidataCache = datosFichaCandidata(n.candidatas);
   registrarRenderizadorZona('ed', ()=>editarNinera(id));
   abrirModal(`
     <h2 style="margin:0 0 12px;">Editar a ${escaparHtml(n.nombre)}</h2>
@@ -689,6 +689,9 @@ async function guardarEdicionNinera(id){
         if(e4) errExtra = e4;
       }
     } else {
+      // Lo que vino corregido de la entrevista (notas_ficha) ya está en los campos que se
+      // acaban de guardar: desde ahora la ficha es la verdad y las notas viejas se limpian.
+      if(n?.candidatas?.notas_ficha && Object.keys(n.candidatas.notas_ficha).length) extra.notas_ficha = {};
       const { error:e3 } = await sb.from('candidatas').update(extra).eq('id', candidataId);
       if(e3) errExtra = e3;
     }
@@ -716,7 +719,7 @@ const CV_CANVA_DESIGN_NOMBRE = 'PLANTILLA BASE v2 - CV niñeras';
 function generarMensajeCV(id){
   const n = ninierasItems.find(x=>x.id===id);
   if(!n) return;
-  const cd = n.candidatas || {};
+  const cd = datosFichaCandidata(n.candidatas);
   // Importante: NUNCA incluir teléfono, mail ni zona acá — esos son datos internos
   // (quedan en la ficha/directorio), no van en el CV que ve la familia.
   const datos = [`Nombre: ${n.nombre}`];

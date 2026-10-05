@@ -1431,6 +1431,18 @@ const FICHA_CAMPOS = [
   {key:'zona', label:'Zona en la que vive', hints:['vive']},
 ];
 
+// Datos de la ficha de una candidata (o de la niñera que salió de ella) tal como quedaron
+// después de la entrevista: lo que se corrigió o completó en la entrevista se guarda en
+// notas_ficha y pisa a la respuesta original del formulario. Antes la ficha de la niñera y el
+// pedido de CV leían solo la respuesta original, y lo cargado en la entrevista no se veía
+// (05/10/2026: 12 niñeras contratadas tenían datos así).
+function datosFichaCandidata(cd){
+  const out = {...(cd||{})};
+  const notas = (cd && cd.notas_ficha) || {};
+  Object.entries(notas).forEach(([k, v])=>{ if(v!==null && v!==undefined && String(v).trim()!=='') out[k] = v; });
+  return out;
+}
+
 const COMPETENCIAS = [
   {key:'responsabilidad', titulo:'Responsabilidad y puntualidad', preguntas:['Contame de una vez que tuviste que cambiar un plan personal porque te llamaron para cubrir un turno de urgencia. ¿Qué hiciste?','¿Cómo avisás si sabés que vas a llegar tarde o no vas a poder ir a un turno?']},
   {key:'seguridad', titulo:'Seguridad y manejo de imprevistos', preguntas:['Si un nene se cae y se lastima mientras estás sola con él, ¿qué es lo primero que hacés?','¿Qué harías si no podés comunicarte con los padres en una emergencia?']},
