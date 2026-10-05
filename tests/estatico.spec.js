@@ -40,6 +40,19 @@ test.describe('estático', () => {
     });
   });
 
+  test('ninguna fecha se saca con toISOString().slice(0,10) (es UTC: de noche da mañana)', () => {
+    // 05/10/2026: todayISO() hacía eso y a partir de las 21:00 proponía la fecha de mañana.
+    // Única excepción: el id de la notificación del extracto, que no se muestra (cambiarlo
+    // haría reaparecer avisos ya leídos).
+    const usos = [];
+    for (const archivo of ORDEN_SCRIPTS) {
+      leer(archivo).split('\n').forEach((l, i) => {
+        if (/toISOString\(\)\.slice\(0, ?10\)/.test(l) && !l.includes("id: 'extracto:'")) usos.push(`${archivo}:${i + 1}`);
+      });
+    }
+    expect(usos).toEqual([]);
+  });
+
   test('temporada.html sigue redirigiendo al formulario de temporada (está en uso)', () => {
     const html = leer('temporada.html');
     expect(html).toContain("location.replace('https://parentsbreak.pages.dev/temporada' + location.search)");

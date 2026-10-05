@@ -13,8 +13,7 @@ function cvEstaDesactualizado(n){
 function esCumpleHoy(n){
   const fn = n.candidatas?.fecha_nacimiento;
   if(!fn) return false;
-  const d = new Date(fn+'T00:00:00'), hoy = new Date();
-  return d.getMonth()===hoy.getMonth() && d.getDate()===hoy.getDate();
+  return String(fn).slice(5,10) === todayISO().slice(5,10);
 }
 let ninFiltroZonas = new Set(); // claveZona() de las zonas marcadas en el filtro
 function toggleFiltroZonaNin(k, marcada){
@@ -86,7 +85,7 @@ let ninUtilUltimaActividad = {};
 async function cargarUtilizacionNinieras(){
   const { data, error } = await sb.from('sittings_traslados').select('ninera_nombre,fecha');
   if(error || !document.getElementById('nin-utilizacion-wrap')) return;
-  const desde30 = new Date(Date.now() - NIN_UTIL_DIAS*24*3600*1000).toISOString().slice(0,10);
+  const desde30 = sumarDiasISO(todayISO(), -NIN_UTIL_DIAS);
   const porNinera = {};
   const ultimaActividad = {};
   (data||[]).forEach(r=>{
@@ -411,8 +410,7 @@ function renderNineraHistorial(id){
   let items = nineraHistItems.slice();
   if(famF) items = items.filter(s=>normaliza(s.familia_nombre)===famF);
   if(periodo>0){
-    const limite = new Date(); limite.setDate(limite.getDate()-periodo);
-    const limiteISO = limite.toISOString().slice(0,10);
+    const limiteISO = sumarDiasISO(todayISO(), -periodo);
     items = items.filter(s=>s.fecha && s.fecha >= limiteISO);
   }
   if(!items.length){ cont.innerHTML = '<div class="empty">No hay sittings registrados con estos filtros.</div>'; return; }
@@ -715,9 +713,9 @@ async function copiarMensajeCV(id){
 // más adelante si cumple años y el CV queda desactualizado. Se asume optimista: si pidió el
 // mensaje, es porque va a generar el CV ahora — no hace falta que confirme de vuelta.
 async function marcarCvGenerado(id){
-  await sb.from('ninieras').update({ cv_generado_en: new Date().toISOString().slice(0,10) }).eq('id', id);
+  await sb.from('ninieras').update({ cv_generado_en: todayISO() }).eq('id', id);
   const n = ninierasItems.find(x=>x.id===id);
-  if(n) n.cv_generado_en = new Date().toISOString().slice(0,10);
+  if(n) n.cv_generado_en = todayISO();
 }
 function descargarMensajeCV(id){
   const n = ninierasItems.find(x=>x.id===id);

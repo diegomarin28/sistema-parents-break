@@ -345,9 +345,8 @@ async function cargarFinanzas(){
   const summary = document.getElementById('fin-summary');
   const movsBox = document.getElementById('fin-movs');
   movsBox.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
-  const [y,m] = finMes.split('-').map(Number);
   const desde = `${finMes}-01`;
-  const hasta = new Date(y, m, 1).toISOString().slice(0,10);
+  const hasta = shiftMes(finMes, 1)+'-01';
   const [{data:sitsRaw, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}, {data:famsZona}, {data:asigs}] = await Promise.all([
     sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('*').gte('fecha', desde).lt('fecha', hasta),
@@ -479,8 +478,7 @@ async function cargarBalanceMultiMes(nMeses){
   const meses = [];
   for(let i=nMeses-1;i>=0;i--) meses.push(shiftMes(hoy, -i));
   const desde = `${meses[0]}-01`;
-  const [y,m] = meses[meses.length-1].split('-').map(Number);
-  const hasta = new Date(y, m, 1).toISOString().slice(0,10);
+  const hasta = shiftMes(meses[meses.length-1], 1)+'-01';
   const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}] = await Promise.all([
     sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', desde).lt('fecha', hasta),
@@ -503,8 +501,7 @@ async function cargarBalanceMultiMes(nMeses){
     porMes[mes].gastos += Number(g.monto)||0;
   });
   meses.forEach(mes=>{
-    const [ya,ma] = mes.split('-').map(Number);
-    const finMesStr = new Date(ya, ma, 1).toISOString().slice(0,10);
+    const finMesStr = shiftMes(mes, 1)+'-01';
     const totalFijos = (fijos||[]).filter(g=>g.activo && g.desde && g.desde < finMesStr).reduce((s,g)=>s+(Number(g.monto)||0), 0);
     porMes[mes].gastos += totalFijos;
   });
@@ -543,16 +540,11 @@ async function cargarBalanceMultiMes(nMeses){
 
 /* ---- Por cobrar / Por pagar (agrupado por frecuencia de familia/niñera) ---- */
 function lunesDeSemana(fechaISO){
-  const d = new Date(fechaISO+'T00:00:00');
-  const dow = d.getDay();
-  const diff = (dow===0 ? -6 : 1-dow);
-  d.setDate(d.getDate()+diff);
-  return d.toISOString().slice(0,10);
+  const dow = new Date(fechaISO+'T12:00:00').getDay();
+  return sumarDiasISO(fechaISO, dow===0 ? -6 : 1-dow);
 }
 function finDeSemanaDesde(lunesISO, trabajaFinde=true){
-  const d = new Date(lunesISO+'T00:00:00');
-  d.setDate(d.getDate() + (trabajaFinde ? 6 : 5)); // +6 domingo (default, sin cambios) · +5 sábado
-  return d.toISOString().slice(0,10);
+  return sumarDiasISO(lunesISO, trabajaFinde ? 6 : 5); // +6 domingo (default, sin cambios) · +5 sábado
 }
 function fmtFechaCortaFin(fechaISO){
   return new Date(fechaISO+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});

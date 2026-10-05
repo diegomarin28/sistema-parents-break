@@ -21,9 +21,10 @@ marketing → postulantes → ninieras → familias → sittings → intermediac
 - Son scripts clásicos, NO `type="module"`: hay ~335 handlers inline (onclick, onchange,
   oninput...) dentro del HTML que arma el JS, y llaman funciones globales por nombre.
 - Utilidades que viven fuera de lugar y se usan desde otros archivos: `renderModulo()` y la
-  capa Realtime están en `agenda.js`; `todayISO()` y `currentMonthStr()` están en
-  `sittings.js`. Solo se pueden llamar en tiempo de ejecución, nunca desde el nivel superior
-  de un archivo que carga antes.
+  capa Realtime están en `agenda.js`; `shiftMes()` y `monthLabel()` están en `sittings.js`.
+  Solo se pueden llamar en tiempo de ejecución, nunca desde el nivel superior de un archivo
+  que carga antes. Las fechas (`todayISO()`, `currentMonthStr()`, `sumarDiasISO()`) están en
+  `core.js` desde el 05/10/2026.
 
 ## Reglas fijas
 1. Nunca hacer commit directo a `main`. Cada tarea va en una rama nueva con su Pull Request.
@@ -65,6 +66,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   principales (verifica lo que se manda a la base).
 - `tests/fijos.spec.js`: vigencia de los fijos, cambio de niñera desde una fecha, registros
   vinculados a la asignación, historial de sittings, app nueva con base sin migrar.
+- `tests/fechas.spec.js`: "hoy" a las 22:30, fin de mes y de año, semanas que cruzan de mes,
+  celular con otra zona horaria.
 - `tests/finanzas.spec.js`: resumen del mes (facturado, cobrado, por cobrar, por pagar,
   resultado).
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
@@ -82,7 +85,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   fechan los incidentes reales; mantener ese estilo.
 - Todo texto que venga de datos (nombres, notas, URLs) y vaya a innerHTML o a un handler
   inline se tiene que escapar. Las candidatas llegan desde un formulario público.
-- Fechas: Montevideo es UTC-3. No usar `new Date().toISOString().slice(0,10)` para "hoy".
+- Fechas: Montevideo es UTC-3. "Hoy" sale siempre de `todayISO()` (core.js, fijado a
+  America/Montevideo aunque el celular tenga otra zona). Nunca `toISOString().slice(0,10)`
+  para una fecha: es UTC y de 21:00 a 24:00 ya da mañana. Para sumar días a "AAAA-MM-DD",
+  `sumarDiasISO()`; para el mes siguiente, `shiftMes()`.
 - Guardados: usar `sbGuardar()` o chequear `error`; nunca mostrar éxito sin verificarlo.
 - No repintar la app entera ante eventos de auth ni al volver de segundo plano: ya causó
   pérdida de entrevistas (ver comentarios en auth.js y bootstrap.js).

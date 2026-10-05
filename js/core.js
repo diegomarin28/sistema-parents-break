@@ -800,7 +800,7 @@ function textoCuentasBancarias(cuentas){
 function calcularEdad(fechaNacISO, fechaRefISO){
   if(!fechaNacISO) return null;
   const nac = new Date(fechaNacISO+'T00:00:00');
-  const ref = fechaRefISO ? new Date(fechaRefISO+'T00:00:00') : new Date();
+  const ref = new Date((fechaRefISO || todayISO())+'T00:00:00');
   if(isNaN(nac)) return null;
   let edad = ref.getFullYear() - nac.getFullYear();
   const noLlegoAlCumple = (ref.getMonth() < nac.getMonth()) || (ref.getMonth()===nac.getMonth() && ref.getDate() < nac.getDate());
@@ -811,7 +811,7 @@ function calcularEdad(fechaNacISO, fechaRefISO){
 // contando años transcurridos en vez de edad respecto a un nacimiento).
 function anosCompletosDesde(fechaISO){
   if(!fechaISO) return 0;
-  const inicio = new Date(fechaISO+'T00:00:00'), hoy = new Date();
+  const inicio = new Date(fechaISO+'T00:00:00'), hoy = new Date(todayISO()+'T00:00:00');
   if(isNaN(inicio)) return 0;
   let anos = hoy.getFullYear() - inicio.getFullYear();
   const noLlegoAlAniversario = (hoy.getMonth() < inicio.getMonth()) || (hoy.getMonth()===inicio.getMonth() && hoy.getDate() < inicio.getDate());
@@ -1034,6 +1034,30 @@ function horaTxt(h){ return h ? h.slice(0,5) : '?'; }
 // Escapa texto que viene de datos antes de meterlo en innerHTML. (El PR 4 la usa en toda
 // la app; por ahora la usa el historial de sittings, que muestra notas tal cual se cargaron.)
 function escaparHtml(t){ return String(t ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ============================================================
+   Fechas en hora de Montevideo (05/10/2026). todayISO() usaba
+   new Date().toISOString(), que es UTC: de 21:00 a 24:00 en Uruguay ya devolvía
+   el día de mañana (un sitting cargado de noche quedaba con la fecha siguiente).
+   Todo "hoy" sale de acá, fijado a America/Montevideo aunque el celular esté en
+   otra zona; para sumar días a una fecha "AAAA-MM-DD" usar sumarDiasISO().
+   ============================================================ */
+const ZONA_NEGOCIO = 'America/Montevideo';
+let _fmtFechaNegocio = null;
+function fechaNegocioISO(d){
+  d = d || new Date();
+  try{
+    if(!_fmtFechaNegocio) _fmtFechaNegocio = new Intl.DateTimeFormat('en-CA', {timeZone:ZONA_NEGOCIO, year:'numeric', month:'2-digit', day:'2-digit'});
+    const p = {};
+    _fmtFechaNegocio.formatToParts(d).forEach(x=>{ p[x.type] = x.value; });
+    if(p.year && p.month && p.day) return `${p.year}-${p.month}-${p.day}`;
+  }catch(e){}
+  // Navegador sin soporte de zonas horarias: la fecha local del aparato.
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function todayISO(){ return fechaNegocioISO(new Date()); }
+function currentMonthStr(){ return todayISO().slice(0,7); }
+function diaSemanaDeISO(fechaISO){ return ['D','L','M','X','J','V','S'][new Date(fechaISO+'T12:00:00').getDay()]; }
 
 /* ============================================================
    Vigencia de los fijos (05/10/2026, error E2). Cada asignación vale entre

@@ -135,21 +135,19 @@ async function actualizarFinanzasBadge(){
 
 const DIAS_LABEL = {L:'Lun',M:'Mar',X:'Mié',J:'Jue',V:'Vie',S:'Sáb',D:'Dom'};
 const DIAS_CORTO = {L:'Lu',M:'Ma',X:'Mi',J:'Ju',V:'Vi',S:'Sa',D:'Do'};
-function diaHoy(){ return ['D','L','M','X','J','V','S'][new Date().getDay()]; }
+function diaHoy(){ return diaSemanaDeISO(todayISO()); }
 function fechaHoyLarga(){
-  const f = new Intl.DateTimeFormat('es-UY', {weekday:'long', day:'numeric', month:'long'}).format(new Date());
+  const f = new Intl.DateTimeFormat('es-UY', {weekday:'long', day:'numeric', month:'long', timeZone:ZONA_NEGOCIO}).format(new Date());
   return f.charAt(0).toUpperCase() + f.slice(1);
 }
 
 let dashChart = null;
-function mananaISO(){ const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
-function diasAtras(n){ const d = new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
+function mananaISO(){ return sumarDiasISO(todayISO(), 1); }
+function diasAtras(n){ return sumarDiasISO(todayISO(), -n); }
 const PENDIENTE_DIAS_ATRAS = 14; // hasta cuántos días hacia atrás se avisa si algo previsto quedó sin registrar
 function rangoFechas(desdeISO, hastaISO){
   const dias = [];
-  let d = new Date(desdeISO+'T00:00:00');
-  const hasta = new Date(hastaISO+'T00:00:00');
-  while(d <= hasta){ dias.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
+  for(let d = desdeISO; d <= hastaISO; d = sumarDiasISO(d, 1)) dias.push(d);
   return dias;
 }
 async function renderDashboard(cont){
