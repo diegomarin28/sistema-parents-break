@@ -84,7 +84,11 @@ function filtrar(filas, params) {
   let out = filas;
   for (const [k, v] of params) {
     if (PARAMS_NO_FILTRO.has(k)) continue;
-    if (k === 'or') continue; // no se usa en la app hoy
+    if (k === 'or') { // or=(estado.neq.previsto,fecha.lte.2026-10-04): alguna de las condiciones
+      const conds = separarLista(v.replace(/^\(|\)$/g, ''));
+      out = out.filter(f => conds.some(c => { const i = c.indexOf('.'); return cumple(f, c.slice(0, i), c.slice(i + 1)); }));
+      continue;
+    }
     out = out.filter(f => cumple(f, k, v));
   }
   return out;
@@ -153,7 +157,7 @@ async function abrirApp(page, opciones = {}) {
   // simular una base lenta (doble toque) o que falle un guardado. fallar recibe
   // {tabla, metodo, cuerpo} y devuelve undefined (anda), 'red' (se corta la conexión) o
   // {status, message} (Supabase responde con error).
-  const estado = { escrituras: [], errores: [], noSimulados: [], db, demoraEscrituras: 0, demoraLecturas: 0, fallar: null };
+  const estado = { escrituras: [], errores: [], noSimulados: [], db, demoraEscrituras: 0, demoraLecturas: 0, fallar: null, rpc: {} };
 
   page.on('console', m => { if (m.type() === 'error') estado.errores.push('consola: ' + m.text()); });
   page.on('pageerror', e => estado.errores.push('excepción: ' + e.message));
@@ -229,8 +233,13 @@ async function abrirApp(page, opciones = {}) {
 
     const tabla = url.pathname.replace('/rest/v1/', '');
     if (tabla.startsWith('rpc/')) {
-      estado.escrituras.push({ tabla, metodo, cuerpo: req.postDataJSON?.() });
-      return route.fulfill({ json: [] });
+      const cuerpo = req.postDataJSON?.();
+      estado.escrituras.push({ tabla, metodo, cuerpo });
+      // Con la base sin migrar, una función nueva no existe (mismo error que Supabase).
+      if (baseSinMigrar) return route.fulfill({ status: 404, json: { code: 'PGRST202', message: `Could not find the function public.${tabla.slice(4)} in the schema cache` } });
+      // estado.rpc[nombre] = (cuerpo, db) => resultado simula lo que hace la función en la base.
+      const simular = estado.rpc[tabla.slice(4)];
+      return route.fulfill({ json: simular ? simular(cuerpo, db) : [] });
     }
     if (baseSinMigrar && tabla === 'sittings_historial') {
       return route.fulfill({ status: 404, json: { code: 'PGRST205', message: "Could not find the table 'public.sittings_historial' in the schema cache" } });
