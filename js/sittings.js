@@ -592,6 +592,11 @@ function abrirModalSitForm(id=null){
   }, 20);
 }
 function setSitTipo(t){
+  // Los campos de cada tipo se vuelven a dibujar: la fecha y la hora de inicio que ya se
+  // eligieron se conservan. Antes volvían a hoy sin avisar y un traslado del 28/09 quedó
+  // guardado con la fecha del día en que se cargó (04/10/2026, "no dejaba elegir el día").
+  const fechaElegida = document.getElementById('sit-fecha')?.value || '';
+  const horaElegida = sitTipo==='sitting' ? leerHora('sit-horaini') : leerHora('sit-hora');
   sitTipo = t;
   sitPagoModoHora = false;
   const bS = document.getElementById('sit-tipo-sitting'), bT = document.getElementById('sit-tipo-traslado');
@@ -600,6 +605,8 @@ function setSitTipo(t){
   sitOrigenAuto = true;
   sitOrigenCoord = null; sitDestinoCoord = null;
   document.getElementById('sit-camposTipo').innerHTML = sitCamposTipoHTML();
+  if(fechaElegida) document.getElementById('sit-fecha').value = fechaElegida;
+  if(horaElegida) setHoraSelect(t==='sitting' ? 'sit-horaini' : 'sit-hora', horaElegida);
   wireSitAutocompletes();
   if(t==='traslado') aplicarDireccionSugerida();
   actualizarPrecioSugeridoTraslado();
