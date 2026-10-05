@@ -133,3 +133,49 @@ test.describe('nombres con apóstrofo y HTML', () => {
     verificarLimpio(e);
   });
 });
+
+// 05/10/2026: un traslado del lunes 28/09 se quiso cargar con esa fecha y "no dejaba
+// seleccionar el día": quedó guardado con la fecha del día en que se cargó (04/10). Al tocar
+// "Traslado" el formulario volvía a dibujar los campos y la fecha volvía a hoy sin avisar.
+test.describe('formulario de Sittings: cambiar el tipo no pisa la fecha', () => {
+  async function abrirForm(page) {
+    await irAModulo(page, 'sittings');
+    await page.locator('button[onclick^="abrirModalSitForm"]').first().click();
+    await expect(page.locator('#sit-fecha')).toBeVisible();
+  }
+  test('elegir la fecha y después "Traslado": se guarda con la fecha elegida', async ({ page }) => {
+    const e = await abrirApp(page);
+    await abrirForm(page);
+    await page.fill('#sit-fecha', '2026-09-28');
+    await page.locator('#sit-tipo-traslado').click();
+    await expect(page.locator('#sit-fecha')).toHaveValue('2026-09-28');
+    await page.evaluate(() => {
+      document.getElementById('sit-familia').value = 'Familia Prueba Dos';
+      sitFamiliaSel = sitFamilias.find(f => f.nombre === 'Familia Prueba Dos');
+      document.getElementById('sit-ninera').value = 'Bruno Inventado';
+      sitNineraSel = sitNinieras.find(n => n.nombre === 'Bruno Inventado');
+      setHoraSelect('sit-hora', '13:00');
+    });
+    await page.fill('#sit-cobro', '488');
+    await page.fill('#sit-pago', '282');
+    await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    const alta = e.escrituras.filter(w => w.tabla === 'sittings_traslados' && w.metodo === 'POST');
+    expect(alta).toHaveLength(1);
+    expect(alta[0].cuerpo).toMatchObject({ tipo: 'traslado', fecha: '2026-09-28', hora_inicio: '13:00' });
+    verificarLimpio(e);
+  });
+  test('ida y vuelta entre Sitting y Traslado conserva fecha y hora de inicio', async ({ page }) => {
+    const e = await abrirApp(page);
+    await abrirForm(page);
+    await page.fill('#sit-fecha', '2026-09-21');
+    await page.evaluate(() => setHoraSelect('sit-horaini', '09:30'));
+    await page.locator('#sit-tipo-traslado').click();
+    await expect(page.locator('#sit-fecha')).toHaveValue('2026-09-21');
+    expect(await page.evaluate(() => leerHora('sit-hora'))).toBe('09:30');
+    await page.locator('#sit-tipo-sitting').click();
+    await expect(page.locator('#sit-fecha')).toHaveValue('2026-09-21');
+    expect(await page.evaluate(() => leerHora('sit-horaini'))).toBe('09:30');
+    verificarLimpio(e);
+  });
+});
