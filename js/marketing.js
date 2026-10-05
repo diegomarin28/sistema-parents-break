@@ -22,7 +22,7 @@ function abrirModalNuevaFechaMarketing(){
     <div class="field"><label>Notas</label><textarea id="mk-notas"></textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="addFechaMarketing()">Agregar fecha</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>addFechaMarketing())">Agregar fecha</button>
     </div>`);
 }
 async function addFechaMarketing(){
@@ -61,7 +61,7 @@ async function cargarMarketing(){
       </div>
       ${f.sugerencia?`<div class="helper" style="margin-top:8px;">${escaparHtml(f.sugerencia)}</div>`:''}
       ${f.notas?`<div class="helper">${escaparHtml(f.notas)}</div>`:''}
-      <div class="actions" style="margin-top:10px;"><button class="smallbtn" onclick="editarFechaMarketing(${argJs(f.id)})">Editar</button><button class="smallbtn danger" onclick="eliminarFechaMarketing(${argJs(f.id)})">Eliminar</button></div>
+      <div class="actions" style="margin-top:10px;"><button class="smallbtn" onclick="editarFechaMarketing(${argJs(f.id)})">Editar</button><button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarFechaMarketing(${argJs(f.id)}))">Eliminar</button></div>
     </div>`;
   };
   let html = '';
@@ -83,7 +83,7 @@ function editarFechaMarketing(id){
     <div class="field"><label>Notas</label><textarea id="ed-mk-notas">${escaparHtml(f.notas)}</textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionFechaMarketing(${argJs(id)})">Guardar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarEdicionFechaMarketing(${argJs(id)}))">Guardar</button>
     </div>`);
 }
 async function guardarEdicionFechaMarketing(id){

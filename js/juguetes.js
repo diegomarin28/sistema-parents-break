@@ -68,7 +68,7 @@ function filtrarJuguetes(){
         <div style="font-size:12px;color:var(--accent);margin-top:6px;">${j.ninera_nombre?escaparHtml('Con '+j.ninera_nombre):'Sin asignar'}</div>
         <div style="display:flex;gap:6px;margin-top:8px;">
           <button class="smallbtn" onclick="abrirModalJuguete(${argJs(j.id)})">Editar</button>
-          <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarJuguete(${argJs(j.id)})" title="Eliminar juguete" aria-label="Eliminar juguete">${ICONS.trash}</button>
+          <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="conGuardado(this, ()=>eliminarJuguete(${argJs(j.id)}))" title="Eliminar juguete" aria-label="Eliminar juguete">${ICONS.trash}</button>
         </div>
       </div>
     </div>`;
@@ -112,7 +112,7 @@ function abrirModalJuguete(id=null){
       </select></div>
     </div>
     <div class="field"><label>Notas</label><textarea id="jug-notas" rows="2">${escaparHtml(j?.notas)}</textarea></div>
-    <button class="btn primary" style="width:100%;margin-top:8px;" onclick="guardarJuguete(${j?`${argJs(j.id)}`:'null'})">Guardar</button>
+    <button class="btn primary" style="width:100%;margin-top:8px;" onclick="conGuardado(this, ()=>guardarJuguete(${j?`${argJs(j.id)}`:'null'}))">Guardar</button>
   `;
   abrirModal(cuerpo);
   setTimeout(()=>{
@@ -188,25 +188,25 @@ async function guardarJuguete(id){
     if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
     jugueteId = data.id;
   }
+  let errMov = null;
   if((anterior?.ninera_nombre||null) !== (ninera_nombre||null)){
-    await sb.from('juguetes_movimientos').insert({
+    ({ error: errMov } = await sb.from('juguetes_movimientos').insert({
       juguete_id: jugueteId,
       ninera_anterior: anterior?.ninera_nombre || null,
       ninera_nueva: ninera_nombre || null,
-    });
+    }));
   }
   cerrarModal();
-  toast('Juguete guardado.');
+  if(errMov) toast('Juguete guardado, pero no se pudo anotar el movimiento en el historial: '+errMov.message, 'bad');
+  else toast('Juguete guardado.');
   cargarJuguetes();
 }
 async function eliminarJuguete(id){
-  confirmarAccion('¿Eliminar este juguete del inventario?', 'Eliminar').then(async ok=>{
-    if(!ok) return;
-    const { error } = await sb.from('juguetes').delete().eq('id', id);
-    if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
-    toast('Juguete eliminado.');
-    cargarJuguetes();
-  });
+  if(!(await confirmarAccion('¿Eliminar este juguete del inventario?', 'Eliminar'))) return;
+  const { error } = await sb.from('juguetes').delete().eq('id', id);
+  if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
+  toast('Juguete eliminado.');
+  cargarJuguetes();
 }
 
 function moduloHeader(titulo){

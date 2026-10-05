@@ -129,7 +129,7 @@ test('la tarjeta de un fijo que ya terminó no ofrece cambiar la niñera ni borr
   const modal = page.locator('#editmodal');
   await expect(modal).toContainText('Este fijo terminó el 28/09/26');
   await expect(modal.locator(`#agenda-fija-guardar-${ID.aFijo}`)).toHaveCount(0);
-  await expect(modal.locator('button', { hasText: 'Quitar esta asignación fija' })).toHaveCount(0);
+  await expect(modal.locator('button', { hasText: 'Terminar este fijo' })).toHaveCount(0);
   await expect(modal.locator('button', { hasText: 'Editar vigencia y tipo' })).toHaveCount(1);
   await expect(modal.locator('button', { hasText: 'Registrar sitting de este día' })).toHaveCount(1);
   verificarLimpio(e);

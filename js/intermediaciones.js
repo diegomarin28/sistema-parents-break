@@ -62,7 +62,7 @@ async function abrirModalInterPoolNinera(poolId){
     <h2>${escaparHtml(p.ninera_nombre)}</h2>
     <div class="helper">Estado actual: ${p.estado==='activa'?'Activa (colocada, trabajando)':'Disponible (libre para una nueva colocación)'}</div>
     <div style="margin-top:14px;">${historialHtml}</div>
-    <button class="btn primary" style="width:100%;margin-top:16px;" onclick="cambiarEstadoPoolEnrique(${argJs(p.id)}, ${argJs(p.estado==='activa'?'disponible':'activa')})">Marcar como ${p.estado==='activa'?'disponible':'activa'}</button>
+    <button class="btn primary" style="width:100%;margin-top:16px;" onclick="conGuardado(this, ()=>cambiarEstadoPoolEnrique(${argJs(p.id)}, ${argJs(p.estado==='activa'?'disponible':'activa')}))">Marcar como ${p.estado==='activa'?'disponible':'activa'}</button>
   `);
 }
 async function cambiarEstadoPoolEnrique(poolId, nuevoEstado){
@@ -128,7 +128,7 @@ function renderInterFormEnrique(){
       </div>
       <div class="field"><label>Comentarios</label><textarea id="inter-enrique-comentarios" rows="2" placeholder="Opcional"></textarea></div>
       <div id="inter-enrique-warn"></div>
-      <button class="btn primary" style="width:100%;" onclick="guardarIntermediacionEnrique()">Guardar colocación</button>
+      <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>guardarIntermediacionEnrique())">Guardar colocación</button>
     </div>
   `;
   interEnriqueSel = null;
@@ -150,12 +150,19 @@ async function guardarIntermediacionEnrique(){
   if(error){ warn.innerHTML = errBox(error); return; }
   // Colocada por Enrique: sale de la lista general de Niñeras (ya no se le asignan sittings)
   // y queda registrada en el pool propio de Intermediaciones como "activa".
-  await sb.from('ninieras').update({activa:false}).eq('id', interEnriqueSel.id);
-  await sb.from('intermediaciones_enrique_pool').upsert(
+  const { error: e2 } = await sb.from('ninieras').update({activa:false}).eq('id', interEnriqueSel.id);
+  const { error: e3 } = await sb.from('intermediaciones_enrique_pool').upsert(
     {ninera_id: interEnriqueSel.id, ninera_nombre: interEnriqueSel.nombre, estado:'activa', updated_at:new Date().toISOString()},
     {onConflict:'ninera_id'}
   );
-  toast('Colocación registrada — la niñera ya no aparece en Niñeras.');
+  // La colocación ya quedó guardada; si falló alguno de los dos pasos siguientes se avisa
+  // qué falta en vez de decir que salió todo bien.
+  if(e2 || e3){
+    const falta = [e2 ? 'sacarla de la lista de Niñeras' : null, e3 ? 'sumarla a "Niñeras Enrique"' : null].filter(Boolean).join(' ni ');
+    toast(`Colocación registrada, pero no se pudo ${falta}: ${(e2||e3).message}`, 'bad');
+  } else {
+    toast('Colocación registrada — la niñera ya no aparece en Niñeras.');
+  }
   interTab = 'historial';
   renderModulo();
 }
@@ -167,7 +174,7 @@ async function abrirModalInterEnriqueDetalle(id){
     <h2>${escaparHtml(it.ninera_nombre)}</h2>
     <div class="helper">Colocación vía Agencia Enrique · ${fechaFmt}</div>
     <div class="fichadl" style="margin-top:14px;"><div><b>Monto cobrado</b>$${Number(it.monto||0).toLocaleString('es-UY')}</div>${it.comentarios?`<div><b>Comentarios</b>${escaparHtml(it.comentarios)}</div>`:''}</div>
-    <button class="btn danger" style="width:100%;margin-top:16px;" onclick="eliminarIntermediacionEnrique(${argJs(it.id)})">Eliminar registro</button>
+    <button class="btn danger" style="width:100%;margin-top:16px;" onclick="conGuardado(this, ()=>eliminarIntermediacionEnrique(${argJs(it.id)}))">Eliminar registro</button>
   `);
 }
 async function eliminarIntermediacionEnrique(id){
@@ -233,7 +240,7 @@ function renderInterFormEvento(){
       <button class="smallbtn" type="button" onclick="agregarFilaInterEvento()" style="margin-bottom:10px;">+ Agregar otra niñera</button>
       <div class="field"><label>Comentarios</label><textarea id="inter-evento-comentarios" rows="2" placeholder="ej: juguetes que se llevaron, o cualquier otro dato del evento"></textarea></div>
       <div id="inter-evento-warn"></div>
-      <button class="btn primary" style="width:100%;" onclick="guardarIntermediacionEvento()">Guardar evento</button>
+      <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>guardarIntermediacionEvento())">Guardar evento</button>
     </div>
   `;
   attachAutocomplete('inter-evento-empresa', 'inter-evento-empresa-dropdown', ()=>interEmpresas, ()=>{});
@@ -281,7 +288,7 @@ async function abrirModalInterEventoDetalle(id){
     <div class="helper">Evento · ${fechaFmt} · Cobro total $${Number(it.cobro_total||0).toLocaleString('es-UY')}</div>
     <div class="tablewrap" style="margin-top:14px;"><table class="asigtable"><thead><tr><th>Niñera</th><th>Horario</th><th>Pago</th></tr></thead><tbody>${filasHtml}</tbody></table></div>
     ${it.comentarios?`<div class="fichadl" style="margin-top:10px;"><div><b>Comentarios</b>${escaparHtml(it.comentarios)}</div></div>`:''}
-    <button class="btn danger" style="width:100%;margin-top:16px;" onclick="eliminarIntermediacionEvento(${argJs(it.id)})">Eliminar evento</button>
+    <button class="btn danger" style="width:100%;margin-top:16px;" onclick="conGuardado(this, ()=>eliminarIntermediacionEvento(${argJs(it.id)}))">Eliminar evento</button>
   `);
 }
 async function eliminarIntermediacionEvento(id){

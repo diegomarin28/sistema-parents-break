@@ -32,7 +32,7 @@ async function renderFinanzas(cont){
       <div id="fin-extracto-aviso"></div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
         <input type="file" accept=".csv,.xls,.xlsx" id="fin-conciliar-file" style="font-size:13px;">
-        <button class="btn primary" onclick="procesarExtractoConciliacion()">Procesar extracto</button>
+        <button class="btn primary" onclick="conGuardado(this, ()=>procesarExtractoConciliacion())">Procesar extracto</button>
       </div>
       <div id="fin-conciliar-resultado" style="margin-top:14px;"></div>
     </div>
@@ -154,7 +154,7 @@ function abrirModalNuevoGasto(){
     </div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarGastoGeneral()">Agregar gasto</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarGastoGeneral())">Agregar gasto</button>
     </div>`);
 }
 async function guardarGastoGeneral(){
@@ -186,7 +186,7 @@ function editarGastoGeneral(id){
     </div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionGasto(${argJs(id)})">Guardar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarEdicionGasto(${argJs(id)}))">Guardar</button>
     </div>`);
 }
 async function guardarEdicionGasto(id){
@@ -222,7 +222,7 @@ function abrirModalNuevoGastoFijo(){
     <div class="field"><label>Notas</label><textarea id="ff-notas"></textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarGastoFijo()">Agregar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarGastoFijo())">Agregar</button>
     </div>`);
 }
 async function guardarGastoFijo(){
@@ -249,7 +249,7 @@ function editarGastoFijo(id){
     <div class="field"><label>Notas</label><textarea id="ef-notas">${escaparHtml(g.notas)}</textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionGastoFijo(${argJs(id)})">Guardar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarEdicionGastoFijo(${argJs(id)}))">Guardar</button>
     </div>`);
 }
 async function guardarEdicionGastoFijo(id){
@@ -388,7 +388,7 @@ async function cargarFinanzas(){
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${Number(g.monto||0).toLocaleString('es-UY')}/mes</span>
             <button class="smallbtn" onclick="editarGastoFijo(${argJs(g.id)})">Editar</button>
-            <button class="smallbtn danger" onclick="eliminarGastoFijo(${argJs(g.id)})">Eliminar</button>
+            <button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarGastoFijo(${argJs(g.id)}))">Eliminar</button>
           </div>
         </div>`;
       }).join('') + (totalFijos>0 ? `<div class="helper" style="margin-top:8px;">Total fijos aplicados a ${monthLabel(finMes)}: <b>$${totalFijos.toLocaleString('es-UY')}</b></div>` : '');
@@ -458,7 +458,7 @@ async function cargarFinanzas(){
       <div>${fechaFmt} · ${escaparHtml(mv.texto)}${mv.pendiente ? ` <span class="badge warn" style="margin-left:6px;">${mv.pendTxt}</span>` : ''}</div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${colorMonto};">${mv.monto>0?'+':''}$${mv.monto.toLocaleString('es-UY')}</span>
-        ${mv.gastoId ? `<button class="smallbtn" onclick="editarGastoGeneral(${argJs(mv.gastoId)})">Editar</button><button class="smallbtn danger" onclick="eliminarGastoGeneral(${argJs(mv.gastoId)})">Eliminar</button>` : ''}
+        ${mv.gastoId ? `<button class="smallbtn" onclick="editarGastoGeneral(${argJs(mv.gastoId)})">Editar</button><button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarGastoGeneral(${argJs(mv.gastoId)}))">Eliminar</button>` : ''}
         ${mv.sitId ? `<button class="smallbtn" onclick="editarMovimientoSitting(${argJs(mv.sitId)})">Editar</button>` : ''}
       </div>
     </div>`;
@@ -629,7 +629,7 @@ function renderPorCobrar(lista){
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${g.total.toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado')">Marcar cobrado</button>
+          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado'))">Marcar cobrado</button>
         </div>
       </div>`).join('')}
   `;
@@ -653,7 +653,7 @@ function renderPorPagar(lista){
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${g.total.toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="marcarGrupoResuelto(${argJs(g.ids)}, 'pagado')">Marcar pagado</button>
+          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'pagado'))">Marcar pagado</button>
         </div>
       </div>`).join('')}
   `;
@@ -697,7 +697,7 @@ function editarMovimientoSitting(id){
     <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="editarRegistroDesdeAgenda(${argJs(r.id)})">Cambiar horario, familia o niñera</button>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarMovimientoSitting(${argJs(r.id)})">Guardar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarMovimientoSitting(${argJs(r.id)}))">Guardar</button>
     </div>`);
 }
 async function guardarMovimientoSitting(id){
@@ -858,7 +858,7 @@ async function procesarExtractoConciliacion(){
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
         <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${m.totalPendiente.toLocaleString('es-UY')}</span>
-        <button class="smallbtn" onclick="marcarGrupoResuelto(${argJs(m.ids)}, 'cobrado')">Marcar cobrado</button>
+        <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(m.ids)}, 'cobrado'))">Marcar cobrado</button>
       </div>
     </div>`;
 
@@ -867,7 +867,7 @@ async function procesarExtractoConciliacion(){
     ${exactos.length ? `
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <h3 style="margin:10px 0 4px;">Coinciden exacto</h3>
-        <button class="btn primary" onclick="marcarGrupoResuelto(${argJs(exactos.flatMap(m=>m.ids))}, 'cobrado')">Marcar todo como cobrado (${exactos.length})</button>
+        <button class="btn primary" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(exactos.flatMap(m=>m.ids))}, 'cobrado'))">Marcar todo como cobrado (${exactos.length})</button>
       </div>
       ${exactos.map(filaMatch).join('')}` : ''}
     ${conDiferencia.length ? `<h3 style="margin:14px 0 4px;">Con diferencia — revisar antes de marcar</h3>${conDiferencia.map(filaMatch).join('')}` : ''}

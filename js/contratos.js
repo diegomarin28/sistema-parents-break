@@ -151,7 +151,7 @@ function renderLegal(cont){
         <div class="field"><label>Nombre</label><input type="text" id="leg-reg-nombre"></div>
         <div class="field"><label>Fecha</label><input type="date" id="leg-reg-fecha"></div>
       </div>
-      <button class="smallbtn" onclick="addContrato()">+ Agregar al registro</button>
+      <button class="smallbtn" onclick="conGuardado(this, ()=>addContrato())">+ Agregar al registro</button>
       <div id="leg-lista" style="margin-top:14px;"></div>
     </div>
   `;
@@ -232,7 +232,7 @@ async function cargarContratos(){
         <option value="enviado" ${c.estado==='enviado'?'selected':''}>Enviado</option>
         <option value="firmado" ${c.estado==='firmado'?'selected':''}>Firmado</option>
       </select></td>
-      <td><button class="smallbtn danger" onclick="eliminarContrato(${argJs(c.id)})">Eliminar</button></td>
+      <td><button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarContrato(${argJs(c.id)}))">Eliminar</button></td>
     </tr>`).join('')}
   </tbody></table></div>`;
 }

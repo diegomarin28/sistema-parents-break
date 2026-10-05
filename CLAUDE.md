@@ -78,6 +78,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   celular con otra zona horaria.
 - `tests/finanzas.spec.js`: resumen del mes (facturado, cobrado, por cobrar, por pagar,
   resultado).
+- `tests/guardados.spec.js`: doble toque, base que falla o sin conexión, cerrar el modal a mitad
+  del guardado, terminar un fijo desde una fecha.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -97,7 +99,12 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   America/Montevideo aunque el celular tenga otra zona). Nunca `toISOString().slice(0,10)`
   para una fecha: es UTC y de 21:00 a 24:00 ya da mañana. Para sumar días a "AAAA-MM-DD",
   `sumarDiasISO()`; para el mes siguiente, `shiftMes()`.
-- Guardados: usar `sbGuardar()` o chequear `error`; nunca mostrar éxito sin verificarlo.
+- Guardados: usar `sbGuardar()` o chequear `error`; nunca mostrar éxito sin verificarlo (si
+  un paso secundario falla, el aviso dice qué faltó). Todo botón que escribe en la base va
+  con `conGuardado(this, ()=>guardarX())` (core.js): deshabilitado y con ruedita mientras
+  guarda, sin doble insert por doble toque. Lo controla `tests/estatico.spec.js`.
+- Fijos: nunca se borran. "Terminar desde [fecha]" completa `vigente_hasta` con el día
+  anterior (`abrirModalTerminarFijo`, agenda.js).
 - No repintar la app entera ante eventos de auth ni al volver de segundo plano: ya causó
   pérdida de entrevistas (ver comentarios en auth.js y bootstrap.js).
 - Una función global nueva no puede repetir el nombre de otra en ningún archivo.
