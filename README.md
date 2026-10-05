@@ -83,7 +83,7 @@ incidentes (optional link to ninieras, familias, and a specific sitting)
 
 **Worth calling out:** the first pass mirrored how the client had been tracking this manually — a candidate got copied into a new record at each pipeline stage (intake sheet → interview sheet → roster sheet). I refactored that into a single `candidatas` table with a `status` enum (`intake → entrevistada → contratada / descartada`) instead, so a person's identity persists through their whole lifecycle rather than being duplicated across stages and risking drift between copies. Interview specifics (scores, red flags, notes) live in a separate `entrevistas` table in a 1:N relationship — that keeps the option open to re-interview someone later without losing prior history, which a flattened single-record model would have made awkward.
 
-Full schema (structure only, no data), including RLS policies, storage buckets, cron jobs and the Realtime publication, is in [`supabase/schema.sql`](./supabase/schema.sql). It is a snapshot of production taken on 2026-10-04; the step-by-step migration history lives in the Supabase project.
+Full schema (structure only, no data), including RLS policies, storage buckets, cron jobs and the Realtime publication, is in [`supabase/schema.sql`](./supabase/schema.sql). It is a snapshot of production taken on 2026-10-04; the earlier step-by-step migration history lives in the Supabase project, and new migrations go in [`supabase/migraciones/`](./supabase/migraciones/).
 
 ## Running it locally
 
@@ -114,6 +114,8 @@ npm test                          # static checks + smoke tests + known-bug regr
 
 - `tests/estatico.spec.js` — `node --check`, script load order, duplicated globals, no new emojis.
 - `tests/humo.spec.js` — headless Chromium: login, every module, modals, main forms (checks what is sent to the database).
+- `tests/fijos.spec.js` — fixed schedules with start/end dates, changing the sitter from a date, change history of sittings.
+- `tests/finanzas.spec.js` — monthly summary (invoiced, collected, to collect, to pay, result).
 - `tests/regresiones.spec.js` — reproductions of known bugs. The ones marked `test.fail()` are expected to fail until their fix lands.
 
 Supabase is fully mocked (`tests/support/app.js`) with fictitious data (`tests/support/datos.js`): tests never reach the real database, and any unmocked request fails the test. supabase-js is served from `tests/vendor/` so tests don't depend on the CDN. CI runs the same suite on every pull request (`.github/workflows/tests.yml`).

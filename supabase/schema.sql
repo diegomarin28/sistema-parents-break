@@ -3,7 +3,8 @@
 -- Postgres 17). SOLO ESTRUCTURA, sin datos.
 --
 -- Foto tomada de producción el 04/10/2026 leyendo el catálogo de Postgres (solo
--- lectura). Reemplaza al schema.sql anterior, que tenía 5 de las 35 tablas.
+-- lectura), más la migración supabase/migraciones/20261005_vigencia_fijos_historial_sittings.sql
+-- (vigencia y tipo de asignaciones, historial de sittings, cierre de candidatas-fotos).
 --
 -- El historial paso a paso son las 79 migraciones registradas en el proyecto
 -- (supabase_migrations.schema_migrations). No se copiaron acá porque varias cargan
@@ -53,7 +54,14 @@ create table public.asignaciones (
   dias jsonb default '[]'::jsonb not null,
   hora_inicio time without time zone,
   hora_fin time without time zone,
-  constraint asignaciones_pkey PRIMARY KEY (id)
+  -- Vigencia del fijo, ambos extremos inclusive (hasta vacío = sigue vigente). La Agenda
+  -- solo lo dibuja dentro de estas fechas; cambiar de niñera cierra una y abre otra.
+  vigente_desde date default ((now() at time zone 'America/Montevideo')::date),
+  vigente_hasta date,
+  tipo text default 'sitting'::text,
+  constraint asignaciones_pkey PRIMARY KEY (id),
+  constraint asignaciones_tipo_check CHECK (((tipo IS NULL) OR (tipo = ANY (ARRAY['sitting'::text, 'traslado'::text])))),
+  constraint asignaciones_vigencia_check CHECK (((vigente_hasta IS NULL) OR (vigente_desde IS NULL) OR (vigente_hasta >= vigente_desde)))
 );
 
 create table public.candidatas (
@@ -395,6 +403,21 @@ create table public.resenas_ninieras (
   constraint resenas_ninieras_pkey PRIMARY KEY (id)
 );
 
+-- Respaldo previo a la migración del 05/10/2026 (misma forma que asignaciones antes de
+-- agregar vigencia y tipo). Sin políticas: no lo ve la app.
+create table public.respaldo_asignaciones_20261005 (
+  id uuid,
+  familia_id uuid,
+  ninera_id uuid,
+  ninera_nombre text,
+  cobro_hora numeric,
+  pago_hora numeric,
+  created_at timestamp with time zone,
+  dias jsonb,
+  hora_inicio time without time zone,
+  hora_fin time without time zone
+);
+
 -- Respaldos manuales de la reorganización de zonas del 30/09/2026 (sin políticas: no
 -- los ve la app). Se pueden borrar cuando ya no hagan falta.
 create table public.respaldo_zona_grupos_20260930 (
@@ -440,6 +463,18 @@ create table public.sittings_traslados (
   constraint sittings_traslados_pkey PRIMARY KEY (id),
   constraint sittings_traslados_fuente_check CHECK ((fuente = ANY (ARRAY['app'::text, 'historico'::text]))),
   constraint sittings_traslados_tipo_check CHECK ((tipo = ANY (ARRAY['sitting'::text, 'traslado'::text])))
+);
+
+-- Historial de cambios de sittings_traslados (lo escribe el trigger sittings_historial_trg).
+create table public.sittings_historial (
+  id bigint generated always as identity primary key,
+  sitting_id uuid not null,
+  accion text not null,
+  usuario text,
+  cuando timestamp with time zone default now() not null,
+  cambios jsonb,
+  fila jsonb,
+  constraint sittings_historial_accion_check CHECK ((accion = ANY (ARRAY['alta'::text, 'cambio'::text, 'baja'::text])))
 );
 
 create table public.solicitud_ninieras (
@@ -549,6 +584,7 @@ alter table public.solicitudes add constraint solicitudes_familia_id_fkey FOREIG
 
 CREATE INDEX asignaciones_familia_id_idx ON public.asignaciones USING btree (familia_id);
 CREATE INDEX asignaciones_ninera_id_idx ON public.asignaciones USING btree (ninera_id);
+CREATE INDEX idx_asignaciones_vigencia ON public.asignaciones USING btree (familia_id, vigente_desde, vigente_hasta);
 CREATE INDEX idx_candidatas_estado ON public.candidatas USING btree (estado);
 CREATE INDEX idx_carsitting_ninera_id ON public.carsitting_datos USING btree (ninera_id);
 CREATE INDEX idx_contratos_parte ON public.contratos USING btree (parte_nombre);
@@ -569,6 +605,7 @@ CREATE INDEX idx_sittings_ninera_id ON public.sittings_traslados USING btree (ni
 CREATE INDEX idx_sittings_ninera_nombre ON public.sittings_traslados USING btree (ninera_nombre);
 CREATE INDEX idx_sittings_pendiente_cobro ON public.sittings_traslados USING btree (familia_id) WHERE (cobrado = false);
 CREATE INDEX idx_sittings_pendiente_pago ON public.sittings_traslados USING btree (ninera_id) WHERE (pagado = false);
+CREATE INDEX idx_sittings_historial_sitting ON public.sittings_historial USING btree (sitting_id, cuando DESC);
 CREATE INDEX idx_solicitud_ninieras_ninera_id ON public.solicitud_ninieras USING btree (ninera_id);
 CREATE INDEX idx_solicitud_ninieras_solicitud_id ON public.solicitud_ninieras USING btree (solicitud_id);
 CREATE INDEX idx_solicitudes_familia_id ON public.solicitudes USING btree (familia_id);
@@ -577,7 +614,7 @@ CREATE INDEX idx_solicitudes_fecha ON public.solicitudes USING btree (fecha);
 -- ----------------------------------------------------------------------------
 -- Row Level Security: todas las tablas con RLS. Las que no tienen política
 -- (app_secrets, respaldo_*, whatsapp_eventos_raw) solo son accesibles con la
--- service role (Edge Functions).
+-- service role (Edge Functions). sittings_historial: solo lectura para la app.
 -- ----------------------------------------------------------------------------
 
 alter table public.app_config enable row level security;
@@ -606,8 +643,10 @@ alter table public.notif_push_preferencias enable row level security;
 alter table public.notificaciones_leidas enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.resenas_ninieras enable row level security;
+alter table public.respaldo_asignaciones_20261005 enable row level security;
 alter table public.respaldo_zona_grupos_20260930 enable row level security;
 alter table public.respaldo_zonas_20260930 enable row level security;
+alter table public.sittings_historial enable row level security;
 alter table public.sittings_traslados enable row level security;
 alter table public.solicitud_ninieras enable row level security;
 alter table public.solicitudes enable row level security;
@@ -691,6 +730,8 @@ create policy push_subscriptions_authenticated_all on public.push_subscriptions 
 create policy resenas_ninieras_authenticated_all on public.resenas_ninieras as permissive for all to public
   using ((( SELECT auth.role() AS role) = 'authenticated'::text))
   with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+create policy sittings_historial_leer on public.sittings_historial as permissive for select to authenticated
+  using (true);
 create policy sittings_traslados_authenticated_all on public.sittings_traslados as permissive for all to public
   using ((( SELECT auth.role() AS role) = 'authenticated'::text))
   with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
@@ -720,12 +761,9 @@ insert into storage.buckets (id, name, public) values
   ('ninieras-fotos', 'ninieras-fotos', true)
 on conflict (id) do nothing;
 
-create policy candidatas_fotos_public_read on storage.objects as permissive for select to public
-  using ((bucket_id = 'candidatas-fotos'::text));
--- OJO (auditoría 04/10/2026): esta política deja SUBIR archivos a cualquiera, sin login
--- ("to public" sin chequear auth.role()). Se transcribe tal cual está en producción.
-create policy candidatas_fotos_service_write on storage.objects as permissive for insert to public
-  with check ((bucket_id = 'candidatas-fotos'::text));
+-- candidatas-fotos no tiene políticas desde el 05/10/2026: solo sube la Edge Function
+-- candidatas-webhook (clave de servicio) y las fotos se ven por URL pública. Antes había
+-- dos políticas que dejaban subir y listar sin login.
 create policy juguetes_fotos_authenticated_delete on storage.objects as permissive for delete to public
   using (((bucket_id = 'juguetes-fotos'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
 create policy juguetes_fotos_authenticated_update on storage.objects as permissive for update to public
@@ -803,6 +841,55 @@ select cron.schedule('enviar-push-urgentes', '*/10 * * * *', $$
     body := '{}'::jsonb
   );
 $$);
+
+-- Historial de sittings: cada alta, cambio y baja queda registrada con el mail de quien
+-- lo hizo (sale del token de la sesión).
+CREATE OR REPLACE FUNCTION public.registrar_historial_sitting()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  usr text;
+  diff jsonb := '{}'::jsonb;
+  k text;
+  viejo jsonb;
+  nuevo jsonb;
+begin
+  begin
+    usr := nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email';
+  exception when others then
+    usr := null;
+  end;
+  usr := coalesce(usr, current_user);
+
+  if tg_op = 'INSERT' then
+    insert into public.sittings_historial (sitting_id, accion, usuario, fila) values (new.id, 'alta', usr, to_jsonb(new));
+    return new;
+  elsif tg_op = 'DELETE' then
+    insert into public.sittings_historial (sitting_id, accion, usuario, fila) values (old.id, 'baja', usr, to_jsonb(old));
+    return old;
+  else
+    viejo := to_jsonb(old);
+    nuevo := to_jsonb(new);
+    for k in select jsonb_object_keys(nuevo) loop
+      if (viejo -> k) is distinct from (nuevo -> k) then
+        diff := diff || jsonb_build_object(k, jsonb_build_object('antes', viejo -> k, 'despues', nuevo -> k));
+      end if;
+    end loop;
+    if diff <> '{}'::jsonb then
+      insert into public.sittings_historial (sitting_id, accion, usuario, cambios) values (new.id, 'cambio', usr, diff);
+    end if;
+    return new;
+  end if;
+end;
+$function$;
+revoke execute on function public.registrar_historial_sitting() from public, anon, authenticated;
+
+create trigger sittings_historial_trg
+  after insert or update or delete on public.sittings_traslados
+  for each row execute function public.registrar_historial_sitting();
 
 -- ----------------------------------------------------------------------------
 -- Realtime: tablas publicadas (la app se suscribe por módulo, ver agenda.js)

@@ -163,10 +163,10 @@ async function renderDashboard(cont){
     </div>
     <div class="chartcard">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-        <h2 style="margin:0;">Ingresos y gastos por mes</h2>
-        <div class="chartlegend"><span><span class="chartdot" style="background:var(--accent);"></span>Ingresos</span><span><span class="chartdot" style="background:var(--clay);"></span>Gastos</span></div>
+        <h2 style="margin:0;">Facturado y costos por mes</h2>
+        <div class="chartlegend"><span><span class="chartdot" style="background:var(--accent);"></span>Facturado</span><span><span class="chartdot" style="background:var(--clay);"></span>Costos</span></div>
       </div>
-      <div style="position:relative;height:170px;" id="finmesChartWrap"><canvas id="finmesChart" role="img" aria-label="Ingresos y gastos por mes, calculados a partir de los sittings, traslados y gastos generales reales"></canvas></div>
+      <div style="position:relative;height:170px;" id="finmesChartWrap"><canvas id="finmesChart" role="img" aria-label="Facturado y costos por mes, calculados a partir de los sittings, traslados y gastos generales reales"></canvas></div>
     </div>
     <button class="pendbanner" onclick="setModulo('pend-hoy')">
       <div class="pendbanner-left">
@@ -233,9 +233,10 @@ async function loadDashboardData(){
       if(!r.fecha) return;
       const mes = r.fecha.slice(0,7);
       if(!porMes[mes]) porMes[mes] = {ingresos:0, gastos:0};
-      // Mismo criterio de caja que Finanzas: solo lo ya cobrado / ya pagado.
-      if(r.cobrado) porMes[mes].ingresos += Number(r.cobro_familia)||0;
-      if(r.pagado) porMes[mes].gastos += Number(r.pago_ninera)||0;
+      // Mismo criterio que Finanzas: lo facturado y lo que corresponde pagar a las niñeras
+      // en el mes, esté o no marcado como cobrado / pagado.
+      porMes[mes].ingresos += Number(r.cobro_familia)||0;
+      porMes[mes].gastos += Number(r.pago_ninera)||0;
     });
     (gastos||[]).forEach(g=>{
       if(!g.fecha) return;
@@ -257,8 +258,8 @@ async function loadDashboardData(){
       dashChart = new Chart(canvas, {
         type:'bar',
         data:{ labels, datasets:[
-          {label:'Ingresos', data:meses.map(m=>Math.round(porMes[m].ingresos)), backgroundColor:'#757CBB', borderRadius:4, barThickness:22},
-          {label:'Gastos', data:meses.map(m=>Math.round(porMes[m].gastos)), backgroundColor:'#DF8386', borderRadius:4, barThickness:22},
+          {label:'Facturado', data:meses.map(m=>Math.round(porMes[m].ingresos)), backgroundColor:'#757CBB', borderRadius:4, barThickness:22},
+          {label:'Costos', data:meses.map(m=>Math.round(porMes[m].gastos)), backgroundColor:'#DF8386', borderRadius:4, barThickness:22},
         ]},
         options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
           scales:{

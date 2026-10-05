@@ -48,6 +48,9 @@ marketing → postulantes → ninieras → familias → sittings → intermediac
   2. Antes de modificar, guardar una copia de esas filas (tabla de respaldo o archivo).
   3. Ejecutar recién cuando Diego diga OK explícitamente.
 - Los cambios de estructura (migraciones) también se proponen primero y se aplican con OK.
+  Van en `supabase/migraciones/AAAAMMDD_descripcion.sql` (en una transacción, con respaldo
+  previo y compatibles con la app que está publicada), junto a un `..._DESHACER.sql`, y se
+  reflejan en `supabase/schema.sql`. Se prueban antes en un Postgres local.
 
 ## Tests
 ```bash
@@ -60,6 +63,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   redirección de temporada.html.
 - `tests/humo.spec.js`: Chromium headless; login, todos los módulos, modales, formularios
   principales (verifica lo que se manda a la base).
+- `tests/fijos.spec.js`: vigencia de los fijos, cambio de niñera desde una fecha, registros
+  vinculados a la asignación, historial de sittings, app nueva con base sin migrar.
+- `tests/finanzas.spec.js`: resumen del mes (facturado, cobrado, por cobrar, por pagar,
+  resultado).
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -80,6 +87,12 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - No repintar la app entera ante eventos de auth ni al volver de segundo plano: ya causó
   pérdida de entrevistas (ver comentarios en auth.js y bootstrap.js).
 - Una función global nueva no puede repetir el nombre de otra en ningún archivo.
+- Fijos (asignaciones): tienen vigencia (`vigente_desde`/`vigente_hasta`, inclusive) y tipo.
+  Nunca pisar la niñera de una asignación con historia: cerrarla y abrir otra desde una
+  fecha. Lo que se registra desde un fijo lleva `asignacion_id`. Para saber si un fijo
+  corre un día, usar `asignacionVigenteEn(a, fecha)` (core.js).
+- Finanzas: el resultado del mes se calcula sobre lo facturado; cobrado/pagado solo dicen si
+  la plata ya entró o salió (error E1, 05/10/2026).
 
 ## Pendientes conocidos
 - Plan de PRs acordado el 04/10/2026: fix E1/E2, fechas (todayISO), escape de HTML,

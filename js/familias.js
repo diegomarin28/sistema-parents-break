@@ -266,11 +266,17 @@ function verFamilia(id){
   famDetalleAbierta = id;
   const margenFam = (Number(f.cobro_hora)||0) - (Number(f.pago_hora)||0);
   const precioHtml = (f.cobro_hora||f.pago_hora) ? `<div class="precio-fam"><span>Cobro: <b>$${f.cobro_hora||0}/h</b></span><span>Pago: <b>$${f.pago_hora||0}/h</b></span><span class="${margenFam>=0?'margenpos':'margenneg'}">Margen: <b>$${margenFam}/h</b></span></div>` : '<div class="helper" style="color:var(--clay-text);">Sin precio cargado — editá la familia para ponerlo.</div>';
-  const asigRows = (f.asignaciones||[]).map(a=>{
+  // Fijos vigentes arriba; los que ya terminaron (cambio de niñera, fin del fijo) quedan
+  // abajo como historial, editables por si la fecha estaba mal cargada.
+  const hoyFam = todayISO();
+  const filaAsig = a=>{
     const dias = (a.dias||[]).join(' ');
     const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : '—';
-    return `<tr><td>${a.ninera_nombre}</td><td>${dias||'—'} · ${horario}</td><td><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></td></tr>`;
-  }).join('');
+    return `<tr><td>${a.ninera_nombre}</td><td>${tipoAsignacion(a)==='traslado'?'Traslado':'Sitting'} · ${dias||'—'} · ${horario}<div class="helper" style="margin:2px 0 0;">${textoVigencia(a)}</div></td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalVigenciaAsignacion('${a.id}')">Vigencia</button><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></div></td></tr>`;
+  };
+  const ordenAsig = (x,y)=>(y.vigente_desde||'').localeCompare(x.vigente_desde||'');
+  const asigRows = (f.asignaciones||[]).filter(a=>!asignacionTerminada(a, hoyFam)).sort(ordenAsig).map(filaAsig).join('');
+  const asigTerminadas = (f.asignaciones||[]).filter(a=>asignacionTerminada(a, hoyFam)).sort(ordenAsig);
   const historialFam = famHistorialPorFamilia[normaliza(f.nombre)] || {};
   const historialNombres = Object.keys(historialFam);
   const historialHtml = historialNombres.length ? `
@@ -307,11 +313,17 @@ function verFamilia(id){
     <div class="card-section-title">Niñeras asignadas</div>
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
       <tbody>${asigRows || '<tr><td colspan="3" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table></div>
+    ${asigTerminadas.length ? `<div class="helper" style="margin:10px 0 4px;">Fijos que ya terminaron</div>
+    <div class="tablewrap"><table class="asigtable"><tbody>${asigTerminadas.map(filaAsig).join('')}</tbody></table></div>` : ''}
     <datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${n.nombre}">`).join('')}</datalist>
     <div class="grid3" style="margin-top:14px;">
       <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
       <div class="field"><label>Hora inicio</label>${selectHora('asig-horaini-'+f.id)}</div>
       <div class="field"><label>Hora fin</label>${selectHora('asig-horafin-'+f.id)}</div>
+    </div>
+    <div class="grid3">
+      <div class="field"><label>Tipo</label><select id="asig-tipo-${f.id}"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
+      <div class="field"><label>Desde</label><input type="date" id="asig-desde-${f.id}" value="${hoyFam}"></div>
     </div>
     <div class="field"><label>Días</label>
       <div class="dayrow" id="asig-dias-${f.id}">
@@ -383,9 +395,12 @@ async function addAsignacion(famId){
   const nombre = document.getElementById('asig-nombre-'+famId).value.trim();
   if(!nombre){ toast('Falta el nombre de la niñera.','bad'); return; }
   const dias = Array.from(document.querySelectorAll(`#asig-dias-${famId} .daybtn.selected`)).map(b=>b.textContent);
-  const asig = { familia_id:famId, ninera_nombre:nombre, dias,
-    hora_inicio:leerHora('asig-horaini-'+famId)||null, hora_fin:leerHora('asig-horafin-'+famId)||null };
-  const { error } = await sb.from('asignaciones').insert(asig);
+  const ninera = (ninierasItems||[]).find(n=>normaliza(n.nombre)===normaliza(nombre));
+  const asig = { familia_id:famId, ninera_nombre:nombre, ninera_id: ninera?.id || null, dias,
+    hora_inicio:leerHora('asig-horaini-'+famId)||null, hora_fin:leerHora('asig-horafin-'+famId)||null,
+    tipo: document.getElementById('asig-tipo-'+famId)?.value || 'sitting',
+    vigente_desde: document.getElementById('asig-desde-'+famId)?.value || todayISO() };
+  const { error } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p), asig);
   if(error){ toast('No se pudo agregar: '+error.message,'bad'); return; }
   toast('Niñera asignada.');
   cargarFamilias();

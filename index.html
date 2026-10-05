@@ -407,10 +407,11 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .durbtn{padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:#fff;font-size:12.5px;cursor:pointer;font-family:'Inter',sans-serif;}
 .durbtn:hover{border-color:var(--accent);color:var(--accent);}
 .summary3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--gutter);margin-bottom:var(--gutter);}
+.summary4{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gutter);margin-bottom:var(--gutter);}
 .summarycard{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
 .mesbar{display:flex;justify-content:space-between;align-items:flex-end;margin:var(--gutter) 0 10px;gap:var(--gutter);flex-wrap:wrap;}
 .precio-fam{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;padding:8px 12px;background:var(--accent-soft);border-radius:9px;font-size:13px;color:var(--ink-soft);}
-@media (max-width:640px){.summary3{grid-template-columns:1fr;}}
+@media (max-width:640px){.summary3{grid-template-columns:1fr;}.summary4{grid-template-columns:1fr 1fr;}}
 @media (max-width:760px){
   .mobile-topbar{display:flex;}
   .appshell{position:static;flex-direction:column;height:auto;padding-top:52px;}

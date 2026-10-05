@@ -979,7 +979,7 @@ async function chequearDobleReservaDB(nineraNombre, fecha, horaInicio, horaFin){
   if(!horaInicio) return null;
   const [{data:regs}, {data:asigs}, {data:sols}] = await Promise.all([
     sb.from('sittings_traslados').select('familia_nombre,hora_inicio,hora_fin,ninera_nombre').eq('fecha', fecha),
-    sb.from('asignaciones').select('hora_inicio,hora_fin,dias,ninera_nombre, familias(nombre)'),
+    sb.from('asignaciones').select('*, familias(nombre)'),
     sb.from('solicitudes').select('familia_nombre,hora_inicio,hora_fin,estado,solicitud_ninieras(ninera_nombre,estado)').eq('fecha', fecha),
   ]);
   const key = normaliza(nineraNombre);
@@ -989,7 +989,7 @@ async function chequearDobleReservaDB(nineraNombre, fecha, horaInicio, horaFin){
     if(rangosSolapan(horaInicio, horaFin, r.hora_inicio, r.hora_fin)) return {familia_nombre:r.familia_nombre, hora_inicio:r.hora_inicio, hora_fin:r.hora_fin};
   }
   for(const a of (asigs||[])){
-    if(normaliza(a.ninera_nombre)!==key || !Array.isArray(a.dias) || !a.dias.includes(diaSemana)) continue;
+    if(normaliza(a.ninera_nombre)!==key || !Array.isArray(a.dias) || !a.dias.includes(diaSemana) || !asignacionVigenteEn(a, fecha)) continue;
     if(rangosSolapan(horaInicio, horaFin, a.hora_inicio, a.hora_fin)) return {familia_nombre:a.familias?.nombre||'(familia)', hora_inicio:a.hora_inicio, hora_fin:a.hora_fin};
   }
   for(const s of (sols||[])){
@@ -1009,12 +1009,13 @@ async function chequearFijoNuevoContraTodo(nineraNombre, dias, horaInicio, horaF
   const hoy = todayISO();
   const key = normaliza(nineraNombre);
   const [{data:fijos}, {data:regs}, {data:sols}] = await Promise.all([
-    sb.from('asignaciones').select('id,dias,hora_inicio,hora_fin,ninera_nombre, familias(nombre)'),
+    sb.from('asignaciones').select('*, familias(nombre)'),
     sb.from('sittings_traslados').select('familia_nombre,fecha,hora_inicio,hora_fin,ninera_nombre').gte('fecha', hoy),
     sb.from('solicitudes').select('familia_nombre,fecha,hora_inicio,hora_fin,estado,solicitud_ninieras(ninera_nombre,estado)').gte('fecha', hoy),
   ]);
   for(const ex of (fijos||[])){
     if(ex.id===excluirAsigId || normaliza(ex.ninera_nombre)!==key || !Array.isArray(ex.dias) || !dias.some(d=>ex.dias.includes(d))) continue;
+    if(asignacionTerminada(ex, hoy)) continue; // un fijo que ya terminó no choca con nada nuevo
     if(rangosSolapan(horaInicio, horaFin, ex.hora_inicio, ex.hora_fin)) return {familia_nombre:ex.familias?.nombre||'(familia)', hora_inicio:ex.hora_inicio, hora_fin:ex.hora_fin};
   }
   for(const r of (regs||[])){
@@ -1030,6 +1031,57 @@ async function chequearFijoNuevoContraTodo(nineraNombre, dias, horaInicio, horaF
   return null;
 }
 function horaTxt(h){ return h ? h.slice(0,5) : '?'; }
+// Escapa texto que viene de datos antes de meterlo en innerHTML. (El PR 4 la usa en toda
+// la app; por ahora la usa el historial de sittings, que muestra notas tal cual se cargaron.)
+function escaparHtml(t){ return String(t ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ============================================================
+   Vigencia de los fijos (05/10/2026, error E2). Cada asignación vale entre
+   vigente_desde y vigente_hasta, los dos inclusive; vacío = sin límite (asignaciones
+   de antes de la migración). Cambiar la niñera de un fijo cierra la asignación vieja y
+   abre una nueva desde una fecha, así el pasado sigue siendo de quien lo hizo.
+   ============================================================ */
+function asignacionVigenteEn(a, fechaISO){
+  if(!a || !fechaISO) return false;
+  if(a.vigente_desde && fechaISO < a.vigente_desde) return false;
+  if(a.vigente_hasta && fechaISO > a.vigente_hasta) return false;
+  return true;
+}
+function asignacionTerminada(a, hoyISO){ return !!(a && a.vigente_hasta && a.vigente_hasta < hoyISO); }
+function tipoAsignacion(a){ return a && a.tipo==='traslado' ? 'traslado' : 'sitting'; }
+function sumarDiasISO(fechaISO, n){
+  const d = new Date(fechaISO+'T12:00:00'); // mediodía: sumar días nunca cruza de fecha por la zona horaria
+  d.setDate(d.getDate()+n);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function textoVigencia(a){
+  const f = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
+  if(a.vigente_desde && a.vigente_hasta) return `del ${f(a.vigente_desde)} al ${f(a.vigente_hasta)}`;
+  if(a.vigente_desde) return `desde el ${f(a.vigente_desde)}`;
+  if(a.vigente_hasta) return `hasta el ${f(a.vigente_hasta)}`;
+  return 'sin fecha de inicio';
+}
+/* Escribe en asignaciones tolerando que la base todavía no tenga las columnas nuevas
+   (si se publicara la app antes de correr la migración): en ese caso reintenta sin
+   vigencia ni tipo y avisa, en vez de fallar. `consulta` recibe el payload y devuelve
+   la consulta de supabase-js (insert/update). */
+let asignacionesSinVigencia = false;
+const COLUMNAS_VIGENCIA = ['vigente_desde','vigente_hasta','tipo'];
+function sinColumnasVigencia(payload){
+  const limpiar = o => { const c = {...o}; COLUMNAS_VIGENCIA.forEach(k=>delete c[k]); return c; };
+  return Array.isArray(payload) ? payload.map(limpiar) : limpiar(payload);
+}
+async function escribirAsignacion(consulta, payload){
+  const intento = asignacionesSinVigencia ? sinColumnasVigencia(payload) : payload;
+  let res = await consulta(intento);
+  const faltaColumna = res.error && (res.error.code==='PGRST204' || /vigente_desde|vigente_hasta|'tipo'/.test(res.error.message||''));
+  if(faltaColumna && !asignacionesSinVigencia){
+    asignacionesSinVigencia = true;
+    console.warn('[asignaciones] la base todavía no tiene vigencia/tipo; se guarda sin esas columnas');
+    res = await consulta(sinColumnasVigencia(payload));
+  }
+  return res;
+}
 
 /* ============================================================
    B6 · Detección de familia ya cubierta: si una familia ya tiene un

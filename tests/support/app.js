@@ -144,9 +144,11 @@ function nuevoId() { secuenciaId++; return `00000000-0000-4000-9000-${String(sec
  *   sesion: false para ver la pantalla de login
  *   ahora: fecha/hora fija (string ISO con zona) para el reloj del navegador
  *   ruta: path a abrir (por defecto '/')
+ *   baseSinMigrar: true simula la base ANTES de la migración del 05/10/2026 (asignaciones
+ *     sin vigencia/tipo, sin tabla sittings_historial), con los mismos errores que Supabase
  */
 async function abrirApp(page, opciones = {}) {
-  const { datos = {}, sesion = true, ahora = '2026-10-04T12:00:00-03:00', ruta = '/' } = opciones;
+  const { datos = {}, sesion = true, ahora = '2026-10-04T12:00:00-03:00', ruta = '/', baseSinMigrar = false } = opciones;
   const db = structuredClone({ ...datosBase(), ...datos });
   const estado = { escrituras: [], errores: [], noSimulados: [], db };
 
@@ -192,6 +194,17 @@ async function abrirApp(page, opciones = {}) {
     if (tabla.startsWith('rpc/')) {
       estado.escrituras.push({ tabla, metodo, cuerpo: req.postDataJSON?.() });
       return route.fulfill({ json: [] });
+    }
+    if (baseSinMigrar && tabla === 'sittings_historial') {
+      return route.fulfill({ status: 404, json: { code: 'PGRST205', message: "Could not find the table 'public.sittings_historial' in the schema cache" } });
+    }
+    if (baseSinMigrar && tabla === 'asignaciones' && ['POST', 'PATCH'].includes(metodo) && req.postData()) {
+      const filas = [].concat(JSON.parse(req.postData()));
+      const col = ['vigente_desde', 'vigente_hasta', 'tipo'].find(c => filas.some(f => c in f));
+      if (col) {
+        estado.rechazadas = (estado.rechazadas || 0) + 1;
+        return route.fulfill({ status: 400, json: { code: 'PGRST204', message: `Could not find the '${col}' column of 'asignaciones' in the schema cache` } });
+      }
     }
     db[tabla] = db[tabla] || [];
     const params = [...url.searchParams.entries()];
