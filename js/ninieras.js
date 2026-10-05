@@ -29,6 +29,7 @@ function renderNinieras(body){
     <div id="nin-zonasnuevas-wrap"></div>
     <div id="nin-temporadas-wrap"></div>
     <div id="nin-utilizacion-wrap"></div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn primary" onclick="abrirModalNuevaNinera()">+ Agregar niñera</button></div>
     <div class="card" style="padding:14px 18px;"><div class="grid2">
       <div class="field" style="margin:0;"><label>Buscar (nombre, universidad, idioma...)</label><input type="text" id="filt-nombre" autocomplete="off" placeholder="Escribí para filtrar..." oninput="filtrarNinieras()"></div>
       <div class="field" style="margin:0;"><label>Tipo</label><select id="filt-tipo" onchange="filtrarNinieras()"><option value="">Todas</option><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
@@ -422,6 +423,48 @@ function renderNineraHistorial(id){
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
       return `<tr><td>${fechaFmt}</td><td>${escaparHtml(r.familia_nombre)}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td></tr>`;
     }).join('')}</tbody></table></div>`;
+}
+/* Alta directa de una niñera (05/10/2026, E5). Antes la única forma era pasar por toda la
+   entrevista de RR.HH. (o crearla al vuelo desde un sitting). Solo el nombre es obligatorio;
+   lo demás se puede completar después con "Editar". */
+function abrirModalNuevaNinera(){
+  abrirModal(`
+    <h2 style="margin:0 0 6px;">Nueva niñera</h2>
+    <div class="helper" style="margin-bottom:14px;">Solo el nombre es obligatorio. Lo demás (foto, fecha de nacimiento, temporada, categorías) se completa después desde "Editar".</div>
+    <div class="grid2">
+      <div class="field"><label>Nombre</label><input type="text" id="nn-nombre" autocomplete="off"></div>
+      <div class="field"><label>Teléfono (opcional)</label><input type="tel" id="nn-telefono"></div>
+      <div class="field"><label>Tipo</label><select id="nn-tipo"><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
+    </div>
+    ${checklistZonas('nn', '', 'Zonas (opcional)')}
+    ${htmlCuentasBancarias('nn', [])}
+    <div class="field"><label>Notas (opcional)</label><textarea id="nn-notas"></textarea></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>addNinera())">Agregar niñera</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('nn-nombre')?.focus(), 30);
+}
+async function addNinera(){
+  const nombre = document.getElementById('nn-nombre').value.trim().replace(/\s+/g, ' ');
+  if(!nombre){ toast('Falta el nombre.', 'bad'); return; }
+  if(!(await confirmarNombreNuevo(nombre, ninierasItems||[], 'niñera'))) return;
+  const telefono = document.getElementById('nn-telefono').value.trim();
+  const notas = document.getElementById('nn-notas').value.trim();
+  const ninera = {
+    nombre,
+    telefono: telefono || null,
+    tipo: document.getElementById('nn-tipo').value || 'Niñera',
+    zona: leerZonasChecklist('nn') || null,
+    cuenta_bancaria: leerCuentasBancarias('nn'),
+    notas: notas || null,
+    activa: true,
+  };
+  const { error } = await sb.from('ninieras').insert(ninera);
+  if(error){ toast('No se pudo agregar: '+error.message, 'bad'); return; }
+  cerrarModal();
+  toast(`${nombre} ya está en Niñeras.`);
+  await cargarNinieras();
 }
 function editarNinera(id){
   const n = ninierasItems.find(x=>x.id===id);
