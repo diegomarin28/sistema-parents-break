@@ -57,6 +57,14 @@ const FORMULARIOS = [
     },
   },
   {
+    nombre: 'niñera', tabla: 'ninieras', boton: 'Agregar niñera',
+    llenar: async page => {
+      await irAModulo(page, 'ninieras');
+      await page.locator('button[onclick^="abrirModalNuevaNinera"]').click();
+      await page.fill('#nn-nombre', 'Niñera Doble Toque');
+    },
+  },
+  {
     nombre: 'candidata', tabla: 'candidatas', boton: 'Agregar candidata',
     llenar: async page => {
       await irAModulo(page, 'rrhh');

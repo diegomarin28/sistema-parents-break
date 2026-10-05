@@ -83,6 +83,7 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   del guardado, terminar un fijo desde una fecha.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
 - `tests/arranque.spec.js`: pantalla de carga, error si no carga supabase-js, "Entrando…".
+- `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
