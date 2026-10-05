@@ -9,8 +9,15 @@ const { datosBase, ID } = require('./support/datos');
 const IGNORAR_RED = [/Failed to load resource|ERR_FAILED|\[Supabase\]|Failed to fetch|TypeError/];
 
 async function elegirAutocomplete(page, input, texto) {
-  await page.fill(input, texto.slice(0, 5));
-  await page.locator(`${input}-dropdown .autocomplete-item`, { hasText: texto }).first().click();
+  // El formulario engancha el autocompletar en un setTimeout después de abrirse: si se
+  // escribe antes (en el CI pasa), ese tipeo no abre la lista. Se vuelve a escribir.
+  const item = page.locator(`${input}-dropdown .autocomplete-item`, { hasText: texto }).first();
+  await expect(async () => {
+    await page.fill(input, '');
+    await page.fill(input, texto.slice(0, 5));
+    await expect(item).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+  await item.click();
   await page.waitForTimeout(200); // el blur del autocompletar cierra el desplegable a los 150 ms
 }
 async function llenarSitting(page) {
