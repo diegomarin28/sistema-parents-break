@@ -351,7 +351,7 @@ async function cargarFinanzas(){
   movsBox.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const desde = `${finMes}-01`;
   const hasta = shiftMes(finMes, 1)+'-01';
-  const [{data:sitsRaw, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}, {data:famsZona}, {data:asigs}] = await Promise.all([
+  let [{data:sitsRaw, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}, {data:famsZona}, {data:asigs}] = await Promise.all([
     sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('*').order('concepto'),
@@ -362,6 +362,10 @@ async function cargarFinanzas(){
   // evita escribir sobre una pantalla que ya no está (mismo caso que "Hoy").
   if(!document.getElementById('fin-movs')) return;
   if(e1 || e2 || e3){ movsBox.innerHTML = errBox(e1||e2||e3); return; }
+  // Fijos automáticos (06/10/2026): lo previsto (días que todavía no llegaron) no entra en
+  // ninguna cifra del mes; se muestra aparte, como referencia.
+  const previstosMes = (sitsRaw||[]).filter(esPrevisto);
+  sitsRaw = (sitsRaw||[]).filter(r=>!esPrevisto(r));
   const sits = filtrarFijosSemanaIncompleta(sitsRaw, construirEsTrabajoFijo(asigs));
   finSitsDelMes = sits || [];
   finZonaPorFamiliaId = {}; finZonaPorFamiliaNombre = {};
@@ -421,6 +425,11 @@ async function cargarFinanzas(){
       <div class="statnum" id="fin-resultado" style="font-size:21px;margin-top:3px;color:${res.resultado>=0?'var(--good)':'var(--bad)'};">${fmt(res.resultado)}</div>
       <div class="helper" style="margin:4px 0 0;">Facturado ${fmt(res.facturado)} − pagos a niñeras ${fmt(res.costoNinieras)} − gastos del negocio ${fmt(res.gastos)}. Se calcula sobre lo facturado: un cobro sin marcar no lo cambia.</div>
     </div>
+    ${previstosMes.length ? `<div class="summarycard fin-previsto" style="grid-column:1/-1;">
+      <div class="statlabel">Previsto de acá a fin de mes (fijos que todavía no pasaron)</div>
+      <div style="margin-top:3px;"><span id="fin-previsto-cobro" style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${fmt(previstosMes.reduce((t,r)=>t+(Number(r.cobro_familia)||0),0))}</span> a facturar · <span id="fin-previsto-pago" style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${fmt(previstosMes.reduce((t,r)=>t+(Number(r.pago_ninera)||0),0))}</span> a pagar a niñeras · ${previstosMes.length} día${previstosMes.length===1?'':'s'}</div>
+      <div class="helper" style="margin:4px 0 0;">Es una referencia: no suma en las cifras de arriba. Cada día entra recién cuando llega.</div>
+    </div>` : ''}
   `;
 
   const chartCard = document.getElementById('fin-breakdown-card');
@@ -473,6 +482,7 @@ async function cargarFinanzas(){
 let finBalanceChart = null;
 let finBalanceMeses = 6;
 async function cargarBalanceMultiMes(nMeses){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   finBalanceMeses = nMeses;
   const chartReady = asegurarChart(); // en paralelo con las consultas de abajo
   const wrap = document.getElementById('fin-balance-totales');
@@ -484,7 +494,7 @@ async function cargarBalanceMultiMes(nMeses){
   const desde = `${meses[0]}-01`;
   const hasta = shiftMes(meses[meses.length-1], 1)+'-01';
   const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}] = await Promise.all([
-    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').gte('fecha', desde).lt('fecha', hasta),
+    sinPrevistos(sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera')).gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('monto,desde,activo'),
   ]);
@@ -566,8 +576,9 @@ function bucketLabelFecha(bucketKey, frecuencia, trabajaFinde=true){
 // Pendientes de cobro y de pago agrupados como en Por cobrar / Por pagar (familia o niñera +
 // período según su frecuencia). Lo usan esas dos listas y la conciliación con el extracto.
 async function calcularPendientesAgrupados(){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   const [{data:pendCobrar}, {data:pendPagar}, {data:fams}, {data:nins}, {data:asigs}] = await Promise.all([
-    sb.from('sittings_traslados').select('id,familia_id,familia_nombre,fecha,cobro_familia').eq('cobrado', false).gt('cobro_familia', 0),
+    sinPrevistos(sb.from('sittings_traslados').select('id,familia_id,familia_nombre,fecha,cobro_familia')).eq('cobrado', false).gt('cobro_familia', 0),
     // Por pagar solo muestra lo que ya pasó (05/10/2026, E7): un sitting cargado por
     // adelantado aparecía como para pagar y se le pagó a una niñera antes de que ocurriera.
     // Entra recién el día del sitting.

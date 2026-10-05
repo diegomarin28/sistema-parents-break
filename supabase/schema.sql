@@ -460,9 +460,41 @@ create table public.sittings_traslados (
   fuente text default 'app'::text not null,
   asignacion_id uuid,
   cancelado boolean default false not null,
+  -- Fijos automáticos (06/10/2026): 'previsto' = lo cargó el proceso para un día que todavía
+  -- no llegó (solo se ve en la Agenda); ese día pasa solo a 'confirmado'. Lo cargado a mano
+  -- es 'confirmado'. generado_automatico: lo creó el proceso y nadie lo tocó (se puede
+  -- recalcular). revisado_at: cuándo se revisó en Hoy un confirmado automático.
+  estado text default 'confirmado'::text not null,
+  generado_automatico boolean default false not null,
+  revisado_at timestamp with time zone,
   constraint sittings_traslados_pkey PRIMARY KEY (id),
+  constraint sittings_traslados_estado_check CHECK ((estado = ANY (ARRAY['previsto'::text, 'confirmado'::text]))),
   constraint sittings_traslados_fuente_check CHECK ((fuente = ANY (ARRAY['app'::text, 'historico'::text]))),
   constraint sittings_traslados_tipo_check CHECK ((tipo = ANY (ARRAY['sitting'::text, 'traslado'::text])))
+);
+
+-- Respaldo previo a la migración del 06/10/2026 (sittings_traslados antes de los fijos
+-- automáticos). Sin políticas: la app no la ve.
+create table public.respaldo_sittings_traslados_20261006 (
+  id uuid, tipo text, registrado_por text, familia_id uuid, familia_nombre text, ninera_id uuid,
+  ninera_nombre text, fecha date, hora_inicio time without time zone, hora_fin time without time zone,
+  km numeric, origen text, destino text, cobro_familia numeric, pago_ninera numeric, notas text,
+  created_at timestamp with time zone, termina_dia_siguiente boolean, cobrado boolean, pagado boolean,
+  fuente text, asignacion_id uuid, cancelado boolean
+);
+
+-- Pausas de un fijo (vacaciones, 06/10/2026): en ese rango no se generan previstos y la
+-- Agenda no lo dibuja, sin terminarlo.
+create table public.asignaciones_pausas (
+  id uuid default gen_random_uuid() not null,
+  asignacion_id uuid not null,
+  desde date not null,
+  hasta date not null,
+  motivo text,
+  creado_por text,
+  created_at timestamp with time zone default now() not null,
+  constraint asignaciones_pausas_pkey PRIMARY KEY (id),
+  constraint asignaciones_pausas_rango_check CHECK ((hasta >= desde))
 );
 
 -- Historial de cambios de sittings_traslados (lo escribe el trigger sittings_historial_trg).
@@ -571,6 +603,7 @@ alter table public.juguetes add constraint juguetes_ninera_id_fkey FOREIGN KEY (
 alter table public.juguetes_movimientos add constraint juguetes_movimientos_juguete_id_fkey FOREIGN KEY (juguete_id) REFERENCES juguetes(id) ON DELETE CASCADE;
 alter table public.ninieras add constraint ninieras_candidata_id_fkey FOREIGN KEY (candidata_id) REFERENCES candidatas(id) ON DELETE SET NULL;
 alter table public.resenas_ninieras add constraint resenas_ninieras_ninera_id_fkey FOREIGN KEY (ninera_id) REFERENCES ninieras(id) ON DELETE SET NULL;
+alter table public.asignaciones_pausas add constraint asignaciones_pausas_asignacion_id_fkey FOREIGN KEY (asignacion_id) REFERENCES asignaciones(id) ON DELETE CASCADE;
 alter table public.sittings_traslados add constraint sittings_traslados_asignacion_id_fkey FOREIGN KEY (asignacion_id) REFERENCES asignaciones(id) ON DELETE SET NULL;
 alter table public.sittings_traslados add constraint sittings_traslados_familia_id_fkey FOREIGN KEY (familia_id) REFERENCES familias(id) ON DELETE SET NULL;
 alter table public.sittings_traslados add constraint sittings_traslados_ninera_id_fkey FOREIGN KEY (ninera_id) REFERENCES ninieras(id) ON DELETE SET NULL;
@@ -597,6 +630,9 @@ CREATE INDEX ninieras_candidata_id_idx ON public.ninieras USING btree (candidata
 CREATE UNIQUE INDEX ninieras_temporada_token_key ON public.ninieras USING btree (temporada_token);
 CREATE INDEX idx_resenas_ninera_id ON public.resenas_ninieras USING btree (ninera_id);
 CREATE INDEX idx_resenas_ninera_nombre ON public.resenas_ninieras USING btree (ninera_nombre);
+CREATE INDEX idx_asignaciones_pausas ON public.asignaciones_pausas USING btree (asignacion_id, desde, hasta);
+CREATE UNIQUE INDEX sittings_fijo_dia_automatico ON public.sittings_traslados USING btree (asignacion_id, fecha) WHERE generado_automatico;
+CREATE INDEX idx_sittings_previstos ON public.sittings_traslados USING btree (estado, fecha) WHERE (estado = 'previsto'::text);
 CREATE INDEX idx_sittings_asignacion_fecha ON public.sittings_traslados USING btree (asignacion_id, fecha) WHERE (asignacion_id IS NOT NULL);
 CREATE INDEX idx_sittings_familia_id ON public.sittings_traslados USING btree (familia_id);
 CREATE INDEX idx_sittings_familia_nombre ON public.sittings_traslados USING btree (familia_nombre);
@@ -648,6 +684,8 @@ alter table public.respaldo_zona_grupos_20260930 enable row level security;
 alter table public.respaldo_zonas_20260930 enable row level security;
 alter table public.sittings_historial enable row level security;
 alter table public.sittings_traslados enable row level security;
+alter table public.asignaciones_pausas enable row level security;
+alter table public.respaldo_sittings_traslados_20261006 enable row level security;
 alter table public.solicitud_ninieras enable row level security;
 alter table public.solicitudes enable row level security;
 alter table public.tarifas_traslado_config enable row level security;
@@ -732,6 +770,8 @@ create policy resenas_ninieras_authenticated_all on public.resenas_ninieras as p
   with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
 create policy sittings_historial_leer on public.sittings_historial as permissive for select to authenticated
   using (true);
+create policy solo_autenticados_todo on public.asignaciones_pausas as permissive for all to public
+  using ((select auth.role()) = 'authenticated') with check ((select auth.role()) = 'authenticated');
 create policy sittings_traslados_authenticated_all on public.sittings_traslados as permissive for all to public
   using ((( SELECT auth.role() AS role) = 'authenticated'::text))
   with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
@@ -891,12 +931,130 @@ create trigger sittings_historial_trg
   after insert or update or delete on public.sittings_traslados
   for each row execute function public.registrar_historial_sitting();
 
+-- Fijos automáticos (06/10/2026). El proceso. Lo corre pg_cron todos los días a las 03:00 de Montevideo (lo programa
+--    _ACTIVAR) y la app lo llama después de cada cambio en un fijo, para que la ventana
+--    quede al día enseguida. Hace, en orden:
+--    a) lo previsto de hoy o antes pasa a 'confirmado' (llegó el día);
+--    b) borra los previstos automáticos que ya no corresponden (fijo terminado, otro
+--       horario o niñera desde una fecha, día sacado, pausa);
+--    c) recalcula los previstos automáticos que nadie tocó (niñera, horario o tarifa nuevos);
+--    d) crea los que faltan, de mañana a hoy + p_dias, salvo que ese día ya tenga una fila
+--       de ese fijo (cargada a mano, "no fue", reemplazo) o de esa familia con esa niñera.
+--    Un previsto que alguien edita desde la app deja de ser automático
+--    (generado_automatico = false): el proceso no lo vuelve a tocar.
+create or replace function public.generar_previstos_fijos(p_dias integer default 14)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  hoy date := (now() at time zone 'America/Montevideo')::date;
+  n_confirmados integer;
+  n_borrados integer;
+  n_actualizados integer;
+  n_creados integer;
+begin
+  if p_dias is null or p_dias < 1 or p_dias > 60 then
+    raise exception 'p_dias tiene que estar entre 1 y 60 (vino %)', p_dias;
+  end if;
+  -- Dos corridas a la vez (la de las 03:00 y una de la app) se esperan una a la otra.
+  perform pg_advisory_xact_lock(hashtext('generar_previstos_fijos'));
+
+  update sittings_traslados set estado = 'confirmado' where estado = 'previsto' and fecha <= hoy;
+  get diagnostics n_confirmados = row_count;
+
+  -- Se puede llamar más de una vez en la misma transacción (por ejemplo desde _ACTIVAR).
+  drop table if exists pg_temp._previstos_deseados;
+  create temporary table _previstos_deseados on commit drop as
+  with dias as (
+    select a.*, f.nombre as fam_nombre, f.cobro_hora as fam_cobro_hora, f.pago_hora as fam_pago_hora, d::date as dia
+      from asignaciones a
+      join familias f on f.id = a.familia_id
+     cross join generate_series(hoy + 1, hoy + p_dias, interval '1 day') d
+     where jsonb_typeof(a.dias) = 'array'
+       and a.dias ? (array['D','L','M','X','J','V','S'])[extract(dow from d)::integer + 1]
+       and a.hora_inicio is not null
+       and (a.vigente_desde is null or a.vigente_desde <= d::date)
+       and (a.vigente_hasta is null or a.vigente_hasta >= d::date)
+       and not exists (select 1 from asignaciones_pausas p where p.asignacion_id = a.id and d::date between p.desde and p.hasta)
+  ), con_horas as (
+    select dias.*,
+           coalesce(dias.tipo, 'sitting') as tipo_fijo,
+           (dias.hora_fin is not null and dias.hora_fin <= dias.hora_inicio) as cruza,
+           case when dias.hora_fin is null then null
+                else (extract(epoch from dias.hora_fin) - extract(epoch from dias.hora_inicio)) / 3600.0
+                     + case when dias.hora_fin <= dias.hora_inicio then 24 else 0 end
+           end as horas
+      from dias
+  )
+  select c.id as asignacion_id, c.dia as fecha, c.familia_id, c.fam_nombre as familia_nombre,
+         c.ninera_id, c.ninera_nombre, c.tipo_fijo as tipo, c.hora_inicio, c.hora_fin,
+         c.cruza as termina_dia_siguiente,
+         case when c.tipo_fijo = 'traslado' then coalesce(t.cobro_familia, 0)
+              else round(coalesce(c.horas, 0) * coalesce(c.fam_cobro_hora, 0)) end as cobro_familia,
+         case when c.tipo_fijo = 'traslado' then coalesce(t.pago_ninera, 0)
+              else round(coalesce(c.horas, 0) * coalesce(c.fam_pago_hora, 0)) end as pago_ninera
+    from con_horas c
+    -- Un traslado no se cobra por hora: el precio del último traslado de ese fijo o, si no
+    -- hay, de esa familia (lo mismo que precarga la app al registrar uno a mano).
+    left join lateral (
+      select s.cobro_familia, s.pago_ninera
+        from sittings_traslados s
+       where c.tipo_fijo = 'traslado' and s.tipo = 'traslado' and not s.cancelado and s.estado = 'confirmado'
+         and (s.asignacion_id = c.id or s.familia_id = c.familia_id)
+       order by (s.asignacion_id = c.id) desc, s.fecha desc
+       limit 1
+    ) t on true;
+
+  delete from sittings_traslados s
+   where s.generado_automatico and s.estado = 'previsto' and s.fecha > hoy
+     and not exists (select 1 from _previstos_deseados d where d.asignacion_id = s.asignacion_id and d.fecha = s.fecha);
+  get diagnostics n_borrados = row_count;
+
+  update sittings_traslados s
+     set ninera_id = d.ninera_id, ninera_nombre = d.ninera_nombre, familia_nombre = d.familia_nombre,
+         tipo = d.tipo, hora_inicio = d.hora_inicio, hora_fin = d.hora_fin,
+         termina_dia_siguiente = d.termina_dia_siguiente,
+         cobro_familia = d.cobro_familia, pago_ninera = d.pago_ninera
+    from _previstos_deseados d
+   where s.generado_automatico and s.estado = 'previsto' and s.fecha > hoy
+     and d.asignacion_id = s.asignacion_id and d.fecha = s.fecha
+     and (s.ninera_id, s.ninera_nombre, s.familia_nombre, s.tipo, s.hora_inicio, s.hora_fin, s.termina_dia_siguiente, s.cobro_familia, s.pago_ninera)
+         is distinct from
+         (d.ninera_id, d.ninera_nombre, d.familia_nombre, d.tipo, d.hora_inicio, d.hora_fin, d.termina_dia_siguiente, d.cobro_familia, d.pago_ninera);
+  get diagnostics n_actualizados = row_count;
+
+  insert into sittings_traslados (tipo, registrado_por, asignacion_id, familia_id, familia_nombre, ninera_id,
+         ninera_nombre, fecha, hora_inicio, hora_fin, termina_dia_siguiente, cobro_familia, pago_ninera,
+         cobrado, pagado, cancelado, estado, generado_automatico, notas)
+  select d.tipo, 'Automático', d.asignacion_id, d.familia_id, d.familia_nombre, d.ninera_id,
+         d.ninera_nombre, d.fecha, d.hora_inicio, d.hora_fin, d.termina_dia_siguiente, d.cobro_familia, d.pago_ninera,
+         false, false, false, 'previsto', true,
+         case when d.tipo = 'traslado' then 'Traslado fijo' else 'Sitting fijo' end || ' — cargado automáticamente'
+    from _previstos_deseados d
+   where not exists (select 1 from sittings_traslados s where s.asignacion_id = d.asignacion_id and s.fecha = d.fecha)
+     and not exists (select 1 from sittings_traslados s
+                      where s.asignacion_id is null and s.fecha = d.fecha and s.familia_id = d.familia_id
+                        and lower(trim(s.ninera_nombre)) = lower(trim(d.ninera_nombre)));
+  get diagnostics n_creados = row_count;
+
+  return jsonb_build_object('confirmados', n_confirmados, 'borrados', n_borrados,
+                            'actualizados', n_actualizados, 'creados', n_creados, 'hoy', hoy);
+end;
+$function$;
+revoke execute on function public.generar_previstos_fijos(integer) from public, anon;
+grant execute on function public.generar_previstos_fijos(integer) to authenticated;
+-- La tarea diaria (cron 'generar-previstos-fijos', 06:00 UTC) la agrega
+-- 20261006_fijos_automaticos_ACTIVAR.sql junto con app_config 'fijos_automaticos'.
+
 -- ----------------------------------------------------------------------------
 -- Realtime: tablas publicadas (la app se suscribe por módulo, ver agenda.js)
 -- ----------------------------------------------------------------------------
 
 alter publication supabase_realtime add table public.app_config;
 alter publication supabase_realtime add table public.asignaciones;
+alter publication supabase_realtime add table public.asignaciones_pausas;
 alter publication supabase_realtime add table public.candidatas;
 alter publication supabase_realtime add table public.carsitting_datos;
 alter publication supabase_realtime add table public.contratos;

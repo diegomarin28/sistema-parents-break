@@ -173,6 +173,7 @@ async function renderDashboard(cont){
       </div>
       <div class="pendbanner-link">Ver</div>
     </button>
+    <div id="dash-autoconf"></div>
     <div class="card">
       <h2>Sin resolver · hoy y mañana</h2>
       <div id="agenda" class="agendabox"><div class="empty">Cargando…</div></div>
@@ -181,6 +182,7 @@ async function renderDashboard(cont){
   loadDashboardData();
 }
 async function loadDashboardData(){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   const chartReady = asegurarChart(); // se descarga en paralelo con las consultas, no bloquea nada
   // Una sola tanda en paralelo con TODAS las consultas independientes del dashboard.
   // Antes eran 4 tandas en serie (4 idas y vueltas a Supabase); ahora es 1.
@@ -189,7 +191,7 @@ async function loadDashboardData(){
     sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
     sb.from('ninieras').select('nombre,tipo,activa'),
     sb.from('familias').select('cobro_hora'),
-    sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera,cobrado,pagado').gte('fecha', primerDiaMesesAtras(6)),
+    sinPrevistos(sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera,cobrado,pagado')).gte('fecha', primerDiaMesesAtras(6)),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('sittings_traslados').select('fecha,familia_nombre,ninera_nombre').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()),
     sb.from('solicitudes').select('*').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()).eq('estado','confirmada'),
@@ -300,9 +302,11 @@ async function loadDashboardData(){
   // ---- Pendiente (sittings/traslados previstos, hasta hoy, sin registrar) ----
   // Mira hacia atrás PENDIENTE_DIAS_ATRAS días, no solo hoy — si un puntual confirmado de
   // hace unos días quedó sin cargar en Sittings & traslados, se sigue avisando en vez de
-  // perderse apenas pasa el día. IMPORTANTE (12/09): los fijos (horarios recurrentes, tabla
-  // asignaciones) NUNCA entran acá — esos se registran por su propio camino semanal aparte;
-  // meterlos en este panel día a día generaba ruido contra ese flujo, no un aviso real.
+  // perderse apenas pasa el día. Los fijos: el 12/09 se sacaron de acá porque se registraban
+  // a mano por su camino semanal y entraban como ruido. Con los fijos automáticos (06/10/2026)
+  // cada día de un fijo ya tiene su fila cargada sola, así que un día sin ninguna fila solo
+  // pasa si el proceso falló (o el fijo se creó hoy): vuelven a entrar, como alarma.
+  cargarConfirmadosAutomaticos();
   try{
     const registros = okData(hoyR);
     const solicitudesConfirmadas = okData(solR);
@@ -321,6 +325,21 @@ async function loadDashboardData(){
       });
     }
 
+    if(fijosAutomaticosActivos){
+      const desde = diasAtras(PENDIENTE_DIAS_ATRAS), hasta = todayISO();
+      const [{data:asigs}, {data:filasFijos}, pausas] = await Promise.all([
+        sb.from('asignaciones').select('*, familias(nombre)'),
+        sb.from('sittings_traslados').select('asignacion_id,fecha').not('asignacion_id', 'is', null).gte('fecha', desde).lte('fecha', hasta),
+        cargarPausasFijos(),
+      ]);
+      const cubiertos = new Set((filasFijos||[]).map(r=>r.asignacion_id+'|'+r.fecha));
+      rangoFechas(desde, hasta).forEach(fecha=>{
+        const dia = diaSemanaDeISO(fecha);
+        (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(dia) && asignacionVigenteEn(a, fecha) && !fijoPausadoEn(pausas, a.id, fecha) && !cubiertos.has(a.id+'|'+fecha))
+          .forEach(a=>previstos.push({ fecha, ninera_nombre: a.ninera_nombre, familia_nombre: a.familias?.nombre || '', hora_inicio: a.hora_inicio, hora_fin: a.hora_fin, esFijo: true }));
+      });
+    }
+
     dashPendientesHoy = previstos.filter(p=>{
       const key = p.fecha+'|'+normaliza(p.ninera_nombre||'')+'|'+normaliza(p.familia_nombre||'');
       return !registradosSet.has(key);
@@ -331,11 +350,106 @@ async function loadDashboardData(){
   }catch(e){}
 }
 
+/* Confirmados automáticamente (fijos automáticos, 06/10/2026): los días de los fijos se
+   confirman solos cuando llegan. Acá queda una lista corta de los que ya pasaron y nadie
+   miró todavía (ayer, o los últimos días si no entraron), para revisarlos de un vistazo y
+   marcar "no fue" o el reemplazo si hace falta. "Bien" los saca de la lista. */
+let dashAutoConfirmados = [];
+async function cargarConfirmadosAutomaticos(){
+  const box = document.getElementById('dash-autoconf');
+  await esperarConfigFijos();
+  if(!box || !fijosAutomaticosActivos){ if(box) box.innerHTML = ''; return; }
+  const { data, error } = await sb.from('sittings_traslados').select('*')
+    .eq('generado_automatico', true).is('revisado_at', null).eq('cancelado', false)
+    .gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lt('fecha', todayISO()).order('fecha').order('hora_inicio');
+  if(!document.getElementById('dash-autoconf')) return;
+  if(error){ box.innerHTML = ''; return; }
+  dashAutoConfirmados = data || [];
+  if(!dashAutoConfirmados.length){ box.innerHTML = ''; return; }
+  const fmt = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'short',day:'2-digit',month:'2-digit'});
+  box.innerHTML = `<div class="card autoconf-card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
+      <h2 style="margin:0;">Fijos confirmados automáticamente</h2>
+      <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoRevisados(dashAutoConfirmados.map(r=>r.id)))">Todo bien</button>
+    </div>
+    <div class="helper" style="margin:4px 0 8px;">Se cargaron solos. Si alguno no fue o fue otra niñera, corregilo; si está bien, tocá "Bien".</div>
+    ${dashAutoConfirmados.map(r=>`<div class="autoconf-fila" data-autoconf="${escaparHtml(r.id)}">
+      <div class="autoconf-txt">
+        <div><b>${fmt(r.fecha)}</b> · ${escaparHtml(r.familia_nombre)} · ${escaparHtml(r.ninera_nombre)}</div>
+        <div class="helper" style="margin:2px 0 0;">${r.tipo==='traslado'?'Traslado':'Sitting'} · ${escaparHtml((r.hora_inicio||'').slice(0,5))}${r.hora_fin?'–'+escaparHtml(r.hora_fin.slice(0,5)):''} · cobro $${Number(r.cobro_familia||0).toLocaleString('es-UY')}</div>
+      </div>
+      <div class="autoconf-btns">
+        <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoRevisados([${argJs(r.id)}]))">Bien</button>
+        <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoNoFue(${argJs(r.id)}))">No fue</button>
+        <button class="smallbtn" onclick="abrirReemplazoAuto(${argJs(r.id)})">Fue otra</button>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+async function marcarAutoRevisados(ids){
+  if(!ids.length) return;
+  if(!(await sbGuardar(sb.from('sittings_traslados').update({ revisado_at: new Date().toISOString() }).in('id', ids), 'la revisión'))) return;
+  toast(ids.length===1 ? 'Listo.' : `Listo: ${ids.length} días revisados.`);
+  await cargarConfirmadosAutomaticos();
+}
+async function marcarAutoNoFue(id){
+  const r = dashAutoConfirmados.find(x=>x.id===id);
+  if(!r) return;
+  if(r.cobrado || r.pagado){ toast('Ese día ya está marcado como cobrado o pagado: corregilo desde Sittings & traslados.', 'bad'); return; }
+  if(!(await confirmarAccion(`¿${r.ninera_nombre} no fue el ${new Date(r.fecha+'T12:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'})} a lo de ${r.familia_nombre}? Queda en $0, sin cobro ni pago.`))) return;
+  if(!(await sbGuardar(sb.from('sittings_traslados').update({
+    cancelado: true, cobro_familia: 0, pago_ninera: 0, cobrado: true, pagado: true,
+    generado_automatico: false, revisado_at: new Date().toISOString(),
+    notas: `${r.ninera_nombre} no fue — sin reemplazo`,
+  }).eq('id', id), 'el cambio'))) return;
+  toast('Listo: ese día no fue nadie.');
+  await cargarConfirmadosAutomaticos();
+}
+let dashReemplazoSel = null;
+function abrirReemplazoAuto(id){
+  const r = dashAutoConfirmados.find(x=>x.id===id);
+  if(!r) return;
+  dashReemplazoSel = null;
+  abrirModal(`
+    <h2 style="margin:0 0 4px;">¿Quién fue en lugar de ${escaparHtml(r.ninera_nombre)}?</h2>
+    <div class="helper" style="margin-bottom:12px;">${escaparHtml(r.familia_nombre)} · ${new Date(r.fecha+'T12:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'})}. Mismo horario y montos; si cambiaron, editalo después en Sittings &amp; traslados.</div>
+    <div class="field" style="position:relative;"><label>Niñera</label>
+      <input type="text" id="autoconf-ninera" autocomplete="off" oninput="dashReemplazoSel=null;">
+      <div id="autoconf-ninera-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
+    </div>
+    <div id="autoconf-warn"></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarReemplazoAuto(${argJs(id)}))">Guardar</button>
+    </div>`);
+  sb.from('ninieras').select('id,nombre').eq('activa', true).order('nombre').then(({data})=>{
+    attachAutocomplete('autoconf-ninera', 'autoconf-ninera-dropdown', ()=>data||[], o=>{ dashReemplazoSel = o; });
+  });
+}
+async function guardarReemplazoAuto(id){
+  const r = dashAutoConfirmados.find(x=>x.id===id);
+  const warn = document.getElementById('autoconf-warn');
+  const nombre = document.getElementById('autoconf-ninera')?.value.trim();
+  if(!r) return;
+  if(!nombre){ warn.innerHTML = '<div class="warnbox">Elegí quién fue.</div>'; return; }
+  if(normaliza(nombre)===normaliza(r.ninera_nombre)){ warn.innerHTML = '<div class="warnbox">Esa es la niñera que ya figura.</div>'; return; }
+  if(r.pagado){ warn.innerHTML = '<div class="warnbox">Ese día ya está marcado como pagado: corregilo desde Sittings &amp; traslados.</div>'; return; }
+  const sel = dashReemplazoSel && normaliza(dashReemplazoSel.nombre)===normaliza(nombre) ? dashReemplazoSel : null;
+  const { error } = await sb.from('sittings_traslados').update({
+    ninera_nombre: nombre, ninera_id: sel?.id || null, generado_automatico: false,
+    revisado_at: new Date().toISOString(), notas: `Reemplazo de ${r.ninera_nombre}`,
+  }).eq('id', id);
+  if(error){ warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  toast(`Listo: ese día figura ${nombre}.`);
+  await cargarConfirmadosAutomaticos();
+}
+
 function renderPendHoy(cont){
   cont.innerHTML = `
     <button class="backbtn" onclick="setModulo(null)">← Volver</button>
     <h1 class="modtitle">Sittings/traslados sin registrar</h1>
-    <div class="helper">Comparando lo previsto de los últimos ${PENDIENTE_DIAS_ATRAS} días (pedidos puntuales confirmados) contra lo que ya cargaste en Sittings &amp; traslados. Los horarios fijos no entran acá — esos se registran aparte.</div>
+    <div class="helper">Comparando lo previsto de los últimos ${PENDIENTE_DIAS_ATRAS} días (pedidos puntuales confirmados${fijosAutomaticosActivos ? ' y días de los fijos' : ''}) contra lo que ya cargaste en Sittings &amp; traslados.${fijosAutomaticosActivos ? ' Los fijos se cargan solos: si aparece uno acá, es que algo falló y conviene cargarlo.' : ' Los horarios fijos no entran acá — esos se registran aparte.'}</div>
     <div class="card">
       ${dashPendientesHoy.length ? dashPendientesHoy.map(a=>{
         const fechaFmt = new Date(a.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
@@ -343,7 +457,7 @@ function renderPendHoy(cont){
         return `
         <div class="agendarow" style="border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
           <div>
-            <div><b>${esHoy?'Hoy':fechaFmt}</b> · ${escaparHtml(a.ninera_nombre)} → ${escaparHtml(a.familia_nombre || 'familia sin nombre')}</div>
+            <div><b>${esHoy?'Hoy':fechaFmt}</b> · ${escaparHtml(a.ninera_nombre)} → ${escaparHtml(a.familia_nombre || 'familia sin nombre')}${a.esFijo ? ' <span class="helper" style="margin:0;">· fijo</span>' : ''}</div>
             <div style="color:var(--ink-soft);">${a.hora_inicio ? a.hora_inicio.slice(0,5) : ''}${a.hora_fin ? '–'+a.hora_fin.slice(0,5) : ''}</div>
           </div>
           <button class="smallbtn" onclick="cargarSittingDesdePendiente(${argJs(a)})">Cargar sitting</button>

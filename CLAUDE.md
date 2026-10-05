@@ -90,6 +90,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   lectores por formato. Los extractos de los tests son inventados: nunca uno real, ni recortado.
 - `tests/exploratorio.spec.js`: punta a punta, celular 390px, datos raros, base vacía, navegar
   rápido, dos usuarias a la vez (Realtime simulado: `estado.emitirRealtime`), totales.
+- `tests/fijos-automaticos.spec.js`: previstos solo en la Agenda, cambios de un día sobre el
+  previsto, cambios del fijo que recalculan, pausas, revisión en Hoy, Finanzas sin previstos, y
+  todo apagado sin la marca. La función de la base se prueba aparte en Postgres local:
+  `supabase/pruebas/fijos_automaticos.sql` (nunca en producción).
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -131,6 +135,14 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   corre un día, usar `asignacionVigenteEn(a, fecha)` (core.js).
 - Finanzas: el resultado del mes se calcula sobre lo facturado; cobrado/pagado solo dicen si
   la plata ya entró o salió (error E1, 05/10/2026).
+- Fijos automáticos (06/10/2026): la base carga sola los próximos 14 días de cada fijo como
+  sittings `estado='previsto'` (`generar_previstos_fijos`, pg_cron 03:00) y el día que llegan
+  pasan a `confirmado`. Rige solo con `app_config` 'fijos_automaticos' activo (lo prende
+  `..._ACTIVAR.sql`); apagado, todo funciona como antes. Previstos solo en la Agenda: toda
+  consulta de sittings que muestra "lo que pasó" va con `sinPrevistos()` (core.js). Un
+  cambio de un solo día corrige la fila prevista (y la marca `generado_automatico=false`);
+  un cambio del fijo (niñera, horario, vigencia, pausa, tarifa) llama a
+  `sincronizarPrevistosFijos()`. Los cambios de horario también van "desde [fecha]".
 - Candidatas: lo corregido en la entrevista vive en `notas_ficha` y pisa la respuesta del
   formulario; para mostrar datos de una candidata/niñera usar `datosFichaCandidata()` (core.js).
 - Extractos (05/10/2026): leer y conciliar están separados. Cada banco o billetera es un lector

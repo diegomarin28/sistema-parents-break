@@ -75,10 +75,11 @@ let sitHistMostrar = 10; // cuántas filas se ven de una — separado de cuánta
 let sitListaMostrar = 15; // igual criterio para "Registros de [mes]", arriba del historial
 const SIT_HIST_PAGE = 200;
 async function cargarSitHistorial(){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   const [{data:pagina, count}, {data:resenas}, {data:soloFamilias}] = await Promise.all([
-    sb.from('sittings_traslados').select('*', {count:'exact'}).order('fecha', {ascending:false}).range(0, SIT_HIST_PAGE-1),
+    sinPrevistos(sb.from('sittings_traslados').select('*', {count:'exact'})).order('fecha', {ascending:false}).range(0, SIT_HIST_PAGE-1),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
-    sb.from('sittings_traslados').select('familia_nombre'), // solo esta columna: liviano aunque la tabla crezca, así el filtro de familia siempre tiene todas las opciones
+    sinPrevistos(sb.from('sittings_traslados').select('familia_nombre')), // solo esta columna: liviano aunque la tabla crezca, así el filtro de familia siempre tiene todas las opciones
   ]);
   sitHistItems = pagina || [];
   sitHistOffset = sitHistItems.length;
@@ -112,10 +113,11 @@ function llenarSelectFamiliasHistorial(filas){
   if(valorPrevio) sel.value = valorPrevio;
 }
 async function cargarSitHistorialMas(){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   if(sitHistLoadingMore || sitHistItems.length>=sitHistTotal) return;
   sitHistLoadingMore = true;
   renderSitHistorial();
-  const { data } = await sb.from('sittings_traslados').select('*').order('fecha', {ascending:false}).range(sitHistOffset, sitHistOffset+SIT_HIST_PAGE-1);
+  const { data } = await sinPrevistos(sb.from('sittings_traslados').select('*')).order('fecha', {ascending:false}).range(sitHistOffset, sitHistOffset+SIT_HIST_PAGE-1);
   sitHistItems = sitHistItems.concat(data||[]);
   sitHistOffset = sitHistItems.length;
   sitHistLoadingMore = false;
@@ -180,6 +182,7 @@ function onSitHistFiltroChange(){
    no depende de los 200 registros más recientes que se cachean para el resto de los filtros
    — así funciona bien incluso muy atrás en el histórico. */
 async function renderSitHistorialCustom(){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   const cont = document.getElementById('sithist-lista');
   if(!cont) return;
   const desde = document.getElementById('sithist-desde')?.value;
@@ -190,7 +193,7 @@ async function renderSitHistorialCustom(){
   const tipoF = document.getElementById('sithist-tipo')?.value||'';
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Buscando…</div>';
   const data = await sbLeer(
-    sb.from('sittings_traslados').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
+    sinPrevistos(sb.from('sittings_traslados').select('*')).gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
     'los registros de ese período', []
   );
   let items = data || [];
@@ -236,6 +239,7 @@ function abrirModalExportarHistorialPDF(){
   abrirModal(html);
 }
 async function generarVistaPreviaHistorialPDF(){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   const desde = document.getElementById('exphist-desde')?.value;
   const hasta = document.getElementById('exphist-hasta')?.value;
   const warn = document.getElementById('exphist-warn');
@@ -247,7 +251,7 @@ async function generarVistaPreviaHistorialPDF(){
   const famF = document.getElementById('sithist-familia')?.value||'';
   const tipoF = document.getElementById('sithist-tipo')?.value||'';
   const data = await sbLeer(
-    sb.from('sittings_traslados').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
+    sinPrevistos(sb.from('sittings_traslados').select('*')).gte('fecha', desde).lte('fecha', hasta).order('fecha', {ascending:false}),
     'los registros de ese período', []
   );
   let items = data || [];
@@ -1350,7 +1354,7 @@ async function guardarSitting(){
         tipo: registro.tipo || 'sitting', vigente_desde: registro.fecha || todayISO(),
       });
       if(errAsig) toast('El registro se guardó, pero la asignación fija falló: '+errAsig.message, 'bad');
-      else toast('Registro guardado y asignación fija creada.');
+      else { await sincronizarPrevistosFijos(); toast('Registro guardado y asignación fija creada.'); }
       }
     }
   } else {
@@ -1375,13 +1379,14 @@ function cambiarSitMesRel(delta){
   cargarSitLista();
 }
 async function cargarSitLista(){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   const wrap = document.getElementById('sit-list-wrap');
   const summary = document.getElementById('sit-summary');
   if(!wrap) return;
   wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const desde = `${sitMes}-01`;
   const hasta = shiftMes(sitMes, 1)+'-01';
-  const { data, error } = await sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
+  const { data, error } = await sinPrevistos(sb.from('sittings_traslados').select('*')).gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
   if(error){ wrap.innerHTML = errBox(error); return; }
   sitItems = data || [];
   sitListaMostrar = 15; // se resetea cada vez que se recarga el mes, para no arrastrar un "mostrar todo" al cambiar de mes

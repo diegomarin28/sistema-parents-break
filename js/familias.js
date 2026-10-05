@@ -75,6 +75,7 @@ const FAM_RIESGO_SEMANAS = 6;      // sin sittings hace más de esto = "en riesg
 const FAM_RIESGO_SNOOZE_DIAS = 30; // al marcar "ya la contacté", no volver a avisar por este tiempo
 let famRiesgoAbierto = false;      // arranca cerrado — antes mostraba todas de una, "cartel inmenso"
 async function cargarFamilias(){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   // Las zonas se esperan: el filtro, el panel de "barrios sin zona" y el selector de Editar las usan.
   if(!zonaGruposCache) await cargarZonaGrupos();
   const cont = document.getElementById('familiaslist');
@@ -84,7 +85,7 @@ async function cargarFamilias(){
   const [{data:familias, error}, {data:asignaciones}, {data:sittings}, {data:resenas}, ninierasRes] = await Promise.all([
     sb.from('familias').select('*, hijos_familia(*)').order('nombre'),
     sb.from('asignaciones').select('*'),
-    sb.from('sittings_traslados').select('familia_nombre,ninera_nombre,fecha'),
+    sinPrevistos(sb.from('sittings_traslados').select('familia_nombre,ninera_nombre,fecha')),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
     necesitaNinieras ? sb.from('ninieras').select('nombre') : Promise.resolve({data:null}),
   ]);
@@ -392,6 +393,8 @@ async function guardarEdicionFamilia(id){
     errHijos = e3;
   }
   cerrarModal();
+  // Fijos automáticos: con tarifa o nombre nuevos se recalculan los previstos que nadie tocó.
+  await sincronizarPrevistosFijos();
   if(errHijos) toast('Se guardó lo demás, pero no los hijos: '+errHijos.message, 'bad');
   else toast('Cambios guardados.');
   const scrollF1 = guardarScrollMainarea();
@@ -417,6 +420,7 @@ async function addAsignacion(famId){
     vigente_desde: document.getElementById('asig-desde-'+famId)?.value || todayISO() };
   const { error } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p), asig);
   if(error){ toast('No se pudo agregar: '+error.message,'bad'); return; }
+  await sincronizarPrevistosFijos();
   toast('Niñera asignada.');
   cargarFamilias();
 }

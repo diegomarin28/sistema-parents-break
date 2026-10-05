@@ -5,6 +5,7 @@ let agendaNinierasBase = [];
 let agendaSolicitudes = [];
 let agendaResizeListenerAttached = false;
 let agendaReemplazoNineraSel = null;
+let agendaPausas = []; // pausas de los fijos (vacaciones), solo con los fijos automáticos activados
 
 function agendaDiasVisibles(){ return 7; } // la página siempre es de una semana — lo que cambia con el ancho es CÓMO se dibuja (ver agendaEsMobile)
 function agendaEsMobile(){ return window.innerWidth <= 760; }
@@ -133,17 +134,25 @@ async function cargarAgendaSolicitudes(){
   const n = agendaDiasVisibles();
   const desde = agendaAncla, hasta = sumarDiasISO(agendaAncla, n-1);
 
-  const [{data:sols, error}, {data:asigs}, {data:registros}] = await Promise.all([
+  await esperarConfigFijos();
+  const [{data:sols, error}, {data:asigs}, {data:registros}, pausas] = await Promise.all([
     sb.from('solicitudes').select('*, solicitud_ninieras(*)').gte('fecha', desde).lte('fecha', hasta).order('hora_inicio', {ascending:true}),
     sb.from('asignaciones').select('*, familias(nombre)'),
     sb.from('sittings_traslados').select('*').gte('fecha', desde).lte('fecha', hasta),
+    cargarPausasFijos(),
   ]);
   if(error){ if(wrap) wrap.innerHTML = errBox(error); return; }
+  agendaPausas = pausas;
+  // Fijos automáticos (06/10/2026): el día de un fijo ya cargado como "previsto" se sigue
+  // dibujando como la tarjeta del fijo (con lo previsto adentro), no como un registro.
+  const previstosPorAsig = new Map((registros||[]).filter(r=>r.asignacion_id && esPrevisto(r)).map(r=>[r.asignacion_id+'|'+r.fecha, r]));
+  const reales = (registros||[]).filter(r=>!esPrevisto(r));
   // Ya registrado en Sittings, por día+niñera+familia (antes era solo niñera+familia, sin día).
-  const registradosSet = new Set((registros||[]).map(r=>r.fecha+'|'+normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
+  const registradosSet = new Set(reales.map(r=>r.fecha+'|'+normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||'')));
   // Lo registrado desde un fijo queda vinculado a su asignación (05/10/2026): ese día el
   // fijo ya está cubierto aunque haya ido otra niñera (reemplazo) o no haya ido nadie.
-  const registradosPorAsig = new Set((registros||[]).filter(r=>r.asignacion_id).map(r=>r.asignacion_id+'|'+r.fecha));
+  const registradosPorAsig = new Set(reales.filter(r=>r.asignacion_id).map(r=>r.asignacion_id+'|'+r.fecha));
+  const previstosUsados = new Set();
 
   // Solicitudes puntuales: al confirmar una niñera (guardarAsignacionDirecta) se crea de una
   // el registro real en Sittings & traslados -- si no se filtra acá, la solicitud confirmada
@@ -166,10 +175,16 @@ async function cargarAgendaSolicitudes(){
     const diaSemana = diaDeFecha(fechaISO);
     // Solo dentro de su vigencia: antes un fijo se dibujaba en TODAS las semanas, pasadas
     // incluidas, con la niñera de hoy -- al cambiarla, el pasado aparecía como de la nueva (E2).
-    (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana) && asignacionVigenteEn(a, fechaISO)).forEach(a=>{
+    (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(diaSemana) && asignacionVigenteEn(a, fechaISO) && !fijoPausadoEn(pausas, a.id, fechaISO)).forEach(a=>{
       const yaRegistrado = registradosPorAsig.has(a.id+'|'+fechaISO)
         || registradosSet.has(fechaISO+'|'+normaliza(a.ninera_nombre||'')+'|'+normaliza(a.familias?.nombre||''));
       if(yaRegistrado) return; // el registro real (en `registrados`, más abajo) ya cubre este día
+      const previsto = previstosPorAsig.get(a.id+'|'+fechaISO) || null;
+      if(previsto){
+        previstosUsados.add(previsto.id);
+        // Un previsto de "no fue" ya está resuelto: se dibuja como cancelado, igual que un registro.
+        if(previsto.cancelado) return;
+      }
       fijas.push({
         id: 'asig:'+a.id+'@'+fechaISO,
         fecha: fechaISO,
@@ -185,13 +200,21 @@ async function cargarAgendaSolicitudes(){
         zona: null,
         cobro_familia: null,
         estado: 'confirmada',
-        ninieras: [{ id:'asigninera:'+a.id+'@'+fechaISO, ninera_nombre:a.ninera_nombre, estado:'confirmada' }],
+        ninieras: [{ id:'asigninera:'+a.id+'@'+fechaISO, ninera_nombre:(previsto?previsto.ninera_nombre:a.ninera_nombre), estado:'confirmada' }],
+        _previsto: previsto,
       });
+      if(previsto){
+        const f = fijas[fijas.length-1];
+        f.hora_inicio = previsto.hora_inicio; f.hora_fin = previsto.hora_fin;
+        f.termina_dia_siguiente = !!previsto.termina_dia_siguiente;
+        f.cobro_familia = previsto.cobro_familia;
+      }
     });
   }
 
-  // Registros ya cargados en Sittings & traslados dentro del rango visible.
-  const registrados = (registros||[]).map(r=>({
+  // Registros ya cargados en Sittings & traslados dentro del rango visible (los previstos
+  // que ya se dibujan en la tarjeta de su fijo no se repiten).
+  const registrados = (registros||[]).filter(r=>!previstosUsados.has(r.id) || r.cancelado).map(r=>({
     id: 'reg:'+r.id,
     fecha: r.fecha,
     _fuente: 'registro',
@@ -205,6 +228,7 @@ async function cargarAgendaSolicitudes(){
     cobro_familia: r.cobro_familia,
     pago_ninera: r.pago_ninera,
     cancelado: r.cancelado || false,
+    _esPrevisto: esPrevisto(r),
     estado: 'confirmada',
     ninieras: [{ id:'regninera:'+r.id, ninera_nombre:r.ninera_nombre, estado:'confirmada' }],
   }));
@@ -268,6 +292,7 @@ function renderAgendaFilaMobile(s){
   const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : '--:--';
   const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
   const esRegistro = s._fuente==='registro' && !s.cancelado;
+  const previsto = !!(s._previsto || s._esPrevisto);
   return `<div style="padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;" onclick="abrirModalSolicitud(${argJs(s.id)})">
     <div style="display:flex;align-items:center;gap:8px;">
       <div style="color:var(--ink-soft);font-variant-numeric:tabular-nums;width:38px;flex-shrink:0;">${horaTxt}</div>
@@ -277,6 +302,7 @@ function renderAgendaFilaMobile(s){
         : esRegistro
           ? (s.zona ? `<span class="badge accent" style="font-size:10px;padding:2px 7px;flex-shrink:0;">${escaparHtml(s.zona)}</span>` : '')
           : `<div style="font-size:11px;font-weight:700;color:${sinAsignar?'var(--warn)':'var(--good)'};flex-shrink:0;">${sinAsignar ? 'Sin asignar' : escaparHtml(ninTxt)}</div>`}
+      ${previsto ? `<span class="agenda-previsto">Previsto</span>` : ''}
     </div>
     ${esRegistro ? `<div style="display:flex;gap:14px;margin-top:4px;padding-left:46px;font-size:11px;color:var(--ink-soft);">
       <span>Cobro <b style="color:var(--ink);font-family:'IBM Plex Mono',monospace;">$${Number(s.cobro_familia||0).toLocaleString('es-UY')}</b></span>
@@ -289,9 +315,10 @@ function renderAgendaTarjetaDia(s){
   const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : 'Sin hora';
   const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
   const esRegistro = s._fuente==='registro' && !s.cancelado;
+  const previsto = !!(s._previsto || s._esPrevisto);
   return `<div style="background:var(--bg);border-radius:8px;padding:7px 8px;margin-bottom:6px;cursor:pointer;font-size:12px;" onclick="abrirModalSolicitud(${argJs(s.id)})">
     <div style="font-weight:700;color:var(--ink);margin-bottom:2px;">${escaparHtml(s.familia_nombre)}</div>
-    <div class="helper" style="margin:0 0 4px;">${horaTxt}</div>
+    <div class="helper" style="margin:0 0 4px;">${horaTxt}${previsto ? ` · <span class="agenda-previsto">Previsto</span>` : ''}</div>
     ${s.cancelado
       ? `<span class="badge warn" style="font-size:10.5px;padding:3px 8px;">Cancelado</span>`
       : esRegistro
@@ -600,12 +627,14 @@ async function guardarAsignacionFijaNueva(){
   const { error } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p), filas);
   if(error){ warn.innerHTML = errBox(error); return; }
   cerrarModal();
+  await sincronizarPrevistosFijos();
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
   toast('Asignación fija guardada — va a aparecer en Agenda los días que elegiste.');
 }
 
 async function abrirModalAsignar(solicitudId){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   const s = agendaSolicitudes.find(x=>x.id===solicitudId);
   if(!s) return;
   abrirModal('<div class="empty"><span class="spinner dark"></span> Buscando niñeras recomendadas…</div>');
@@ -613,7 +642,7 @@ async function abrirModalAsignar(solicitudId){
   const [{data:histFam}, {data:histTotal}, {data:sitTotal}] = await Promise.all([
     sb.from('solicitud_ninieras').select('ninera_nombre, solicitudes!inner(familia_nombre)').eq('estado','confirmada').eq('solicitudes.familia_nombre', s.familia_nombre),
     sb.from('solicitud_ninieras').select('ninera_nombre').eq('estado','confirmada'),
-    sb.from('sittings_traslados').select('ninera_nombre'),
+    sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre')),
   ]);
   const conteoFamilia = {};
   (histFam||[]).forEach(r=>{ const k=normaliza(r.ninera_nombre); conteoFamilia[k]=(conteoFamilia[k]||0)+1; });
@@ -778,6 +807,12 @@ function abrirModalAsignacionFija(s){
   // se ve en las semanas pasadas solo para registrar esos días: no se le cambia la niñera,
   // el horario ni se borra (perdería su historia).
   const terminado = asignacionTerminada(a, hoy);
+  // Fijos automáticos: si este día ya está cargado como previsto, "solo este día" cambia esa
+  // fila (horario, no fue, reemplazo) en vez de crear otra.
+  const prev = s._previsto || null;
+  const desdeHorarioSugerido = a.vigente_desde && a.vigente_desde > hoy ? a.vigente_desde : hoy;
+  const pausasDelFijo = (agendaPausas||[]).filter(p=>p.asignacion_id===asigId && p.hasta >= hoy);
+  const fmtCorta = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'});
   const cuerpo = `
     <h2>${escaparHtml(s.familia_nombre)}</h2>
     <div class="helper">${esTraslado?'Traslado':'Sitting'} fijo · ${diasTxt || 'sin días'} · ${horario}</div>
@@ -799,7 +834,8 @@ function abrirModalAsignacionFija(s){
     <div style="height:1px;background:var(--line);margin:14px 0;"></div>
     <button type="button" class="btn" id="agenda-fija-edit-toggle" style="width:100%;" onclick="document.getElementById('agenda-fija-edit-box').style.display='block';this.style.display='none';">Editar horarios futuros</button>
     <div id="agenda-fija-edit-box" style="display:none;">
-      <div class="helper" style="margin:10px 0 8px;">Aplica desde ahora para todos los próximos días, no toca lo que ya está registrado:</div>
+      <div class="helper" style="margin:10px 0 8px;">Desde la fecha que elijas. Lo anterior conserva el horario que tuvo y lo ya registrado no se toca:</div>
+      <div class="field" style="margin-bottom:8px;"><label>Desde</label><input type="date" id="agenda-fija-edit-desde" value="${desdeHorarioSugerido}"></div>
       <div class="grid2" style="margin-bottom:8px;">
         <div class="field"><label>Hora inicio</label>${selectHora('agenda-fija-edit-hi')}</div>
         <div class="field"><label>Hora fin</label>${selectHora('agenda-fija-edit-hf')}</div>
@@ -808,11 +844,18 @@ function abrirModalAsignacionFija(s){
         ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn ${(a.dias||[]).includes(d)?'selected':''}" data-dia="${d}" onclick="this.classList.toggle('selected')">${DIAS_CORTO[d]}</button>`).join('')}
       </div>
       <div id="agenda-fija-edit-warn"></div>
-      <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="conGuardado(this, ()=>guardarHorarioAsignacionFija(${argJs(asigId)}))">Guardar horario/días para todos los próximos</button>
-    </div>`}
+      <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="conGuardado(this, ()=>guardarHorarioAsignacionFija(${argJs(asigId)}))">Guardar horario/días desde esa fecha</button>
+    </div>
+    ${fijosAutomaticosActivos ? `
+    <div style="height:1px;background:var(--line);margin:14px 0;"></div>
+    ${pausasDelFijo.map(p=>`<div class="agenda-ninerarow"><div>Pausado del ${fmtCorta(p.desde)} al ${fmtCorta(p.hasta)}${p.motivo?` <span class="helper" style="margin:0;">· ${escaparHtml(p.motivo)}</span>`:''}</div>
+      <button class="smallbtn" onclick="conGuardado(this, ()=>quitarPausaFijo(${argJs(p.id)}))">Quitar pausa</button></div>`).join('')}
+    <button class="btn" style="width:100%;" onclick="abrirModalPausarFijo(${argJs(asigId)})">Pausar este fijo (vacaciones)</button>` : ''}`}
 
     <div style="height:1px;background:var(--line);margin:14px 0;"></div>
-    <div class="helper" style="margin-bottom:8px;">Corregir solo el día de hoy (${s.fecha}), sin tocar el fijo:</div>
+    ${prev
+      ? `<div class="helper" style="margin-bottom:8px;">Este día (${fmtCorta(s.fecha)}) ya está <b>previsto</b> con ${escaparHtml(prev.ninera_nombre)}${prev.cobro_familia!=null?` · cobro $${Number(prev.cobro_familia).toLocaleString('es-UY')}`:''}: se confirma solo ese día. Si cambia algo solo ese día, corregilo acá:</div>`
+      : `<div class="helper" style="margin-bottom:8px;">Corregir solo el día de hoy (${s.fecha}), sin tocar el fijo:</div>`}
     ${s._yaRegistrado
       ? `<div class="helper" style="margin-bottom:8px;">Ya hay un registro cargado para ${escaparHtml(a.ninera_nombre)} este día en Sittings.</div>`
       : `<div class="grid2" style="margin-bottom:8px;">
@@ -826,7 +869,7 @@ function abrirModalAsignacionFija(s){
          </div>
          <div class="helper" id="agenda-fija-precio-helper" style="margin:-4px 0 8px;"></div>` : ''}
          <div id="agenda-fija-horario-warn"></div>
-         <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="conGuardado(this, ()=>registrarSittingFijoDeHoy(${argJs(s.id)}))">Registrar ${esTraslado?'traslado':'sitting'} de este día</button>
+         <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="conGuardado(this, ()=>registrarSittingFijoDeHoy(${argJs(s.id)}))">${prev ? 'Guardar el cambio de este día' : `Registrar ${esTraslado?'traslado':'sitting'} de este día`}</button>
          <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionAsignacionFija(${argJs(s.id)})">Este día no fue</button>`}
     ${terminado ? '' : `<button class="btn danger" style="width:100%;" onclick="abrirModalTerminarFijo(${argJs(asigId)})">Terminar este fijo desde una fecha</button>`}
   `;
@@ -834,11 +877,18 @@ function abrirModalAsignacionFija(s){
   setHoraSelect('agenda-fija-edit-hi', a.hora_inicio||'');
   setHoraSelect('agenda-fija-edit-hf', a.hora_fin||'');
   if(!s._yaRegistrado){
-    setHoraSelect('agenda-fija-hi', a.hora_inicio||'');
-    setHoraSelect('agenda-fija-hf', a.hora_fin||'');
+    setHoraSelect('agenda-fija-hi', (prev ? prev.hora_inicio : a.hora_inicio)||'');
+    setHoraSelect('agenda-fija-hf', (prev ? prev.hora_fin : a.hora_fin)||'');
+    if(prev && prev.termina_dia_siguiente){ const c = document.getElementById('agenda-fija-cruza'); if(c) c.checked = true; }
   }
   setTimeout(()=>attachAutocomplete('agenda-fija-ninera-'+asigId, 'agenda-fija-ninera-'+asigId+'-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
-  if(esTraslado && !s._yaRegistrado) precargarPrecioTrasladoFijo(a);
+  if(esTraslado && !s._yaRegistrado){
+    if(prev){
+      const c = document.getElementById('agenda-fija-cobro'), p = document.getElementById('agenda-fija-pago');
+      if(c) c.value = Number(prev.cobro_familia)||0;
+      if(p) p.value = Number(prev.pago_ninera)||0;
+    } else precargarPrecioTrasladoFijo(a);
+  }
 }
 /* Un traslado fijo no se cobra por hora: se precarga con lo del último traslado de ese
    fijo (o de esa familia), y queda editable. */
@@ -856,29 +906,62 @@ async function precargarPrecioTrasladoFijo(a){
   if(!pago.value) pago.value = Number(ultimo.pago_ninera)||0;
   if(helper) helper.textContent = `Precargado con el último traslado (${new Date(ultimo.fecha+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'})}). Revisalo antes de registrar.`;
 }
-/* Edita la asignación fija en sí (hora_inicio/hora_fin/dias en `asignaciones`) --
-   a diferencia de "Registrar sitting de hoy", esto no crea un registro real,
-   solo corrige la plantilla recurrente para que los próximos días salgan bien
-   desde el vamos, sin tener que repetir la corrección día a día. */
+/* Editar horarios futuros DESDE una fecha (06/10/2026). Antes cambiaba el fijo entero y
+   las semanas pasadas sin registrar pasaban a mostrar el horario nuevo (el mismo problema
+   que E2 con la niñera). Ahora funciona igual que el cambio de niñera: cierra el fijo el día
+   anterior y abre otro igual con el horario o los días nuevos. Si la fecha es el primer
+   día del fijo (o antes), no hay pasado que cuidar y se cambia ahí mismo. Lo ya registrado
+   no se toca; los previstos automáticos se recalculan desde esa fecha. */
 async function guardarHorarioAsignacionFija(asigId){
   const warn = document.getElementById('agenda-fija-edit-warn');
   const horaIni = leerHora('agenda-fija-edit-hi');
   const horaFin = leerHora('agenda-fija-edit-hf');
+  const desde = document.getElementById('agenda-fija-edit-desde')?.value || todayISO();
   const dias = [...document.querySelectorAll('#agenda-fija-edit-dias .daybtn.selected')].map(b=>b.dataset.dia);
   if(!horaIni || !horaFin){ if(warn) warn.innerHTML = '<div class="warnbox">Completá las dos horas.</div>'; return; }
   if(horaFin<=horaIni){ if(warn) warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio.</div>'; return; }
   if(!dias.length){ if(warn) warn.innerHTML = '<div class="warnbox">Elegí al menos un día.</div>'; return; }
   const item = agendaSolicitudes.find(s=>s._asigId===asigId);
-  const nineraNombre = item?._raw?.ninera_nombre;
-  if(nineraNombre){
-    const choque = await chequearFijoNuevoContraTodo(nineraNombre, dias, horaIni, horaFin, asigId);
-    if(!(await avisarSiDobleReserva(choque, nineraNombre, 'Guardar igual'))) return;
+  const a = item?._raw;
+  if(!a) return;
+  if(a.vigente_hasta && desde > a.vigente_hasta){ if(warn) warn.innerHTML = `<div class="warnbox">Este fijo termina el ${escaparHtml(a.vigente_hasta)}: elegí una fecha anterior.</div>`; return; }
+  if(a.ninera_nombre){
+    const choque = await chequearFijoNuevoContraTodo(a.ninera_nombre, dias, horaIni, horaFin, asigId);
+    if(!(await avisarSiDobleReserva(choque, a.ninera_nombre, 'Guardar igual'))) return;
   }
-  const { error } = await sb.from('asignaciones').update({hora_inicio: horaIni, hora_fin: horaFin, dias}).eq('id', asigId);
-  if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+  const baseSinVigencia = asignacionesSinVigencia || !('vigente_desde' in a);
+  const enElMismoLugar = baseSinVigencia || !a.vigente_desde || desde <= a.vigente_desde;
+  if(enElMismoLugar && !a.vigente_desde && !baseSinVigencia){
+    if(warn) warn.innerHTML = '<div class="warnbox">Este fijo no tiene fecha de inicio cargada. Tocá "Editar vigencia y tipo", cargá desde cuándo corre y después cambiá el horario.</div>';
+    return;
+  }
+  if(enElMismoLugar){
+    const { error } = await sb.from('asignaciones').update({hora_inicio: horaIni, hora_fin: horaFin, dias}).eq('id', asigId);
+    if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+  } else {
+    const nuevaAsig = {
+      familia_id: a.familia_id, ninera_nombre: a.ninera_nombre, ninera_id: a.ninera_id || null,
+      dias, hora_inicio: horaIni, hora_fin: horaFin,
+      cobro_hora: a.cobro_hora ?? null, pago_hora: a.pago_hora ?? null,
+      tipo: tipoAsignacion(a), vigente_desde: desde, vigente_hasta: a.vigente_hasta || null,
+    };
+    const { data: creada, error: e1 } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p).select().single(), nuevaAsig);
+    if(e1){ if(warn) warn.innerHTML = errBox(e1); return; }
+    const { error: e2 } = await escribirAsignacion(p=>sb.from('asignaciones').update(p).eq('id', asigId), {vigente_hasta: sumarDiasISO(desde, -1)});
+    if(e2){
+      const { error: e3 } = await sb.from('asignaciones').delete().eq('id', creada.id);
+      if(warn) warn.innerHTML = e3
+        ? `<div class="warnbox">No se pudo cerrar el horario anterior y tampoco deshacer el nuevo: quedaron los dos. Abrí "Editar vigencia y tipo" en el fijo anterior y poné "hasta" el día antes del cambio. (${escaparHtml(e2.message)})</div>`
+        : errBox(e2);
+      return;
+    }
+  }
   cerrarModal();
+  await sincronizarPrevistosFijos();
   await cargarAgendaSolicitudes();
-  toast('Horario fijo actualizado — aplica desde ahora para los próximos días.');
+  const fechaTxt = new Date(desde+'T12:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
+  toast(`Desde el ${fechaTxt} el fijo va de ${horaIni} a ${horaFin}. Lo anterior conserva su horario.`);
+  await revisarPrevistosEditadosFueraDelFijo([asigId]);
 }
 /* Un solo flujo para registrar el sitting de hoy: el horario sale precargado
    con el habitual de la asignación, pero siempre queda editable ahí mismo —
@@ -913,9 +996,24 @@ async function registrarSittingFijoDeHoy(id){
   }
   const choque = chequearDobleReservaAgenda(a.ninera_nombre, s.fecha, horaIni, horaFin, s.id);
   if(!(await avisarSiDobleReserva(choque, a.ninera_nombre, 'Registrar igual'))) return;
+  const prev = s._previsto || null;
   if(familia){
-    const choqueFamilia = await chequearFamiliaYaCubierta(familia.id, s.fecha, horaIni, horaFin, a.ninera_nombre, null);
+    const choqueFamilia = await chequearFamiliaYaCubierta(familia.id, s.fecha, horaIni, horaFin, prev ? prev.ninera_nombre : a.ninera_nombre, prev?.id || null);
     if(!(await avisarSiFamiliaYaCubierta(choqueFamilia, s.familia_nombre, 'Sí, van dos'))) return;
+  }
+  if(prev){
+    // Día ya previsto: se corrige esa misma fila y deja de ser automática (el proceso no
+    // la vuelve a recalcular). Sigue "prevista" hasta que llegue el día.
+    const { error } = await sb.from('sittings_traslados').update({
+      hora_inicio: horaIni, hora_fin: horaFin, termina_dia_siguiente: cruza,
+      cobro_familia: cobro, pago_ninera: pago, generado_automatico: false,
+      registrado_por: registradoPorUsuario(),
+    }).eq('id', prev.id);
+    if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+    cerrarModal();
+    await cargarAgendaSolicitudes();
+    toast('Listo: ese día queda con el horario nuevo.');
+    return;
   }
   // Niñera y tipo salen de la asignación vigente ESE día (la Agenda solo muestra la que
   // corresponde a cada fecha), y el registro queda vinculado a ella.
@@ -948,7 +1046,7 @@ function mostrarExcepcionAsignacionFija(id){
   const a = s._raw;
   const fechaTxt = new Date(s.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
   const cuerpo = `
-    <h2 style="margin:0 0 6px;">¿${escaparHtml(a.ninera_nombre)} no fue el ${fechaTxt} a lo de ${escaparHtml(s.familia_nombre)}?</h2>
+    <h2 style="margin:0 0 6px;">¿${escaparHtml(s._previsto ? s._previsto.ninera_nombre : a.ninera_nombre)} no ${s.fecha>todayISO()?'va':'fue'} el ${fechaTxt} a lo de ${escaparHtml(s.familia_nombre)}?</h2>
     <div class="helper" style="margin-bottom:16px;">No se le cobra nada a la familia ni se le paga nada a ${escaparHtml(a.ninera_nombre)} por este día.</div>
     <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="conGuardado(this, ()=>registrarExcepcionFija(${argJs(id)}))">No fue nadie ese día</button>
     <button class="btn primary" style="width:100%;text-align:left;" onclick="mostrarReemplazoFijoHoy(${argJs(id)})">Vino otra niñera</button>
@@ -960,6 +1058,18 @@ async function registrarExcepcionFija(id){
   const s = agendaSolicitudes.find(x=>x.id===id);
   if(!s) return;
   const a = s._raw;
+  if(s._previsto){
+    // Previsto: esa misma fila pasa a la de $0 (cancelado), así el proceso no lo recrea.
+    const { error } = await sb.from('sittings_traslados').update({
+      cancelado: true, cobro_familia: 0, pago_ninera: 0, cobrado: true, pagado: true,
+      generado_automatico: false, notas: `${s._previsto.ninera_nombre} no va — sin reemplazo`,
+    }).eq('id', s._previsto.id);
+    if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+    cerrarModal();
+    await cargarAgendaSolicitudes();
+    toast('Listo: ese día no va nadie.');
+    return;
+  }
   const { error } = await sb.from('sittings_traslados').insert({
     tipo: tipoAsignacion(a),
     asignacion_id: a.id,
@@ -1044,8 +1154,22 @@ async function confirmarReemplazoFijoHoy(id){
   const choque = chequearDobleReservaAgenda(nineraTxt, s.fecha, horaIni, horaFin, s.id);
   if(!(await avisarSiDobleReserva(choque, nineraTxt, 'Registrar igual'))) return;
   if(familia){
-    const choqueFamilia = await chequearFamiliaYaCubierta(familia.id, s.fecha, horaIni, horaFin, nineraTxt, null);
+    const choqueFamilia = await chequearFamiliaYaCubierta(familia.id, s.fecha, horaIni, horaFin, nineraTxt, s._previsto?.id || null);
     if(!(await avisarSiFamiliaYaCubierta(choqueFamilia, s.familia_nombre, 'Sí, van dos'))) return;
+  }
+  if(s._previsto){
+    // Previsto: cambia la niñera de esa fila, solo ese día.
+    const { error } = await sb.from('sittings_traslados').update({
+      ninera_id: nineraSel?.id || null, ninera_nombre: nineraTxt,
+      hora_inicio: horaIni, hora_fin: horaFin, termina_dia_siguiente: cruza,
+      cobro_familia: cobro, pago_ninera: pago, generado_automatico: false,
+      notas: `Reemplazo de ${s._previsto.ninera_nombre}`,
+    }).eq('id', s._previsto.id);
+    if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+    cerrarModal();
+    await cargarAgendaSolicitudes();
+    toast(`Listo: ese día va ${nineraTxt}.`);
+    return;
   }
   const { error } = await sb.from('sittings_traslados').insert({
     tipo: tipoAsignacion(a),
@@ -1124,9 +1248,11 @@ async function cambiarNineraAsignacionFija(asigId){
     }
   }
   cerrarModal();
+  await sincronizarPrevistosFijos();
   await cargarAgendaSolicitudes();
   const fechaTxt = new Date(desde+'T12:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
   toast(`Desde el ${fechaTxt} el fijo lo hace ${nueva}. Lo anterior sigue como estaba.`);
+  await revisarPrevistosEditadosFueraDelFijo([asigId]);
 }
 /* Vigencia (desde / hasta) y tipo de una asignación, editables desde la app para
    corregirlos sin SQL. Se abre desde el fijo en la Agenda y desde la ficha de la familia. */
@@ -1162,9 +1288,11 @@ async function guardarVigenciaAsignacion(asigId){
   if(error){ warn.innerHTML = errBox(error); return; }
   if(asignacionesSinVigencia){ warn.innerHTML = '<div class="warnbox">La base todavía no tiene vigencia de los fijos (falta la migración). Avisale a Diego.</div>'; return; }
   cerrarModal();
+  await sincronizarPrevistosFijos();
   toast('Vigencia del fijo guardada.');
   if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
   if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
+  await revisarPrevistosEditadosFueraDelFijo([asigId]);
 }
 /* Terminar un fijo desde una fecha (05/10/2026, paso 5). Antes "Quitar" BORRABA la
    asignación: desaparecía de todas las semanas, también de las pasadas, y los sittings ya
@@ -1213,9 +1341,92 @@ async function terminarFijoDesde(asigId){
   const { error } = await sb.from('asignaciones').update({vigente_hasta: hasta}).eq('id', asigId);
   if(error){ warn.innerHTML = errBox(error); return; }
   cerrarModal();
+  await sincronizarPrevistosFijos();
   toast(`Listo: el fijo corre hasta el ${fmt(hasta)}. Desde el ${fmt(desde)} ya no aparece en la Agenda.`);
   if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
   if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
+  await revisarPrevistosEditadosFueraDelFijo([asigId]);
+}
+/* Pausar un fijo (vacaciones, 06/10/2026): en ese rango no se cargan previstos y la Agenda
+   no lo dibuja, sin terminarlo. Solo con los fijos automáticos activados. */
+async function abrirModalPausarFijo(asigId){
+  const { data: a, error } = await sb.from('asignaciones').select('*, familias(nombre)').eq('id', asigId).single();
+  if(error || !a){ toast('No se pudo abrir el fijo: '+(error?.message||'no existe'), 'bad'); return; }
+  const hoy = todayISO();
+  abrirModal(`
+    <h2 style="margin:0 0 4px;">Pausar el fijo</h2>
+    <div class="helper" style="margin-bottom:14px;">${escaparHtml(a.familias?.nombre||'(familia)')} · ${escaparHtml(a.ninera_nombre)}</div>
+    <div class="grid2">
+      <div class="field"><label>Desde</label><input type="date" id="pausa-desde" value="${hoy}"></div>
+      <div class="field"><label>Hasta (inclusive)</label><input type="date" id="pausa-hasta"></div>
+    </div>
+    <div class="field"><label>Motivo (opcional)</label><input type="text" id="pausa-motivo" placeholder="Vacaciones"></div>
+    <div class="helper">En esos días no se carga nada y el fijo no aparece en la Agenda. Después sigue solo, con la misma niñera y horario. Lo que ya está registrado no se toca.</div>
+    <div id="pausa-warn"></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarPausaFijo(${argJs(a.id)}))">Pausar</button>
+    </div>`);
+}
+async function guardarPausaFijo(asigId){
+  const warn = document.getElementById('pausa-warn');
+  const desde = document.getElementById('pausa-desde')?.value;
+  const hasta = document.getElementById('pausa-hasta')?.value;
+  const motivo = document.getElementById('pausa-motivo')?.value.trim() || null;
+  if(!desde || !hasta){ warn.innerHTML = '<div class="warnbox">Elegí las dos fechas.</div>'; return; }
+  if(hasta < desde){ warn.innerHTML = '<div class="warnbox">"Hasta" no puede ser antes que "desde".</div>'; return; }
+  if(hasta < todayISO()){ warn.innerHTML = '<div class="warnbox">Esas fechas ya pasaron: lo que no fue se marca día por día con "Este día no fue".</div>'; return; }
+  const { error } = await sb.from('asignaciones_pausas').insert({ asignacion_id: asigId, desde, hasta, motivo, creado_por: registradoPorUsuario() });
+  if(error){ warn.innerHTML = errBox(error); return; }
+  cerrarModal();
+  await sincronizarPrevistosFijos();
+  const fmt = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
+  toast(`Fijo pausado del ${fmt(desde)} al ${fmt(hasta)}.`);
+  if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
+  await revisarPrevistosEditadosFueraDelFijo([asigId]);
+}
+async function quitarPausaFijo(pausaId){
+  if(!(await confirmarAccion('¿Quitar la pausa? Esos días vuelven a cargarse como siempre.'))) return;
+  const { error } = await sb.from('asignaciones_pausas').delete().eq('id', pausaId);
+  if(error){ toast('No se pudo quitar la pausa: '+error.message, 'bad'); return; }
+  cerrarModal();
+  await sincronizarPrevistosFijos();
+  toast('Pausa quitada.');
+  if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
+}
+/* Días previstos que alguien cambió a mano (un horario distinto, un reemplazo, un "no va")
+   y que, después de cambiar el fijo, ya no le corresponden: el fijo terminó, cambió de
+   niñera u horario desde una fecha, o quedó en pausa. El proceso no los toca (son
+   decisiones de alguien): se muestran para decidir si se borran o se dejan. */
+async function revisarPrevistosEditadosFueraDelFijo(asigIds){
+  if(!fijosAutomaticosActivos || !asigIds || !asigIds.length) return;
+  const hoy = todayISO();
+  const [{data:filas}, {data:asigs}, pausas] = await Promise.all([
+    sb.from('sittings_traslados').select('*').in('asignacion_id', asigIds).eq('estado', 'previsto').eq('generado_automatico', false).gt('fecha', hoy).order('fecha'),
+    sb.from('asignaciones').select('*').in('id', asigIds),
+    cargarPausasFijos(),
+  ]);
+  const fuera = (filas||[]).filter(r=>{
+    const a = (asigs||[]).find(x=>x.id===r.asignacion_id);
+    return !a || !asignacionVigenteEn(a, r.fecha) || !(a.dias||[]).includes(diaSemanaDeISO(r.fecha)) || fijoPausadoEn(pausas, a.id, r.fecha);
+  });
+  if(!fuera.length) return;
+  const fmt = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'short',day:'2-digit',month:'2-digit'});
+  abrirModal(`
+    <h2 style="margin:0 0 6px;">Días cambiados a mano</h2>
+    <div class="helper" style="margin-bottom:12px;">Estos días los había cambiado alguien a mano y, con el cambio del fijo, ya no le corresponden. No se tocaron: ¿los borramos?</div>
+    ${fuera.map(r=>`<div class="agenda-ninerarow"><div><b>${fmt(r.fecha)}</b> · ${escaparHtml(r.ninera_nombre)} · ${escaparHtml((r.hora_inicio||'').slice(0,5))}${r.hora_fin?'–'+escaparHtml(r.hora_fin.slice(0,5)):''}${r.cancelado?' · no va':''}</div></div>`).join('')}
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Dejarlos</button>
+      <button class="btn danger" onclick="conGuardado(this, ()=>borrarPrevistosEditados(${argJs(fuera.map(r=>r.id))}))">Borrar estos días</button>
+    </div>`);
+}
+async function borrarPrevistosEditados(ids){
+  const { error } = await sb.from('sittings_traslados').delete().in('id', ids).eq('estado', 'previsto');
+  if(error){ toast('No se pudieron borrar: '+error.message, 'bad'); return; }
+  cerrarModal();
+  toast(ids.length===1 ? 'Día borrado.' : `${ids.length} días borrados.`);
+  if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
 }
 function abrirModalRegistroDesdeAgenda(s){
   const horario = s.termina_dia_siguiente
@@ -1223,12 +1434,12 @@ function abrirModalRegistroDesdeAgenda(s){
     : (s.hora_inicio ? (s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5)) : 'Sin horario');
   const cuerpo = `
     <h2>${escaparHtml(s.familia_nombre)}</h2>
-    <div class="helper">${s.tipo==='traslado'?'Traslado':'Sitting'} · ${horario} · ya registrado en Sittings &amp; traslados</div>
+    <div class="helper">${s.tipo==='traslado'?'Traslado':'Sitting'} · ${horario} · ${s._esPrevisto ? 'previsto (se confirma solo ese día)' : 'ya registrado en Sittings &amp; traslados'}</div>
     <div style="margin:14px 0;">
       <div class="agenda-ninerarow"><div><b>${escaparHtml(s.ninieras[0].ninera_nombre)}</b></div></div>
       ${s.cobro_familia ? `<div class="helper">Cobro a la familia: $${Number(s.cobro_familia).toLocaleString('es-UY')}</div>` : ''}
     </div>
-    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="editarRegistroDesdeAgenda(${argJs(s._regId)})">Editar este registro</button>
+    ${s._esPrevisto ? '' : `<button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="editarRegistroDesdeAgenda(${argJs(s._regId)})">Editar este registro</button>`}
     <button class="btn danger" style="width:100%;" onclick="conGuardado(this, ()=>eliminarRegistroDesdeAgenda(${argJs(s._regId)}))">Eliminar este registro</button>
   `;
   abrirModal(cuerpo);
@@ -1344,6 +1555,7 @@ function renderModulo(){
   renderSidebar();
   document.getElementById('modfooter').innerHTML = '';
   suscribirRealtimeModuloActivo();
+  esperarConfigFijos(); // arranca la lectura de la marca de fijos automáticos sin frenar el pintado
   const cont = document.getElementById('modcontent');
   // Devuelve la promesa del render específico (cuando la tiene) para que quien llame a
   // renderModulo()/setModulo() pueda hacer `await` y saber que los datos ya cargaron de
