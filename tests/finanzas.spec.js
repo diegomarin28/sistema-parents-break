@@ -89,16 +89,17 @@ test.describe('Por pagar del resumen sin días futuros', () => {
     const e = await abrirApp(page, { datos: datosConFuturo() });
     await irAModulo(page, 'finanzas');
     await verMes(page, '2026-10');
-    expect(await cifra(page, 'fin-porpagar')).toBe('$750');
+    // Con espera: al entrar a Finanzas el mes actual se carga dos veces (el módulo y verMes).
+    await expect(page.locator('#fin-porpagar')).toHaveText('$750');
     await expect(page.locator('#fin-porpagar-futuro')).toHaveText('Sin contar $750 de días que todavía no pasaron.');
-    expect(await cifra(page, 'fin-facturado')).toBe('$2.280');
+    await expect(page.locator('#fin-facturado')).toHaveText('$2.280');
     verificarLimpio(e);
   });
   test('cuando llega el día entra en Por pagar y desaparece el aviso', async ({ page }) => {
     const e = await abrirApp(page, { datos: datosConFuturo(), ahora: '2026-10-10T09:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     await verMes(page, '2026-10');
-    expect(await cifra(page, 'fin-porpagar')).toBe('$1.500');
+    await expect(page.locator('#fin-porpagar')).toHaveText('$1.500');
     await expect(page.locator('#fin-porpagar-futuro')).toHaveCount(0);
     verificarLimpio(e);
   });
