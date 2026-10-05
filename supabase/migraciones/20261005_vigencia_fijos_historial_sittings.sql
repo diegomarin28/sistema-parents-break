@@ -10,8 +10,9 @@
 -- Se ejecuta entera en una transacción. Si algo falla, no queda nada a medias.
 --
 -- EJECUTADA el 05/10/2026 a las 09:37 (Montevideo), puntos 1 a 3, con OK de Diego. El
--- punto 4 (bucket) va en su propia transacción al final y quedó pendiente: la herramienta
--- de Supabase pide aprobar en pantalla los DROP POLICY.
+-- punto 4 (bucket) va en su propia transacción al final: se ejecutó aparte el mismo
+-- 05/10/2026 (quedan 0 políticas de candidatas-fotos; el bucket sigue público para ver
+-- las fotos por su URL).
 -- ============================================================================
 
 begin;
