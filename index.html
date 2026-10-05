@@ -14,9 +14,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&family=Dancing+Script:wght@700&display=swap">
-<!-- Versión fija (la misma que ya se usaba): "@2" a secas se re-resuelve seguido y el navegador
-     casi no la puede guardar en caché. Para actualizar supabase-js, cambiar el número a mano. -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <style>
 :root{
   --bg:#F6F5FB; --paper:#FFFFFF; --ink:#312F45; --ink-soft:#6C6A84; --line:#E3E1EE;
@@ -163,6 +160,12 @@ textarea{resize:vertical;min-height:54px;}
 .btn.ghost:hover{border-color:var(--accent);color:var(--accent);}
 .btn.danger{background:var(--clay-text);color:#fff;}
 .btn.danger:hover{background:#9C4448;}
+.pantallacarga{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:var(--bg);padding:24px;text-align:center;z-index:50;}
+.pantallacarga-logo{width:min(220px,60vw);height:auto;animation:fadeIn 400ms ease both;}
+.pantallacarga-spinner{width:22px;height:22px;border-width:3px;}
+.pantallacarga-msg{font-size:14px;color:var(--ink-soft);max-width:340px;line-height:1.5;}
+.pantallacarga-msg b{color:var(--ink);display:block;font-size:16px;margin-bottom:4px;}
+.pantallacarga .btn{margin-top:4px;}
 .confirmoverlay{position:fixed;inset:0;background:rgba(49,47,69,.35);display:flex;align-items:center;justify-content:center;z-index:300;opacity:0;transition:opacity 180ms ease;padding:20px;}
 .confirmoverlay.show{opacity:1;}
 .confirmbox{background:var(--paper);border-radius:16px;padding:22px 24px;max-width:380px;width:100%;box-shadow:var(--shadow-md);transform:translateY(8px) scale(.98);transition:transform 180ms cubic-bezier(.2,.8,.2,1);position:relative;}
@@ -446,8 +449,23 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 </style>
 </head>
 <body>
-<div class="wrap" id="app"></div>
+<div class="wrap" id="app">
+  <!-- Pantalla de carga: se ve desde el primer instante hasta que el JS pinta el login o la app
+       (que reemplazan todo el contenido de #app). Ver mostrarPantallaCarga() en core.js. -->
+  <div class="pantallacarga" id="pantalla-carga" role="status" aria-live="polite">
+    <img src="logo.png" alt="Parents’ Break" class="pantallacarga-logo">
+    <span class="spinner dark pantallacarga-spinner"></span>
+    <div class="pantallacarga-msg" id="pantallacarga-msg">Cargando…</div>
+  </div>
+</div>
 
+<!-- supabase-js 2.117.2 servido desde este repo (05/10/2026, E4): antes venía de jsdelivr y si
+     ese CDN fallaba la app quedaba en blanco, sin ningún mensaje. Es el mismo archivo que
+     publica npm (dist/umd/supabase.js); tests/estatico.spec.js controla versión y sha256.
+     Para actualizarlo: bajar la versión nueva de npm, reemplazar el archivo y el número acá.
+     Va acá abajo (no en el <head>) para que la pantalla de carga se vea mientras se descarga;
+     el orden de los scripts es el mismo de siempre: primero esta librería, después core.js. -->
+<script src="vendor/supabase-js-2.117.2.umd.js"></script>
 <script src="js/core.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/app-shell.js"></script>

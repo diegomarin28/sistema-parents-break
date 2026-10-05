@@ -3,8 +3,8 @@
 // - Todo pedido a *.supabase.co se responde acá con los datos ficticios de datos.js
 //   (o los que pase cada test). Nada llega a la base real: un pedido que no se sabe
 //   simular queda anotado en `noSimulados` y el test falla al final (ver verificarLimpio).
-// - supabase-js se sirve desde tests/vendor (misma versión que index.html), así los tests
-//   no dependen del CDN.
+// - supabase-js viene del propio repo (vendor/, desde el 05/10/2026): los tests no dependen
+//   de ningún CDN.
 // - Chart.js y xlsx se reemplazan por versiones mínimas (stubs.js): los tests miran la
 //   app, no los gráficos.
 // - La sesión se inyecta en localStorage, igual que la deja supabase-js después de un login
@@ -16,7 +16,6 @@ const { datosBase } = require('./datos');
 const { STUB_CHART, STUB_XLSX } = require('./stubs');
 
 const REF_PROD = 'wvewzamdohrpfhpccvcz';
-const SUPABASE_JS = path.join(__dirname, '..', 'vendor', 'supabase-js-2.117.2.umd.js');
 
 const USUARIO = {
   id: '00000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated',
@@ -161,7 +160,8 @@ async function abrirApp(page, opciones = {}) {
 
   if (ahora) await page.clock.setFixedTime(new Date(ahora));
 
-  await page.route(/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/, r => r.fulfill({ path: SUPABASE_JS, contentType: 'application/javascript' }));
+  // jsdelivr ya no se usa: si algo lo pide, que falle y se note.
+  await page.route(/cdn\.jsdelivr\.net/, r => { estado.noSimulados.push('CDN ' + r.request().url()); return r.abort(); });
   await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ body: '', contentType: 'text/css' }));
   // Ojo: Playwright prueba primero la ruta registrada ÚLTIMA. La genérica va antes.
   await page.route(/cdnjs\.cloudflare\.com/, r => r.fulfill({ body: '', contentType: 'application/javascript' }));

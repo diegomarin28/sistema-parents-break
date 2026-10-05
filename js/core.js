@@ -1,8 +1,57 @@
 const SUPABASE_URL = 'https://wvewzamdohrpfhpccvcz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_NX4E4FfAkwFQSFo4Rgl0Jg_IcebuaaI';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage, experimental: { passkey: true } }
-});
+// Si supabase-js no cargó, sb queda en null y boot() muestra un error claro en vez de dejar la
+// pantalla en blanco (antes: "supabase is not defined" y nada más).
+const sb = (typeof supabase !== 'undefined' && typeof supabase.createClient === 'function')
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage, experimental: { passkey: true } }
+    })
+  : null;
+
+/* ---- Pantalla de carga y error de arranque (05/10/2026, E4) ----
+   Mientras arranca, se busca la sesión o se entra, se ve el logo con una ruedita (el HTML
+   inicial ya la trae en index.html). Si algo sale mal antes de poder pintar la app, se
+   explica qué pasó con un botón para reintentar, en vez de una pantalla en blanco. */
+function mostrarPantallaCarga(mensaje='Cargando…'){
+  const app = document.getElementById('app');
+  if(!app) return;
+  if(!document.getElementById('pantalla-carga')){
+    app.innerHTML = `<div class="pantallacarga" id="pantalla-carga" role="status" aria-live="polite">
+      <img src="logo.png" alt="Parents’ Break" class="pantallacarga-logo">
+      <span class="spinner dark pantallacarga-spinner"></span>
+      <div class="pantallacarga-msg" id="pantallacarga-msg"></div>
+    </div>`;
+  }
+  const msg = document.getElementById('pantallacarga-msg');
+  if(msg) msg.textContent = mensaje;
+  programarAvisoCargaLenta();
+}
+function mostrarErrorArranque(titulo, detalle){
+  const app = document.getElementById('app');
+  if(!app) return;
+  app.innerHTML = `<div class="pantallacarga" id="pantalla-error" role="alert">
+    <img src="logo.png" alt="Parents’ Break" class="pantallacarga-logo">
+    <div class="pantallacarga-msg"><b>${escaparHtml(titulo)}</b>${escaparHtml(detalle)}</div>
+    <button class="btn primary" onclick="location.reload()">Reintentar</button>
+  </div>`;
+}
+// Si la carga tarda mucho (mala señal), se avisa debajo del logo sin cortar nada.
+let avisoCargaLentaTimer = null;
+function programarAvisoCargaLenta(){
+  clearTimeout(avisoCargaLentaTimer);
+  avisoCargaLentaTimer = setTimeout(()=>{
+    const msg = document.getElementById('pantallacarga-msg');
+    if(!msg || !document.getElementById('pantalla-carga')) return;
+    msg.innerHTML = `${escaparHtml(msg.textContent)}<br>Está tardando más de lo normal. Si no avanza, revisá la conexión.`;
+    if(!document.getElementById('pantallacarga-reintentar')){
+      const b = document.createElement('button');
+      b.id = 'pantallacarga-reintentar'; b.className = 'btn ghost'; b.textContent = 'Reintentar';
+      b.addEventListener('click', ()=>location.reload());
+      msg.after(b);
+    }
+  }, 12000);
+}
+programarAvisoCargaLenta();
 
 /* ---- Carga de librerías pesadas SOLO cuando hacen falta (Chart.js y xlsx no bloquean el arranque de la app) ---- */
 function cargarScript(src){
