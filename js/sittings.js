@@ -14,15 +14,8 @@ let sitOrigenCoord = null;
 let sitDestinoCoord = null;
 let sitMes = null;
 
-function currentMonthStr(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function shiftMes(mesStr, delta){ const [y,m] = mesStr.split('-').map(Number); const d = new Date(y, m-1+delta, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
-function todayISO(){ return new Date().toISOString().slice(0,10); }
-function primerDiaMesesAtras(n){
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth()-n);
-  return d.toISOString().slice(0,10);
-}
+function primerDiaMesesAtras(n){ return shiftMes(currentMonthStr(), -n)+'-01'; }
 function monthLabel(mesStr){
   const [y,m] = mesStr.split('-').map(Number);
   const f = new Intl.DateTimeFormat('es-UY', {month:'long', year:'numeric'}).format(new Date(y, m-1, 1));
@@ -324,8 +317,7 @@ function renderSitHistorial(){
   if(famF) items = items.filter(s=>normaliza(s.familia_nombre)===famF);
   if(tipoF) items = items.filter(s=>s.tipo===tipoF);
   if(periodo>0){
-    const limite = new Date(); limite.setDate(limite.getDate()-periodo);
-    const limiteISO = limite.toISOString().slice(0,10);
+    const limiteISO = sumarDiasISO(todayISO(), -periodo);
     items = items.filter(s=>s.fecha && s.fecha >= limiteISO);
   }
   const hayMasSinCargar = periodo===0 && sitHistItems.length < sitHistTotal;
@@ -1385,9 +1377,8 @@ async function cargarSitLista(){
   const summary = document.getElementById('sit-summary');
   if(!wrap) return;
   wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
-  const [y,m] = sitMes.split('-').map(Number);
   const desde = `${sitMes}-01`;
-  const hasta = new Date(y, m, 1).toISOString().slice(0,10);
+  const hasta = shiftMes(sitMes, 1)+'-01';
   const { data, error } = await sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
   if(error){ wrap.innerHTML = errBox(error); return; }
   sitItems = data || [];

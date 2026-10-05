@@ -88,7 +88,6 @@ test.describe('E2: cambio de niñera en un fijo', () => {
 
 test.describe('fechas en Montevideo (UTC-3)', () => {
   test('a las 22:30 el formulario de sitting propone la fecha de hoy, no la de mañana', async ({ page }) => {
-    test.fail(true, 'todayISO() usa UTC: se arregla en el PR 3');
     const e = await abrirApp(page, { ahora: '2026-10-04T22:30:00-03:00' });
     await irAModulo(page, 'sittings');
     await page.locator('button[onclick^="abrirModalSitForm"]').first().click();

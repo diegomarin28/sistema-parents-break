@@ -63,9 +63,7 @@ function agendaRangoLabel(){
 }
 function cambiarAgendaRango(delta){
   const n = agendaDiasVisibles();
-  const d = new Date(agendaAncla+'T00:00:00');
-  d.setDate(d.getDate() + delta*n);
-  agendaAncla = d.toISOString().slice(0,10);
+  agendaAncla = sumarDiasISO(agendaAncla, delta*n);
   const lbl = document.getElementById('agenda-fecha-label');
   if(lbl) lbl.textContent = agendaRangoLabel();
   cargarAgendaSolicitudes();
@@ -128,17 +126,12 @@ async function cargarAgendaBase(){
   agendaNinierasBase = nins || [];
 }
 
-function diaDeFecha(fechaISO){
-  const d = new Date(fechaISO+'T00:00:00');
-  return ['D','L','M','X','J','V','S'][d.getDay()];
-}
+function diaDeFecha(fechaISO){ return diaSemanaDeISO(fechaISO); }
 async function cargarAgendaSolicitudes(){
   const wrap = document.getElementById('agenda-grid-wrap');
   if(wrap) wrap.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const n = agendaDiasVisibles();
-  const d1 = new Date(agendaAncla+'T00:00:00');
-  const d2 = new Date(d1); d2.setDate(d2.getDate()+n-1);
-  const desde = agendaAncla, hasta = d2.toISOString().slice(0,10);
+  const desde = agendaAncla, hasta = sumarDiasISO(agendaAncla, n-1);
 
   const [{data:sols, error}, {data:asigs}, {data:registros}] = await Promise.all([
     sb.from('solicitudes').select('*, solicitud_ninieras(*)').gte('fecha', desde).lte('fecha', hasta).order('hora_inicio', {ascending:true}),
@@ -169,8 +162,7 @@ async function cargarAgendaSolicitudes(){
   // tarjeta "pendiente" del fijo Y la tarjeta del registro real, para el mismo día.
   const fijas = [];
   for(let i=0;i<n;i++){
-    const d = new Date(d1); d.setDate(d.getDate()+i);
-    const fechaISO = d.toISOString().slice(0,10);
+    const fechaISO = sumarDiasISO(agendaAncla, i);
     const diaSemana = diaDeFecha(fechaISO);
     // Solo dentro de su vigencia: antes un fijo se dibujaba en TODAS las semanas, pasadas
     // incluidas, con la niñera de hoy -- al cambiarla, el pasado aparecía como de la nueva (E2).
@@ -228,9 +220,7 @@ function renderAgendaGrid(){
   const hoy = todayISO();
   const dias = [];
   for(let i=0;i<n;i++){
-    const d = new Date(agendaAncla+'T00:00:00');
-    d.setDate(d.getDate()+i);
-    dias.push(d.toISOString().slice(0,10));
+    dias.push(sumarDiasISO(agendaAncla, i));
   }
   const porDia = dias.map(fecha=>{
     const esHoy = fecha===hoy;

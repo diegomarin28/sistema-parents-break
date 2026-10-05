@@ -138,7 +138,7 @@ function renderLegal(cont){
       <div class="grid3">
         <div class="field"><label>Tarifa por hora</label><input type="number" id="leg-tarifa"></div>
         <div class="field"><label>Frecuencia de pago</label><input type="text" id="leg-frecuencia" value="semanalmente"></div>
-        <div class="field"><label>Fecha</label><input type="date" id="leg-fecha" value="${typeof todayISO==='function'?todayISO():new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>Fecha</label><input type="date" id="leg-fecha" value="${todayISO()}"></div>
       </div>
       <button class="btn primary" onclick="generarContrato()">Generar texto del contrato</button>
       <div id="leg-resultado"></div>
