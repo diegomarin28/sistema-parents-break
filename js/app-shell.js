@@ -573,7 +573,13 @@ async function marcarNotifLeida(id){
   if(notifLeidas.has(id)) return;
   notifLeidas.add(id);
   renderNotifBell();
-  await sb.from('notificaciones_leidas').upsert({notif_id:id, usuario:notifUsuario(), leido_en:new Date().toISOString()});
+  const { error } = await sb.from('notificaciones_leidas').upsert({notif_id:id, usuario:notifUsuario(), leido_en:new Date().toISOString()});
+  if(error){
+    // No quedó guardada: vuelve a aparecer como no leída, así no se pierde el aviso.
+    notifLeidas.delete(id);
+    renderNotifBell();
+    toast('No se pudo marcar como leída. Revisá tu conexión.', 'bad');
+  }
 }
 
 function toggleNotifPanel(force){
@@ -644,15 +650,16 @@ async function activarPushNotificaciones(){
       });
     }
     const json = sub.toJSON();
-    await sb.from('push_subscriptions').upsert({
+    const { error } = await sb.from('push_subscriptions').upsert({
       usuario: notifUsuario(),
       endpoint: json.endpoint,
       p256dh: json.keys.p256dh,
       auth_key: json.keys.auth,
     }, {onConflict:'endpoint'});
+    if(error) throw error;
     toast('Notificaciones push activadas en este dispositivo.');
   }catch(e){
-    toast('No se pudo activar el push: '+(e.message||e));
+    toast('No se pudo activar el push: '+(e.message||e), 'bad');
   }
   // Una vez activado ya no tiene sentido mostrar la tarjeta "Este dispositivo" (era solo para
   // llegar a este punto) — se vuelve a pintar toda la pantalla para que desaparezca sola.
@@ -692,7 +699,7 @@ async function renderNotifConfig(cont){
       ${!pushSoportado()
         ? `<p class="helper">Este dispositivo no soporta notificaciones push.</p>`
         : `<p class="helper" style="margin-bottom:12px;">Activalo una vez por dispositivo (celular, tablet) para recibir avisos aunque tengas la app cerrada. En iPhone hay que agregarlo antes a la pantalla de inicio (compartir → Agregar a inicio).</p>
-           <button class="btn" onclick="activarPushNotificaciones()">Activar notificaciones push</button>`}
+           <button class="btn" onclick="conGuardado(this, ()=>activarPushNotificaciones())">Activar notificaciones push</button>`}
     </div>`}
     <div class="card">
       <h2>Qué te llega como push</h2>
@@ -719,8 +726,11 @@ async function renderNotifConfig(cont){
   actualizarNotifNavdot();
 }
 async function guardarPrefNotif(tipo, activado){
-  await sb.from('notif_push_preferencias').upsert({usuario: notifUsuario(), tipo, activado}, {onConflict:'usuario,tipo'});
-  toast('Guardado.');
+  const ok = await sbGuardar(sb.from('notif_push_preferencias').upsert({usuario: notifUsuario(), tipo, activado}, {onConflict:'usuario,tipo'}), 'la preferencia');
+  if(ok){ toast('Guardado.'); return; }
+  // Falló: se vuelve a pintar con lo que hay guardado, así la casilla no miente.
+  const cont = document.getElementById('notifcfg-body');
+  if(cont) await renderNotifConfig(cont);
 }
 
 /* ---- Sidebar: nunca scrollea, se achica solo si hace falta ----

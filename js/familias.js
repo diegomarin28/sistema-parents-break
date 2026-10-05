@@ -46,7 +46,7 @@ function abrirModalNuevaFamilia(){
     <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="addFamilia()">Agregar familia</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>addFamilia())">Agregar familia</button>
     </div>`);
 }
 async function addFamilia(){
@@ -62,7 +62,7 @@ async function addFamilia(){
   const hijos = leerHijosFamilia('fam');
   if(hijos.length){
     const { error: e2 } = await sb.from('hijos_familia').insert(hijos.map((h,i)=>({...h, familia_id:data.id, orden:i})));
-    if(e2) toast('Familia guardada, pero no los hijos: '+e2.message, 'bad');
+    if(e2){ cerrarModal(); toast('Familia guardada, pero no los hijos: '+e2.message, 'bad'); cargarFamilias(); return; }
   }
   cerrarModal();
   toast('Familia agregada.');
@@ -171,7 +171,7 @@ function renderFamiliasEnRiesgo(){
               ? `<button class="btn primary" style="padding:6px 10px;font-size:12.5px;" onclick="enviarWhatsappRiesgo(${argJs(f.id)})">Enviar por WhatsApp</button>`
               : `<div class="helper" style="margin:0;color:var(--clay-text);">Sin teléfono cargado</div>`}
             <button class="smallbtn" onclick="copiarMensajeRiesgo(${argJs(f.id)})">Copiar mensaje</button>
-            <button class="smallbtn" onclick="marcarContactadaRiesgo(${argJs(f.id)})">Ya la contacté</button>
+            <button class="smallbtn" onclick="conGuardado(this, ()=>marcarContactadaRiesgo(${argJs(f.id)}))">Ya la contacté</button>
           </div>
         </div>`;
       }).join('')}` : ''}
@@ -255,7 +255,7 @@ function renderFamiliasList(){
       <div class="rowbtns">
         <button class="smallbtn" onclick="verFamilia(${argJs(f.id)})">Ver ficha</button>
         <button class="smallbtn" onclick="editarFamilia(${argJs(f.id)})">Editar</button>
-        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarFamilia(${argJs(f.id)})" title="Eliminar familia" aria-label="Eliminar familia">${ICONS.trash}</button>
+        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="conGuardado(this, ()=>eliminarFamilia(${argJs(f.id)}))" title="Eliminar familia" aria-label="Eliminar familia">${ICONS.trash}</button>
       </div>
     </div>`;
   }).join('') + '</div>';
@@ -272,7 +272,7 @@ function verFamilia(id){
   const filaAsig = a=>{
     const dias = (a.dias||[]).join(' ');
     const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : '—';
-    return `<tr><td>${escaparHtml(a.ninera_nombre)}</td><td>${tipoAsignacion(a)==='traslado'?'Traslado':'Sitting'} · ${dias||'—'} · ${horario}<div class="helper" style="margin:2px 0 0;">${textoVigencia(a)}</div></td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalVigenciaAsignacion(${argJs(a.id)})">Vigencia</button><button class="smallbtn danger" onclick="quitarAsignacion(${argJs(a.id)})">Quitar</button></div></td></tr>`;
+    return `<tr><td>${escaparHtml(a.ninera_nombre)}</td><td>${tipoAsignacion(a)==='traslado'?'Traslado':'Sitting'} · ${dias||'—'} · ${horario}<div class="helper" style="margin:2px 0 0;">${textoVigencia(a)}</div></td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalVigenciaAsignacion(${argJs(a.id)})">Vigencia</button>${asignacionTerminada(a, hoyFam) ? '' : `<button class="smallbtn danger" onclick="abrirModalTerminarFijo(${argJs(a.id)})">Terminar</button>`}</div></td></tr>`;
   };
   const ordenAsig = (x,y)=>(y.vigente_desde||'').localeCompare(x.vigente_desde||'');
   const asigRows = (f.asignaciones||[]).filter(a=>!asignacionTerminada(a, hoyFam)).sort(ordenAsig).map(filaAsig).join('');
@@ -330,7 +330,7 @@ function verFamilia(id){
         ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" onclick="this.classList.toggle('selected')">${d}</button>`).join('')}
       </div>
     </div>
-    <button class="smallbtn" onclick="addAsignacion(${argJs(f.id)})">+ Asignar niñera</button>`);
+    <button class="smallbtn" onclick="conGuardado(this, ()=>addAsignacion(${argJs(f.id)}))">+ Asignar niñera</button>`);
   renderIncidentesEnFicha('fam-incidentes', 'familia', f.id, f.nombre);
 }
 function editarFamilia(id){
@@ -360,7 +360,7 @@ function editarFamilia(id){
     <div class="field"><label>Notas</label><textarea id="ed-fam-notas">${escaparHtml(f.notas)}</textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionFamilia(${argJs(id)})">Guardar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarEdicionFamilia(${argJs(id)}))">Guardar</button>
     </div>`);
 }
 async function guardarEdicionFamilia(id){
@@ -377,16 +377,23 @@ async function guardarEdicionFamilia(id){
   };
   const { error } = await sb.from('familias').update(cambios).eq('id', id);
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
-  // Hijos: se reemplaza la lista entera (se borran los de antes y se cargan los actuales) --
-  // más simple que ir comparando fila por fila, y el formulario siempre manda la lista completa.
-  await sb.from('hijos_familia').delete().eq('familia_id', id);
+  // Hijos: se reemplaza la lista entera, porque el formulario siempre manda la lista completa.
+  // Primero se cargan los nuevos y recién después se borran los de antes: si algo falla a
+  // mitad de camino nunca se pierden los hijos (antes se borraba primero sin mirar el error).
   const hijos = leerHijosFamilia('ed-fam');
-  if(hijos.length){
+  const { data: previos, error: e0 } = await sb.from('hijos_familia').select('id').eq('familia_id', id);
+  let errHijos = e0;
+  if(!errHijos && hijos.length){
     const { error: e2 } = await sb.from('hijos_familia').insert(hijos.map((h,i)=>({...h, familia_id:id, orden:i})));
-    if(e2){ toast('Se guardó lo demás, pero no los hijos: '+e2.message, 'bad'); }
+    errHijos = e2;
+  }
+  if(!errHijos && (previos||[]).length){
+    const { error: e3 } = await sb.from('hijos_familia').delete().in('id', previos.map(h=>h.id));
+    errHijos = e3;
   }
   cerrarModal();
-  toast('Cambios guardados.');
+  if(errHijos) toast('Se guardó lo demás, pero no los hijos: '+errHijos.message, 'bad');
+  else toast('Cambios guardados.');
   const scrollF1 = guardarScrollMainarea();
   await cargarFamilias();
   restaurarScrollMainarea(scrollF1);
@@ -403,11 +410,6 @@ async function addAsignacion(famId){
   const { error } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p), asig);
   if(error){ toast('No se pudo agregar: '+error.message,'bad'); return; }
   toast('Niñera asignada.');
-  cargarFamilias();
-}
-async function quitarAsignacion(id){
-  const { error } = await sb.from('asignaciones').delete().eq('id', id);
-  if(error){ toast('No se pudo quitar: '+error.message,'bad'); return; }
   cargarFamilias();
 }
 async function eliminarFamilia(id){

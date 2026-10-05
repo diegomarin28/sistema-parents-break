@@ -511,20 +511,14 @@ function abrirModalNuevaSolicitud(){
       <div id="agenda-repetir-horario-por-dia" style="display:none;margin-top:6px;"></div>
     </div>
     <div id="agenda-nueva-warn"></div>
-    <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarSolicitud(event)">Guardar solicitud</button>
+    <button class="btn primary" style="width:100%;margin-top:6px;" onclick="conGuardado(this, ()=>guardarSolicitud())">Guardar solicitud</button>
   `;
   abrirModal(html);
   setTimeout(()=>attachAutocomplete('agenda-repetir-ninera', 'agenda-repetir-ninera-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
 }
-async function guardarSolicitud(ev){
-  const btn = ev?.target;
-  if(btn){ if(btn.disabled) return; btn.disabled = true; }
-  try {
-    if(agendaModoNueva==='repetir') return await guardarAsignacionFijaNueva();
-    return await guardarSolicitudPuntual();
-  } finally {
-    if(btn) btn.disabled = false;
-  }
+async function guardarSolicitud(){
+  if(agendaModoNueva==='repetir') return await guardarAsignacionFijaNueva();
+  return await guardarSolicitudPuntual();
 }
 async function guardarSolicitudPuntual(){
   const familiaTxt = document.getElementById('agenda-familia').value.trim();
@@ -686,7 +680,7 @@ async function abrirModalAsignar(solicitudId){
     <div id="agenda-asignar-pago-wrap" style="display:none;margin-top:10px;">
       <div class="field"><label>Pago a la niñera</label><div class="moneyfield"><input type="number" id="agenda-asignar-pago" oninput="marcarCampoEditadoManual('agenda-asignar-pago')"></div></div>
       <div id="agenda-asignar-warn"></div>
-      <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarAsignacionDirecta(${argJs(s.id)})">Guardar asignación</button>
+      <button class="btn primary" style="width:100%;margin-top:6px;" onclick="conGuardado(this, ()=>guardarAsignacionDirecta(${argJs(s.id)}))">Guardar asignación</button>
     </div>
   `;
   abrirModal(html);
@@ -716,7 +710,7 @@ async function guardarAsignacionDirecta(solicitudId){
     estado: 'confirmada', pago_ninera: pago,
   });
   if(e1){ warn.innerHTML = errBox(e1); return; }
-  await sbGuardar(sb.from('solicitudes').update({estado:'confirmada'}).eq('id', solicitudId), 'la solicitud');
+  const okSolicitud = await sbGuardar(sb.from('solicitudes').update({estado:'confirmada'}).eq('id', solicitudId), 'la solicitud');
   // Se carga directo el registro real en Sittings & traslados -- ya no hace falta un paso
   // aparte de "Cargar sitting" después de asignar.
   const { error: e2 } = await sb.from('sittings_traslados').insert({
@@ -731,7 +725,9 @@ async function guardarAsignacionDirecta(solicitudId){
   cerrarModal();
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
-  toast(e2 ? 'Quedó asignado, pero no se pudo cargar en Sittings & traslados: '+e2.message : 'Asignado — ya quedó cargado en Sittings & traslados.', e2?'bad':'good');
+  // Si la solicitud no quedó como confirmada, sbGuardar ya avisó: no se tapa con un "listo".
+  if(e2) toast('Quedó asignado, pero no se pudo cargar en Sittings & traslados: '+e2.message, 'bad');
+  else if(okSolicitud) toast('Asignado — ya quedó cargado en Sittings & traslados.');
 }
 function abrirModalSolicitud(id){
   const s = agendaSolicitudes.find(x=>x.id===id);
@@ -752,7 +748,7 @@ function abrirModalSolicitud(id){
           ${n.pago_ninera ? `<div class="helper" style="margin:2px 0 0;">Pago $${Number(n.pago_ninera).toLocaleString('es-UY')}</div>` : ''}
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
-          ${n.estado!=='confirmada' ? `<button class="smallbtn" onclick="confirmarNinera(${argJs(n.id)})">Confirmar</button>` : ''}
+          ${n.estado!=='confirmada' ? `<button class="smallbtn" onclick="conGuardado(this, ()=>confirmarNinera(${argJs(n.id)}))">Confirmar</button>` : ''}
           <a class="smallbtn" href="${urlSegura(waLink(agendaTelefonoNinera(n.ninera_nombre), mensajeWA(s, n.ninera_nombre)))}" target="_blank" rel="noopener">WhatsApp</a>
         </div>
       </div>`).join('');
@@ -764,7 +760,7 @@ function abrirModalSolicitud(id){
     <div style="margin:14px 0;">${ninierasHtml || '<div class="empty">Todavía no hay niñeras asignadas.</div>'}</div>
     ${s.estado==='sin_asignar' ? `<button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="cerrarModal();abrirModalAsignar(${argJs(s.id)})">Asignar niñera</button>` : ''}
     ${s.estado==='pendiente_confirmar' ? `<button class="btn" style="width:100%;margin-bottom:8px;" onclick="cerrarModal();abrirModalAsignar(${argJs(s.id)})">+ Agregar otra niñera</button>` : ''}
-    ${s.estado!=='cancelada' ? `<button class="btn danger" style="width:100%;" onclick="cancelarSolicitud(${argJs(s.id)})">Cancelar solicitud</button>` : `<div class="warnbox">Esta solicitud fue cancelada.</div>`}
+    ${s.estado!=='cancelada' ? `<button class="btn danger" style="width:100%;" onclick="conGuardado(this, ()=>cancelarSolicitud(${argJs(s.id)}))">Cancelar solicitud</button>` : `<div class="warnbox">Esta solicitud fue cancelada.</div>`}
   `;
   abrirModal(cuerpo);
 }
@@ -797,7 +793,7 @@ function abrirModalAsignacionFija(s){
     </div>
     <div class="helper" style="margin:-4px 0 8px;">Lo anterior a esa fecha no cambia: sigue siendo de quien lo hizo.</div>
     <div id="agenda-fija-warn"></div>
-    <button class="btn primary" id="agenda-fija-guardar-${asigId}" style="width:100%;margin-bottom:8px;" onclick="cambiarNineraAsignacionFija(${argJs(asigId)})">Cambiar niñera desde esa fecha</button>
+    <button class="btn primary" id="agenda-fija-guardar-${asigId}" style="width:100%;margin-bottom:8px;" onclick="conGuardado(this, ()=>cambiarNineraAsignacionFija(${argJs(asigId)}))">Cambiar niñera desde esa fecha</button>
     <button class="btn" style="width:100%;margin-bottom:8px;" onclick="abrirModalVigenciaAsignacion(${argJs(asigId)})">Editar vigencia y tipo</button>
 
     <div style="height:1px;background:var(--line);margin:14px 0;"></div>
@@ -812,7 +808,7 @@ function abrirModalAsignacionFija(s){
         ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn ${(a.dias||[]).includes(d)?'selected':''}" data-dia="${d}" onclick="this.classList.toggle('selected')">${DIAS_CORTO[d]}</button>`).join('')}
       </div>
       <div id="agenda-fija-edit-warn"></div>
-      <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="guardarHorarioAsignacionFija(${argJs(asigId)})">Guardar horario/días para todos los próximos</button>
+      <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="conGuardado(this, ()=>guardarHorarioAsignacionFija(${argJs(asigId)}))">Guardar horario/días para todos los próximos</button>
     </div>`}
 
     <div style="height:1px;background:var(--line);margin:14px 0;"></div>
@@ -830,9 +826,9 @@ function abrirModalAsignacionFija(s){
          </div>
          <div class="helper" id="agenda-fija-precio-helper" style="margin:-4px 0 8px;"></div>` : ''}
          <div id="agenda-fija-horario-warn"></div>
-         <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="registrarSittingFijoDeHoy(${argJs(s.id)})">Registrar ${esTraslado?'traslado':'sitting'} de este día</button>
+         <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="conGuardado(this, ()=>registrarSittingFijoDeHoy(${argJs(s.id)}))">Registrar ${esTraslado?'traslado':'sitting'} de este día</button>
          <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionAsignacionFija(${argJs(s.id)})">Este día no fue</button>`}
-    ${terminado ? '' : `<button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda(${argJs(asigId)})">Quitar esta asignación fija</button>`}
+    ${terminado ? '' : `<button class="btn danger" style="width:100%;" onclick="abrirModalTerminarFijo(${argJs(asigId)})">Terminar este fijo desde una fecha</button>`}
   `;
   abrirModal(cuerpo);
   setHoraSelect('agenda-fija-edit-hi', a.hora_inicio||'');
@@ -954,7 +950,7 @@ function mostrarExcepcionAsignacionFija(id){
   const cuerpo = `
     <h2 style="margin:0 0 6px;">¿${escaparHtml(a.ninera_nombre)} no fue el ${fechaTxt} a lo de ${escaparHtml(s.familia_nombre)}?</h2>
     <div class="helper" style="margin-bottom:16px;">No se le cobra nada a la familia ni se le paga nada a ${escaparHtml(a.ninera_nombre)} por este día.</div>
-    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="registrarExcepcionFija(${argJs(id)})">No fue nadie ese día</button>
+    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="conGuardado(this, ()=>registrarExcepcionFija(${argJs(id)}))">No fue nadie ese día</button>
     <button class="btn primary" style="width:100%;text-align:left;" onclick="mostrarReemplazoFijoHoy(${argJs(id)})">Vino otra niñera</button>
     <div id="agenda-fija-reemplazo-box"></div>
   `;
@@ -1013,7 +1009,7 @@ function mostrarReemplazoFijoHoy(id){
       <div class="field"><label>Pago a la niñera</label><div class="moneyfield"><input type="number" id="agenda-fija-rpago"></div></div>
     </div>` : ''}
     <div id="agenda-fija-reemplazo-warn"></div>
-    <button class="btn primary" style="width:100%;" onclick="confirmarReemplazoFijoHoy(${argJs(id)})">Registrar reemplazo</button>`;
+    <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>confirmarReemplazoFijoHoy(${argJs(id)}))">Registrar reemplazo</button>`;
   setHoraSelect('agenda-fija-rhi', a.hora_inicio||'');
   setHoraSelect('agenda-fija-rhf', a.hora_fin||'');
   setTimeout(()=>attachAutocomplete('agenda-fija-reemplazo-ninera', 'agenda-fija-reemplazo-ninera-dropdown', ()=>agendaNinierasBase, (o)=>{ agendaReemplazoNineraSel = o; }), 20);
@@ -1120,8 +1116,10 @@ async function cambiarNineraAsignacionFija(asigId){
     const { error: e2 } = await escribirAsignacion(p=>sb.from('asignaciones').update(p).eq('id', asigId), {vigente_hasta: sumarDiasISO(desde, -1)});
     if(e2){
       // Sin cerrar la vieja quedarían dos fijos superpuestos: se deshace la nueva.
-      await sb.from('asignaciones').delete().eq('id', creada.id);
-      warn.innerHTML = errBox(e2);
+      const { error: e3 } = await sb.from('asignaciones').delete().eq('id', creada.id);
+      warn.innerHTML = e3
+        ? `<div class="warnbox">No se pudo cerrar el fijo anterior y tampoco deshacer el nuevo: quedaron los dos. Abrí "Editar vigencia y tipo" en el de ${escaparHtml(a.ninera_nombre)} y poné "hasta" el día antes del cambio. (${escaparHtml(e2.message)})</div>`
+        : errBox(e2);
       return;
     }
   }
@@ -1148,7 +1146,7 @@ async function abrirModalVigenciaAsignacion(asigId){
     <div id="vig-warn"></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarVigenciaAsignacion(${argJs(a.id)})">Guardar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarVigenciaAsignacion(${argJs(a.id)}))">Guardar</button>
     </div>`);
   document.getElementById('vig-tipo').value = tipoAsignacion(a);
 }
@@ -1168,12 +1166,56 @@ async function guardarVigenciaAsignacion(asigId){
   if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
   if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
 }
-async function quitarAsignacionFijaDesdeAgenda(asigId){
-  const ok = await confirmarAccion('¿Quitar esta asignación fija? Ya no va a aparecer en la Agenda ni en Hoy.', 'Quitar');
-  if(!ok) return;
-  await quitarAsignacion(asigId);
+/* Terminar un fijo desde una fecha (05/10/2026, paso 5). Antes "Quitar" BORRABA la
+   asignación: desaparecía de todas las semanas, también de las pasadas, y los sittings ya
+   registrados quedaban apuntando a un fijo que no existía (desde la ficha de la familia,
+   además, sin pedir confirmación). Ahora se completa vigente_hasta con el día anterior a la
+   fecha elegida: desde ese día no aparece más en la Agenda ni en Hoy, y lo anterior queda
+   como estaba, con sus registros vinculados. Se abre desde la Agenda y desde la ficha. */
+async function abrirModalTerminarFijo(asigId){
+  const { data: a, error } = await sb.from('asignaciones').select('*, familias(nombre)').eq('id', asigId).single();
+  if(error || !a){ toast('No se pudo abrir el fijo: '+(error?.message||'no existe'), 'bad'); return; }
+  const hoy = todayISO();
+  const minimo = a.vigente_desde ? sumarDiasISO(a.vigente_desde, 1) : null;
+  const sugerida = minimo && minimo > hoy ? minimo : hoy;
+  const diasTxt = (a.dias||[]).map(d=>DIAS_CORTO[d]||d).join(' ');
+  abrirModal(`
+    <h2 style="margin:0 0 4px;">Terminar el fijo</h2>
+    <div class="helper" style="margin-bottom:14px;">${escaparHtml(a.familias?.nombre||'(familia)')} · ${escaparHtml(a.ninera_nombre)} · ${diasTxt||'sin días'} · vigente ${textoVigencia(a)}</div>
+    <div class="field"><label>Deja de correr desde</label><input type="date" id="terminar-desde" value="${sugerida}"${minimo?` min="${minimo}"`:''}></div>
+    <div class="helper">Desde ese día el fijo ya no aparece en la Agenda ni en Hoy. Lo anterior, y los sittings que ya están registrados, quedan como están.</div>
+    <div id="terminar-warn"></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn danger" onclick="conGuardado(this, ()=>terminarFijoDesde(${argJs(a.id)}))">Terminar el fijo</button>
+    </div>`);
+}
+async function terminarFijoDesde(asigId){
+  const warn = document.getElementById('terminar-warn');
+  const desde = document.getElementById('terminar-desde')?.value;
+  if(!desde){ warn.innerHTML = '<div class="warnbox">Elegí desde qué día deja de correr.</div>'; return; }
+  const { data: a, error: e0 } = await sb.from('asignaciones').select('*').eq('id', asigId).single();
+  if(e0 || !a){ warn.innerHTML = errBox(e0 || 'El fijo ya no existe.'); return; }
+  if(asignacionesSinVigencia || !('vigente_desde' in a)){
+    warn.innerHTML = '<div class="warnbox">La base todavía no tiene vigencia de los fijos (falta la migración). Avisale a Diego.</div>';
+    return;
+  }
+  const fmt = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
+  if(a.vigente_desde && desde <= a.vigente_desde){
+    warn.innerHTML = `<div class="warnbox">Este fijo empezó el ${fmt(a.vigente_desde)}: elegí un día posterior. Si la fecha de inicio estaba mal, corregila con "Editar vigencia y tipo".</div>`;
+    return;
+  }
+  const hasta = sumarDiasISO(desde, -1);
+  if(a.vigente_hasta && a.vigente_hasta <= hasta){
+    warn.innerHTML = `<div class="warnbox">Este fijo ya termina el ${fmt(a.vigente_hasta)}.</div>`;
+    return;
+  }
+  const { error } = await sb.from('asignaciones').update({vigente_hasta: hasta}).eq('id', asigId);
+  if(error){ warn.innerHTML = errBox(error); return; }
   cerrarModal();
-  cargarAgendaSolicitudes();
+  toast(`Listo: el fijo corre hasta el ${fmt(hasta)}. Desde el ${fmt(desde)} ya no aparece en la Agenda.`);
+  if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
+  if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
 }
 function abrirModalRegistroDesdeAgenda(s){
   const horario = s.termina_dia_siguiente
@@ -1187,7 +1229,7 @@ function abrirModalRegistroDesdeAgenda(s){
       ${s.cobro_familia ? `<div class="helper">Cobro a la familia: $${Number(s.cobro_familia).toLocaleString('es-UY')}</div>` : ''}
     </div>
     <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="editarRegistroDesdeAgenda(${argJs(s._regId)})">Editar este registro</button>
-    <button class="btn danger" style="width:100%;" onclick="eliminarRegistroDesdeAgenda(${argJs(s._regId)})">Eliminar este registro</button>
+    <button class="btn danger" style="width:100%;" onclick="conGuardado(this, ()=>eliminarRegistroDesdeAgenda(${argJs(s._regId)}))">Eliminar este registro</button>
   `;
   abrirModal(cuerpo);
 }

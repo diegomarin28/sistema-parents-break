@@ -150,7 +150,11 @@ function nuevoId() { secuenciaId++; return `00000000-0000-4000-9000-${String(sec
 async function abrirApp(page, opciones = {}) {
   const { datos = {}, sesion = true, ahora = '2026-10-04T12:00:00-03:00', ruta = '/', baseSinMigrar = false } = opciones;
   const db = structuredClone({ ...datosBase(), ...datos });
-  const estado = { escrituras: [], errores: [], noSimulados: [], db };
+  // demoraEscrituras (ms) y fallar(pedido) se pueden cambiar en medio del test: sirven para
+  // simular una base lenta (doble toque) o que falle un guardado. fallar recibe
+  // {tabla, metodo, cuerpo} y devuelve undefined (anda), 'red' (se corta la conexión) o
+  // {status, message} (Supabase responde con error).
+  const estado = { escrituras: [], errores: [], noSimulados: [], db, demoraEscrituras: 0, fallar: null };
 
   page.on('console', m => { if (m.type() === 'error') estado.errores.push('consola: ' + m.text()); });
   page.on('pageerror', e => estado.errores.push('excepción: ' + e.message));
@@ -231,6 +235,13 @@ async function abrirApp(page, opciones = {}) {
     }
 
     const cuerpo = req.postData() ? JSON.parse(req.postData()) : null;
+    if (estado.demoraEscrituras) await new Promise(r => setTimeout(r, estado.demoraEscrituras));
+    const falla = estado.fallar && estado.fallar({ tabla, metodo, cuerpo, params: Object.fromEntries(params) });
+    if (falla === 'red') { estado.fallidas = (estado.fallidas || 0) + 1; return route.abort('failed'); }
+    if (falla) {
+      estado.fallidas = (estado.fallidas || 0) + 1;
+      return route.fulfill({ status: falla.status || 500, json: { code: falla.code || 'XX000', message: falla.message || 'falla simulada' } });
+    }
     estado.escrituras.push({ tabla, metodo, params: Object.fromEntries(params), cuerpo });
     let afectadas = [];
     if (metodo === 'POST') {

@@ -415,7 +415,7 @@ function sitFormHTML(){
     <div id="sit-sin-tarifa-box"></div>
     <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="sit-notas"></textarea></div>
     <div class="actions">
-      <button class="btn primary" onclick="guardarSitting()">${sitEditId ? 'Guardar cambios' : 'Guardar registro'}</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarSitting())">${sitEditId ? 'Guardar cambios' : 'Guardar registro'}</button>
       <div style="margin-left:auto;align-self:center;font-size:13px;color:var(--ink-soft);">Margen: <b id="sit-margen" style="color:var(--good);font-family:'IBM Plex Mono',monospace;">$0</b></div>
     </div>
     ${sitEditId ? `<div id="sit-historial-box" style="margin-top:12px;"><button type="button" class="smallbtn" onclick="verHistorialSitting(${argJs(sitEditId)})">Historial de cambios</button></div>` : ''}
@@ -577,7 +577,7 @@ function onSitFamiliaInput(){
   const val = document.getElementById('sit-familia').value.trim();
   sitFamiliaSel = findFamilia(val);
   const box = document.getElementById('sit-familia-create');
-  box.innerHTML = (val && !sitFamiliaSel) ? `<button type="button" class="createbtn" onclick="crearFamiliaRapida()">+ Crear familia "${escaparHtml(val)}"</button>` : '';
+  box.innerHTML = (val && !sitFamiliaSel) ? `<button type="button" class="createbtn" onclick="conGuardado(this, ()=>crearFamiliaRapida())">+ Crear familia "${escaparHtml(val)}"</button>` : '';
   sitOrigenAuto = true;
   if(sitTipo==='traslado') aplicarDireccionSugerida();
   actualizarCobroPagoPorHorario();
@@ -586,7 +586,7 @@ function onSitNineraInput(){
   const val = document.getElementById('sit-ninera').value.trim();
   sitNineraSel = findNinera(val);
   const box = document.getElementById('sit-ninera-create');
-  box.innerHTML = (val && !sitNineraSel) ? `<button type="button" class="createbtn" onclick="crearNineraRapida()">+ Crear niñera "${escaparHtml(val)}"</button>` : '';
+  box.innerHTML = (val && !sitNineraSel) ? `<button type="button" class="createbtn" onclick="conGuardado(this, ()=>crearNineraRapida())">+ Crear niñera "${escaparHtml(val)}"</button>` : '';
 }
 async function crearFamiliaRapida(){
   const val = document.getElementById('sit-familia').value.trim();
@@ -710,7 +710,7 @@ function abrirModalIncidente(prefill){
     </div>
     <div class="field"><label>Descripción</label><textarea id="inc-descripcion" rows="4" placeholder="Qué pasó, cuándo se enteraron, cómo se resolvió…"></textarea></div>
     <div id="inc-warn"></div>
-    <button class="btn primary" style="width:100%;" onclick="guardarIncidente(${argJs(prefill.sitting_id||'')})">Guardar incidente</button>
+    <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>guardarIncidente(${argJs(prefill.sitting_id||'')}))">Guardar incidente</button>
   `;
   abrirModal(html);
   setTimeout(()=>{
@@ -784,7 +784,7 @@ function renderIncidentesLista(){
           <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
             <span class="badge ${i.tipo==='accidente'?'bad':i.tipo==='queja'?'warn':'brand'}" style="font-size:10.5px;">${i.tipo==='accidente'?'Accidente':i.tipo==='queja'?'Queja':'Otro'}</span>
             <span class="badge ${gravedadClase(i.gravedad)}" style="font-size:10.5px;">${escaparHtml(i.gravedad)}</span>
-            <button class="smallbtn danger" onclick="eliminarIncidente(${argJs(i.id)})">Eliminar</button>
+            <button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarIncidente(${argJs(i.id)}))">Eliminar</button>
           </div>
         </div>`;
       }).join('')}
@@ -832,7 +832,7 @@ async function renderIncidentesEnFicha(containerId, tipo, id, nombre){
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
           <span class="badge ${i.tipo==='accidente'?'bad':i.tipo==='queja'?'warn':'brand'}" style="font-size:10px;">${i.tipo==='accidente'?'Accidente':i.tipo==='queja'?'Queja':'Otro'}</span>
           <span class="badge ${i.gravedad==='grave'?'bad':i.gravedad==='moderado'?'warn':'good'}" style="font-size:10px;">${escaparHtml(i.gravedad)}</span>
-          <button class="smallbtn danger" onclick="eliminarIncidenteFicha(${argJs(i.id)},${argJs(containerId)},${argJs(tipo)},${argJs(id||'')},${argJs(nombre||'')})">Eliminar</button>
+          <button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarIncidenteFicha(${argJs(i.id)},${argJs(containerId)},${argJs(tipo)},${argJs(id||'')},${argJs(nombre||'')}))">Eliminar</button>
         </div>
       </div>`;
     }).join('')}
@@ -1073,7 +1073,7 @@ function abrirModalTarifaTraslado(){
     <div class="field" style="margin-top:6px;"><label>Margen premium (multiplicador fijo)</label><input type="number" step="0.01" id="tar-premium" value="${cfg.margen_premium??1}"></div>
     <div class="field" style="margin-top:6px;"><label>Margen para Parents’ Break (% que se descuenta al precio de la niñera)</label><input type="number" step="1" id="tar-margen-ninera" value="${Math.round((cfg.margen_ninera??0.15)*100)}"></div>
     <div id="tar-warn"></div>
-    <button class="btn primary" style="width:100%;margin-top:8px;" onclick="guardarTarifaTraslado()">Guardar tarifa</button>
+    <button class="btn primary" style="width:100%;margin-top:8px;" onclick="conGuardado(this, ()=>guardarTarifaTraslado())">Guardar tarifa</button>
   `;
   abrirModal(html);
 }
@@ -1157,7 +1157,7 @@ function actualizarCobroPagoPorHorario(){
             ${cobroH ? '' : `<div class="field"><label>Cobro por hora</label><input type="number" id="sit-tarifa-cobro-nueva" placeholder="ej. 400"></div>`}
             <div class="field"><label>Pago por hora</label><input type="number" id="sit-tarifa-pago-nueva" placeholder="ej. 280"></div>
           </div>
-          <button type="button" class="smallbtn" onclick="guardarTarifaFamiliaDesdeSitting()">Guardar tarifa y calcular</button>`;
+          <button type="button" class="smallbtn" onclick="conGuardado(this, ()=>guardarTarifaFamiliaDesdeSitting())">Guardar tarifa y calcular</button>`;
       } else if(sinTarifaBox){
         sinTarifaBox.innerHTML = '';
       }
@@ -1406,7 +1406,7 @@ function renderSitListaTabla(){
     <tbody>${itemsMostrados.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${escaparHtml(r.ninera_nombre)}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm(${argJs(r.id)})">Editar</button><button class="smallbtn" onclick="abrirModalIncidente(${argJs({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha})})">Incidente</button><button class="smallbtn danger" onclick="eliminarSitting(${argJs(r.id)})">Eliminar</button></div></td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${escaparHtml(r.ninera_nombre)}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm(${argJs(r.id)})">Editar</button><button class="smallbtn" onclick="abrirModalIncidente(${argJs({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha})})">Incidente</button><button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarSitting(${argJs(r.id)}))">Eliminar</button></div></td></tr>`;
     }).join('')}</tbody></table></div>
     ${hayMas ? `<button class="smallbtn" onclick="sitListaMostrar+=15;renderSitListaTabla();" style="margin-top:10px;">Mostrar más</button>` : ''}
   `;

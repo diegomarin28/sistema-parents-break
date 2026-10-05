@@ -157,9 +157,17 @@ async function reescribirZonasConTexto(texto){
   const tiene = x => zonasDe(x.zona).some(z=>claveZona(z)===k);
   const afectadasNin = (ninierasItems||[]).filter(tiene);
   const afectadasFam = (familiasItems||[]).filter(tiene);
-  for(const n of afectadasNin){ await sb.from('ninieras').update({zona: textoZonas(n.zona)}).eq('id', n.id); }
-  for(const f of afectadasFam){ await sb.from('familias').update({zona: textoZonas(f.zona)}).eq('id', f.id); }
-  return afectadasNin.length + afectadasFam.length;
+  // Cuenta solo las que se guardaron de verdad y avisa si alguna falló (antes se ignoraba el
+  // error y el aviso decía que se corrigieron todas).
+  let corregidas = 0, fallidas = 0;
+  for(const [tabla, filas] of [['ninieras', afectadasNin], ['familias', afectadasFam]]){
+    for(const x of filas){
+      const { error } = await sb.from(tabla).update({zona: textoZonas(x.zona)}).eq('id', x.id);
+      if(error) fallidas++; else corregidas++;
+    }
+  }
+  if(fallidas) toast(`No se pudo corregir la zona en ${fallidas} ficha${fallidas===1?'':'s'}. Reintentá en un momento.`, 'bad');
+  return corregidas;
 }
 async function refrescarTrasCambioDeZonas(){
   if(typeof cargarNinieras==='function' && document.getElementById('ninierasgrid')) await cargarNinieras();
@@ -205,8 +213,8 @@ function renderZonasNuevasPanel(){
           <option value="">¿De qué zona es?</option>
           ${listaZonas().map(g=>`<option value="${escaparHtml(g.id)}">${escaparHtml(g.nombre)}</option>`).join('')}
         </select>
-        <button class="smallbtn" onclick="accionAsignarBarrioAZona(${argJs(z)},'zn-sel-${i}')">Asignar</button>
-        <button class="smallbtn" onclick="accionCrearZonaConBarrio(${argJs(z)})">Crear zona nueva</button>
+        <button class="smallbtn" onclick="conGuardado(this, ()=>accionAsignarBarrioAZona(${argJs(z)},'zn-sel-${i}'))">Asignar</button>
+        <button class="smallbtn" onclick="conGuardado(this, ()=>accionCrearZonaConBarrio(${argJs(z)}))">Crear zona nueva</button>
       </div>`).join('')}
   </div>`;
 }
@@ -351,7 +359,7 @@ function abrirModalGruposZona(idPrefixOrigen){
     <div id="zonagrupos-list" style="margin-top:10px;">${listaZonas().map(filaZonaGrupo).join('') || '<div class="empty">Todavía no hay zonas.</div>'}</div>
     <button type="button" class="smallbtn" onclick="agregarFilaZonaGrupo()" style="margin-bottom:10px;">+ Agregar zona</button>
     <div id="zonagrupos-warn"></div>
-    <button class="btn primary" style="width:100%;" onclick="guardarGruposZona()">Guardar</button>
+    <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>guardarGruposZona())">Guardar</button>
   `;
   abrirModal(html);
 }
@@ -431,7 +439,10 @@ async function guardarGruposZona(){
   // Zonas que estaban antes y ya no aparecen (se borraron con "Eliminar zona"). Las fichas
   // que la tenían conservan el texto y aparecen en "Barrios sin zona" para reasignarlas.
   const aBorrar = [...anteriores.keys()].filter(id=>!idsVistos.includes(id));
-  for(const id of aBorrar){ await sb.from('zona_grupos').delete().eq('id', id); }
+  for(const id of aBorrar){
+    const { error } = await sb.from('zona_grupos').delete().eq('id', id);
+    if(error){ warn.innerHTML = errBox(error); await cargarZonaGrupos(); return; }
+  }
   await cargarZonaGrupos();
   // Zona renombrada: se cambia el nombre en todas las fichas que la tenían guardada.
   let corregidas = 0;
@@ -449,16 +460,18 @@ async function renombrarZonaEnFichas(viejo, nuevo){
   const kv = claveZona(viejo);
   const cambiar = txt => zonasDe(txt).some(z=>claveZona(z)===kv) ? textoZonas(zonasDe(txt).map(z=>claveZona(z)===kv ? nuevo : z).join('/')) : null;
   const objetivos = [['ninieras','zona'],['familias','zona'],['solicitudes','zona'],['candidatas','zona'],['candidatas','zona_sitting']];
-  let total = 0;
+  let total = 0, fallidas = 0;
   for(const [tabla, col] of objetivos){
-    const { data } = await sb.from(tabla).select(`id,${col}`).ilike(col, `%${viejo.replace(/[%_]/g,'')}%`);
+    const { data, error: eLeer } = await sb.from(tabla).select(`id,${col}`).ilike(col, `%${viejo.replace(/[%_]/g,'')}%`);
+    if(eLeer){ fallidas++; continue; }
     for(const r of (data||[])){
       const nuevoTxt = cambiar(r[col]);
       if(nuevoTxt===null || nuevoTxt===r[col]) continue;
       const { error } = await sb.from(tabla).update({[col]: nuevoTxt}).eq('id', r.id);
-      if(!error) total++;
+      if(error) fallidas++; else total++;
     }
   }
+  if(fallidas) toast(`No se pudo cambiar el nombre de la zona en algunas fichas (${fallidas}). Volvé a guardar las zonas.`, 'bad');
   return total;
 }
 /* ============================================================
@@ -912,6 +925,37 @@ async function sbLeer(consulta, queCosa='los datos', fallback=null){
    sueltas no chequeaban error en absoluto (fallaban en silencio, la pantalla seguía como si
    hubiera funcionado) o usaban un alert() feo del navegador en vez del aviso normal de la app.
    Uso: if(!(await sbGuardar(sb.from('solicitudes').update({...}).eq('id', id), 'la solicitud'))) return; */
+/* Doble toque en "Guardar" (05/10/2026, paso 5). El 19/09 quedaron cuatro sittings iguales
+   guardados en medio segundo: cada toque disparaba otro insert. Todo botón que escribe en la
+   base llama a su función a través de conGuardado(this, ()=>guardarX(...)): el botón queda
+   deshabilitado y con la ruedita hasta que el guardado termina (bien o mal), y un segundo
+   toque mientras tanto no hace nada. La función de adentro tiene que devolver la promesa
+   (async/await) para que el botón se libere recién al final. */
+async function conGuardado(btn, accion){
+  if(btn && btn.dataset.guardando) return;
+  let htmlAntes = null;
+  if(btn){
+    btn.dataset.guardando = '1';
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    htmlAntes = btn.innerHTML;
+    const fondoOscuro = btn.classList.contains('primary') || (btn.classList.contains('btn') && btn.classList.contains('danger'));
+    // El ícono de algunos botones (tacho) se reemplaza; el texto queda, con la ruedita adelante.
+    const texto = btn.textContent.trim();
+    btn.innerHTML = `<span class="spinner${fondoOscuro?'':' dark'}"></span>${texto ? ' '+escaparHtml(texto) : ''}`;
+  }
+  try {
+    return await accion();
+  } finally {
+    // Si el modal se cerró, el botón ya no está en pantalla y no hay nada que restaurar.
+    if(btn && btn.isConnected){
+      btn.innerHTML = htmlAntes;
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+      delete btn.dataset.guardando;
+    }
+  }
+}
 async function sbGuardar(consulta, queCosa='los cambios'){
   try {
     const { error } = await consulta;
@@ -1386,7 +1430,7 @@ function abrirModalEditarPreguntas(){
     <div class="helper">Se usan en la ficha de entrevista, agrupadas por competencia. Usá ¿...? en las que sean preguntas de verdad.</div>
     ${COMPETENCIAS.filter(c=>!COMP_FINALES_KEYS.includes(c.key)).map(bloque).join('')}
     <div id="epreguntas-warn"></div>
-    <button class="btn primary" style="width:100%;" onclick="guardarPreguntasEntrevista()">Guardar</button>
+    <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>guardarPreguntasEntrevista())">Guardar</button>
   `;
   abrirModal(html);
 }
@@ -1419,7 +1463,10 @@ async function guardarPreguntasEntrevista(){
     }
   }
   const idsPrevios = (entrevistaPreguntasCache||[]).map(p=>p.id);
-  for(const id of idsPrevios.filter(id=>!idsVistos.includes(id))){ await sb.from('entrevista_preguntas').delete().eq('id', id); }
+  for(const id of idsPrevios.filter(id=>!idsVistos.includes(id))){
+    const { error } = await sb.from('entrevista_preguntas').delete().eq('id', id);
+    if(error){ warn.innerHTML = errBox(error); await cargarEntrevistaPreguntas(); return; }
+  }
   await cargarEntrevistaPreguntas();
   cerrarModal();
   if(typeof renderCompetencias==='function' && document.getElementById('competencias')) renderCompetencias();

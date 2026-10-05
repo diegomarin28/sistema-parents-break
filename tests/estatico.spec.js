@@ -30,6 +30,25 @@ test.describe('estático', () => {
     expect(malos).toEqual([]);
   });
 
+  test('todo botón que escribe en la base pasa por conGuardado (sin doble toque)', () => {
+    // 05/10/2026: un doble toque en Guardar disparaba dos inserts. Las funciones de abajo
+    // escriben en la base; un <button> que las llama tiene que hacerlo con
+    // conGuardado(this, ()=>...). Login y contraseñas manejan su botón por su cuenta.
+    const ESCRIBEN = /^(guardar\w*|add(Asignacion|Contrato|Familia|FechaMarketing|Intake)|contratar|crear(FamiliaRapida|NineraRapida)|registrar(ExcepcionFija|SittingFijoDeHoy|PasskeyDispositivo)|confirmar(Ninera|ReemplazoFijoHoy)|cambiarNineraAsignacionFija|cancelarSolicitud|marcar(GrupoResuelto|ContactadaRiesgo)|resolverCambioTelefono|repetirTemporadaAnterior|descartarIntake|eliminar\w+|terminarFijoDesde|accion(AsignarBarrioAZona|CrearZonaConBarrio)|cambiarEstadoPoolEnrique|procesarExtractoConciliacion|activarPushNotificaciones)$/;
+    const PROPIOS = new Set(['guardarNuevaContrasena']);
+    const malos = [];
+    for (const archivo of ORDEN_SCRIPTS) {
+      leer(archivo).split('\n').forEach((l, i) => {
+        for (const m of l.matchAll(/<button\b[^<>]*?\bonclick="([^"]*)"/g)) {
+          const llamadas = [...m[1].matchAll(/(?<![\w.])([A-Za-z_]\w*)\(/g)].map(x => x[1]);
+          const escribe = llamadas.filter(n => ESCRIBEN.test(n) && !PROPIOS.has(n));
+          if (escribe.length && !m[1].startsWith('conGuardado(this, ()=>')) malos.push(`${archivo}:${i + 1}: ${escribe.join(', ')}`);
+        }
+      });
+    }
+    expect(malos).toEqual([]);
+  });
+
   test('index.html carga los scripts en el orden acordado (bootstrap.js último)', () => {
     expect(scriptsDeIndex()).toEqual(ORDEN_SCRIPTS);
     expect(leer('index.html')).not.toMatch(/type=["']module["']/);

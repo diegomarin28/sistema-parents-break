@@ -140,7 +140,7 @@ function renderUtilizacionNinieras(){
               ${n.telefono
                 ? `<button class="smallbtn" onclick="enviarWhatsappNinera(${argJs(n.id)})">Enviar por WhatsApp</button>`
                 : `<span class="helper" style="margin:0;">Sin teléfono cargado</span>`}
-              <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="eliminarNinera(${argJs(n.id)})">Eliminar niñera</button>
+              <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="conGuardado(this, ()=>eliminarNinera(${argJs(n.id)}))">Eliminar niñera</button>
             </div>`;
           }).join('')}
         </div>` : ''}` : ''}
@@ -241,7 +241,7 @@ function filtrarNinieras(){
         <button class="smallbtn" onclick="verNinera(${argJs(n.id)})">Ver ficha</button>
         <button class="smallbtn" onclick="editarNinera(${argJs(n.id)})">Editar</button>
         <button class="smallbtn" onclick="generarMensajeCV(${argJs(n.id)})">CV</button>
-        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarNinera(${argJs(n.id)})" title="Eliminar niñera" aria-label="Eliminar niñera">${ICONS.trash}</button>
+        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="conGuardado(this, ()=>eliminarNinera(${argJs(n.id)}))" title="Eliminar niñera" aria-label="Eliminar niñera">${ICONS.trash}</button>
       </div>
     </div>`;
   grid.innerHTML = countMsg + '<div class="person-list">' + completas.map(filaNinera).join('') + '</div>'
@@ -376,8 +376,8 @@ function htmlCambioTelefono(n){
         <div>Nuevo: <span style="font-family:'IBM Plex Mono',monospace;">${escaparHtml(n.telefono_pendiente)}</span>. Ahora: <span style="font-family:'IBM Plex Mono',monospace;">${escaparHtml(n.telefono||'sin celular')}</span></div>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="btn ghost" style="padding:7px 14px;font-size:12.5px;" onclick="resolverCambioTelefono(${argJs(n.id)}, false)">Descartar</button>
-        <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="resolverCambioTelefono(${argJs(n.id)}, true)">Aceptar</button>
+        <button class="btn ghost" style="padding:7px 14px;font-size:12.5px;" onclick="conGuardado(this, ()=>resolverCambioTelefono(${argJs(n.id)}, false))">Descartar</button>
+        <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="conGuardado(this, ()=>resolverCambioTelefono(${argJs(n.id)}, true))">Aceptar</button>
       </div>
     </div>`;
 }
@@ -475,7 +475,7 @@ function editarNinera(id){
     <button class="btn" type="button" style="width:100%;margin-top:10px;" onclick="abrirSelectorCategoriaNinera()">+ Agregar categorías</button>
     <div class="confirmbtns" style="margin-top:18px;">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionNinera(${argJs(id)})">Guardar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarEdicionNinera(${argJs(id)}))">Guardar</button>
     </div>`);
   ninFotoUrlPendiente = n.foto || null;
   // precargar los campos de categorías que ya tenían datos cargados —
@@ -631,6 +631,7 @@ async function guardarEdicionNinera(id){
       extra[f.key] = null;
     }
   });
+  let errExtra = null; // si falla lo de la ficha de candidata, se avisa en vez de "Cambios guardados"
   if(Object.keys(extra).length){
     const n = ninierasItems.find(x=>x.id===id);
     let candidataId = n?.candidata_id;
@@ -639,15 +640,19 @@ async function guardarEdicionNinera(id){
       const { data:nuevaCand, error:e2 } = await sb.from('candidatas')
         .insert({ nombre: partes[0]||cambios.nombre, apellido: partes.slice(1).join(' ')||null, estado:'contratada', tipo: cambios.tipo, ...extra })
         .select().single();
-      if(e2){ toast('Se guardó lo básico, pero no las categorías extra: '+e2.message, 'bad'); }
-      else { await sb.from('ninieras').update({candidata_id: nuevaCand.id}).eq('id', id); }
+      if(e2) errExtra = e2;
+      else {
+        const { error:e4 } = await sb.from('ninieras').update({candidata_id: nuevaCand.id}).eq('id', id);
+        if(e4) errExtra = e4;
+      }
     } else {
       const { error:e3 } = await sb.from('candidatas').update(extra).eq('id', candidataId);
-      if(e3){ toast('Se guardó lo básico, pero no las categorías extra: '+e3.message, 'bad'); }
+      if(e3) errExtra = e3;
     }
   }
   cerrarModal();
-  toast('Cambios guardados.');
+  if(errExtra) toast('Se guardó lo básico, pero no las categorías extra: '+errExtra.message, 'bad');
+  else toast('Cambios guardados.');
   const scrollN1 = guardarScrollMainarea();
   await cargarNinieras();
   restaurarScrollMainarea(scrollN1);
@@ -713,7 +718,8 @@ async function copiarMensajeCV(id){
 // más adelante si cumple años y el CV queda desactualizado. Se asume optimista: si pidió el
 // mensaje, es porque va a generar el CV ahora — no hace falta que confirme de vuelta.
 async function marcarCvGenerado(id){
-  await sb.from('ninieras').update({ cv_generado_en: todayISO() }).eq('id', id);
+  const { error } = await sb.from('ninieras').update({ cv_generado_en: todayISO() }).eq('id', id);
+  if(error){ toast('No se pudo anotar la fecha del CV: '+error.message, 'bad'); return; }
   const n = ninierasItems.find(x=>x.id===id);
   if(n) n.cv_generado_en = todayISO();
 }
@@ -1011,7 +1017,7 @@ function filaTemporadaPanel(n){
           ${n.temporada_comentario ? `<div class="helper" style="margin:2px 0 0;">Comentario: ${escaparHtml(n.temporada_comentario)}</div>` : ''}
         </div>
         <div class="temp-acciones">
-          ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior(${argJs(n.id)})">Repetir lo del año pasado</button>` : ''}
+          ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="conGuardado(this, ()=>repetirTemporadaAnterior(${argJs(n.id)}))">Repetir lo del año pasado</button>` : ''}
           <button type="button" class="smallbtn" onclick="pedirTemporadaWhatsapp(${argJs(n.id)})">Pedirle por WhatsApp</button>
           <button type="button" class="smallbtn" onclick="setTodasQuincenas(${argJs(prefix)}, true)">Todo el año</button>
           <button type="button" class="smallbtn" onclick="setTodasQuincenas(${argJs(prefix)}, false)">No va</button>
@@ -1019,7 +1025,7 @@ function filaTemporadaPanel(n){
       </div>
       ${htmlEditorTemporada(prefix, grupos, n.temporada)}
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-        <button type="button" class="smallbtn" data-temp-guardar="${prefix}" style="display:${est==='ok'?'none':''};background:var(--accent);color:#fff;border-color:var(--accent);" onclick="guardarTemporadaPanel(${argJs(n.id)})">${est==='ok'?'Guardar cambios':'Guardar temporada'}</button>
+        <button type="button" class="smallbtn" data-temp-guardar="${prefix}" style="display:${est==='ok'?'none':''};background:var(--accent);color:#fff;border-color:var(--accent);" onclick="conGuardado(this, ()=>guardarTemporadaPanel(${argJs(n.id)}))">${est==='ok'?'Guardar cambios':'Guardar temporada'}</button>
       </div>
     </div>`;
 }
@@ -1098,14 +1104,14 @@ function abrirPasoTemporada(id){
       : 'Todavía no sabemos si veranea afuera de Montevideo. Marcá las quincenas en que está en Punta del Este, o dejalo vacío si no va.'}</div>
     ${htmlEditorTemporada('paso-temp', gruposParaEditor(n), n.temporada)}
     <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-      ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior(${argJs(id)}, ()=>editarNinera(${argJs(id)}))">Repetir lo del año pasado</button>` : ''}
+      ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="conGuardado(this, ()=>repetirTemporadaAnterior(${argJs(id)}, ()=>editarNinera(${argJs(id)})))">Repetir lo del año pasado</button>` : ''}
       <button type="button" class="smallbtn" onclick="setTodasQuincenas('paso-temp', true)">Todo el año</button>
       <button type="button" class="smallbtn" onclick="setTodasQuincenas('paso-temp', false)">No va</button>
       <button type="button" class="smallbtn" onclick="pedirTemporadaWhatsapp(${argJs(id)})">Pedirle por WhatsApp</button>
     </div>
     <div class="confirmbtns" style="margin-top:16px;">
       <button class="btn ghost" onclick="omitirPasoTemporada(${argJs(id)})">Omitir por ahora</button>
-      <button class="btn primary" onclick="guardarPasoTemporada(${argJs(id)})">Guardar y seguir</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarPasoTemporada(${argJs(id)}))">Guardar y seguir</button>
     </div>`);
 }
 function omitirPasoTemporada(id){ ninTempOmitidas.add(id); editarNinera(id); }

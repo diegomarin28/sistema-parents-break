@@ -81,7 +81,8 @@ function renderCarsittingPendientes(){
 }
 async function marcarCarsittingMailEnviado(origen, id){
   const tabla = origen==='ninera' ? 'ninieras' : 'candidatas';
-  await sb.from(tabla).update({carsitting_mail_enviado_at: new Date().toISOString()}).eq('id', id);
+  const { error } = await sb.from(tabla).update({carsitting_mail_enviado_at: new Date().toISOString()}).eq('id', id);
+  if(error) toast('El mail se abrió, pero no se pudo anotar que se mandó: '+error.message, 'bad');
 }
 function errBox(e){ return `<div class="warnbox">Error de conexión con la base: ${escaparHtml(e?.message||e)}</div>`; }
 
@@ -135,7 +136,7 @@ function abrirModalNuevaCandidata(){
     <div class="field"><label>Tipo</label><select id="in-tipo"><option>Niñera</option><option>Traslados</option><option>Ambas</option></select></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="addIntake()">Agregar candidata</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>addIntake())">Agregar candidata</button>
     </div>`);
 }
 async function addIntake(){
@@ -175,7 +176,7 @@ async function loadIntake(){
       <div class="rowbtns">
         <button class="smallbtn" onclick="verFichaIntake(${i})">Ver ficha</button>
         <button class="smallbtn" onclick="agendarDesdeIntake(${i})">Agendar</button>
-        <button class="smallbtn danger" onclick="descartarIntake(${argJs(c.id)})">Descartar</button>
+        <button class="smallbtn danger" onclick="conGuardado(this, ()=>descartarIntake(${argJs(c.id)}))">Descartar</button>
       </div>
     </div>`).join('') + '</div>';
 }
@@ -302,7 +303,7 @@ async function renderEntrevista(body){
     <div class="card"><h2>Notas finales</h2><textarea id="f-notas" placeholder="Impresión general…"></textarea></div>
     <div class="card resultcard" id="resultado" style="display:none;"></div>
     <div class="actions">
-      <button class="btn primary" id="btnGuardar" onclick="guardarCandidata()">Guardar candidata</button>
+      <button class="btn primary" id="btnGuardar" onclick="conGuardado(this, ()=>guardarCandidata())">Guardar candidata</button>
       <button class="btn ghost" onclick="window.print()">Imprimir</button>
       <button class="btn ghost" onclick="limpiarForm()">Vaciar formulario</button>
     </div>
@@ -517,9 +518,9 @@ function verDetalle(i){
       ${htmlBarriosMarcados([cd.zona, cd.zona_sitting].filter(Boolean).join('/'), unirBarrios(cd.zona_barrios, cd.zona_sitting_barrios), 'En el formulario marcó')}
       <div id="hire-temp-wrap"></div>
       <div class="helper">El precio por hora se define por familia en la sección "Familias".</div>
-      <button class="btn primary" onclick="contratar(${argJs(cd.id)})">Pasar a Niñeras</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>contratar(${argJs(cd.id)}))">Pasar a Niñeras</button>
     </div>`}
-    <div class="actions"><button class="btn danger" onclick="eliminarCandidata(${argJs(cd.id)})">Eliminar candidata</button></div>
+    <div class="actions"><button class="btn danger" onclick="conGuardado(this, ()=>eliminarCandidata(${argJs(cd.id)}))">Eliminar candidata</button></div>
   `);
   cargarCarsittingSeccion(cd.nombre, 'cg-carsitting', cd.tipo, cd.mail);
   if(cd.estado!=='contratada') pintarContratarTemporada(cd);
@@ -586,8 +587,8 @@ async function contratar(candidataId){
   const { error: e1 } = await sb.from('ninieras').insert(ninera);
   if(e1){ toast('No se pudo contratar: '+e1.message,'bad'); return; }
   const { error: e2 } = await sb.from('candidatas').update({ estado:'contratada' }).eq('id', candidataId);
-  if(e2){ toast('Niñera creada, pero no se pudo actualizar el estado: '+e2.message,'bad'); }
-  toast('Pasó a Niñeras.');
+  if(e2) toast('Niñera creada, pero no se pudo actualizar el estado: '+e2.message,'bad');
+  else toast('Pasó a Niñeras.');
   cerrarModal();
   cargarGuardadas();
 }

@@ -26,7 +26,7 @@ test.describe('E1: conciliación con extracto Itaú', () => {
     const antes = await page.locator('#fin-summary').innerText();
     const csv = 'Fecha;Concepto;Crédito\n20/09/2026;TRANSF 0001234567 FAMILIA;2280\n21/09/2026;CAMBIOS VARIOS;100\n';
     await page.setInputFiles('#fin-conciliar-file', { name: 'extracto.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
-    await page.locator('button[onclick^="procesarExtractoConciliacion"]').click();
+    await page.locator('button[onclick*="procesarExtractoConciliacion"]').click();
     await expect(page.locator('#fin-conciliar-resultado')).toContainText('créditos leídos');
     await expect(page.locator('#fin-conciliar-resultado')).toContainText('Familia Prueba Uno');
     expect(e.escrituras.map(w => w.tabla)).toEqual(['app_config']);

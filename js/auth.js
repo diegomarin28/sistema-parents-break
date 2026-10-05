@@ -47,8 +47,6 @@ async function boot(){
   const { data } = await sb.auth.getSession();
   session = data.session;
   const yaPintadaConEstaSesion = !!(sesionGuardada && session && session.user?.id === sesionGuardada.user?.id);
-  // Autogenera los sittings de horarios fijos para esta semana si todavía no existen — silencioso, no bloquea el boot.
-  if(session && typeof autogenerarSittingsFijosSemana === 'function') autogenerarSittingsFijosSemana();
   sb.auth.onAuthStateChange((event, s) => {
     const mismaSesionQueAntes = !!(session && s && session.user?.id === s.user?.id);
     session = s;
@@ -306,9 +304,9 @@ async function gestionarPasskeys(){
           <div>${escaparHtml(p.friendly_name || 'Dispositivo')}</div>
           <div class="helper" style="margin:0;">Activado ${new Date(p.created_at).toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'})}</div>
         </div>
-        <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="eliminarPasskey(${argJs(p.id)})">Borrar</button>
+        <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="conGuardado(this, ()=>eliminarPasskey(${argJs(p.id)}))">Borrar</button>
       </div>`).join('')}
-    <button class="btn" type="button" style="width:100%;margin-top:14px;" onclick="registrarPasskeyDispositivo()">+ Activar en este dispositivo</button>`;
+    <button class="btn" type="button" style="width:100%;margin-top:14px;" onclick="conGuardado(this, ()=>registrarPasskeyDispositivo())">+ Activar en este dispositivo</button>`;
 }
 async function eliminarPasskey(id){
   if(!(await confirmarAccion('¿Borrar este Face ID/Touch ID? Ese dispositivo va a tener que entrar con contraseña.'))) return;
