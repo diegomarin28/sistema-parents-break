@@ -42,6 +42,14 @@ marketing → postulantes → ninieras → familias → sittings → intermediac
    configuración externa: no auditarla.
 
 ## Base de producción
+- **Esto es producción.** En la base real nunca se escriben datos de prueba: los tests corren
+  solo contra el simulador.
+- **El repo es público** (GitHub Pages publica desde `main`). En el repo, los tests, los
+  comentarios, los commits y las descripciones de PR no van nombres, ids, cuentas,
+  teléfonos ni montos reales de familias, niñeras o candidatas. Los datos de los tests son
+  inventados ("Familia Prueba Uno", "Ana Ficticia", cuentas 0001234567...). Los extractos
+  bancarios reales se usan solo en una carpeta temporal y nunca se commitean, ni recortados.
+  Una migración que necesita tocar filas puntuales las nombra solo por id.
 - Para diagnosticar se pueden LEER datos de producción (solo lectura).
 - Escribir en producción solo para corregir datos rotos por un bug, y nunca desde tests:
   1. Primero mostrarle a Diego las filas afectadas, cómo quedan antes y después, y el SQL
