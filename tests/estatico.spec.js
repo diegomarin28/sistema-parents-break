@@ -86,6 +86,18 @@ test.describe('estático', () => {
     expect(usos).toEqual([]);
   });
 
+  test('supabase-js se sirve desde el repo, con la versión y el archivo fijados', () => {
+    // 05/10/2026 (E4): antes venía de jsdelivr y si el CDN fallaba la app quedaba en blanco.
+    // Es el dist/umd/supabase.js de @supabase/supabase-js@2.117.2 publicado en npm.
+    const html = leer('index.html');
+    expect(html).toContain('<script src="vendor/supabase-js-2.117.2.umd.js"></script>');
+    expect(html).not.toMatch(/cdn\.jsdelivr\.net/);
+    const sha = require('crypto').createHash('sha256').update(require('fs').readFileSync(path.join(RAIZ, 'vendor/supabase-js-2.117.2.umd.js'))).digest('hex');
+    expect(sha).toBe('59d39487c3589843b410322d8a3d562ce022aba1e5ccb16898ef3fb2a0da2ecd');
+    // Va antes que core.js (que crea el cliente).
+    expect(html.indexOf('vendor/supabase-js')).toBeLessThan(html.indexOf('js/core.js'));
+  });
+
   test('temporada.html sigue redirigiendo al formulario de temporada (está en uso)', () => {
     const html = leer('temporada.html');
     expect(html).toContain("location.replace('https://parentsbreak.pages.dev/temporada' + location.search)");

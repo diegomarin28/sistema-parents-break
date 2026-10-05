@@ -6,7 +6,8 @@ a las familias y niñeras.
 
 ## Stack
 - HTML/CSS/JS vanilla, sin build ni framework. GitHub Pages publica desde `main`.
-- `index.html` = head + CSS + `<div id="app">` + scripts. Todo el HTML de la app lo genera JS.
+- `index.html` = head + CSS + `<div id="app">` (con la pantalla de carga inicial) + scripts.
+  Todo el HTML de la app lo genera JS. supabase-js se carga de `vendor/`, justo antes de core.js.
 - Supabase (proyecto "Parents-break", ref `wvewzamdohrpfhpccvcz`): Postgres + Auth (contraseña
   y passkeys) + RLS solo para usuarios autenticados + Realtime + Storage + Edge Functions.
 - PWA: `manifest.json` + `sw.js`. El service worker solo maneja push y notificationclick: NO
@@ -81,12 +82,13 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/guardados.spec.js`: doble toque, base que falla o sin conexión, cerrar el modal a mitad
   del guardado, terminar un fijo desde una fecha.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
+- `tests/arranque.spec.js`: pantalla de carga, error si no carga supabase-js, "Entrando…".
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
   Ningún test llega a la base real: un pedido sin simular hace fallar el test.
-- supabase-js se sirve desde `tests/vendor/` (la misma versión que `index.html`). En el
-  entorno cloud de Claude, cdn.jsdelivr.net está bloqueado.
+- supabase-js 2.117.2 está en el repo (`vendor/`, desde el 05/10/2026): la app y los tests lo
+  cargan de ahí, sin CDN. `tests/estatico.spec.js` controla la versión y el sha256.
 - El CI corre todo en cada PR (`.github/workflows/tests.yml`).
 - Más adelante: tests de integración contra un proyecto de Supabase gratis aparte (nunca
   producción).

@@ -118,4 +118,4 @@ npm test                          # static checks + smoke tests + known-bug regr
 - `tests/finanzas.spec.js` — monthly summary (invoiced, collected, to collect, to pay, result).
 - `tests/regresiones.spec.js` — reproductions of known bugs. The ones marked `test.fail()` are expected to fail until their fix lands.
 
-Supabase is fully mocked (`tests/support/app.js`) with fictitious data (`tests/support/datos.js`): tests never reach the real database, and any unmocked request fails the test. supabase-js is served from `tests/vendor/` so tests don't depend on the CDN. CI runs the same suite on every pull request (`.github/workflows/tests.yml`).
+Supabase is fully mocked (`tests/support/app.js`) with fictitious data (`tests/support/datos.js`): tests never reach the real database, and any unmocked request fails the test. supabase-js lives in the repo (`vendor/supabase-js-2.117.2.umd.js`) and the app loads it from there, so neither the app nor the tests depend on a CDN. CI runs the same suite on every pull request (`.github/workflows/tests.yml`).

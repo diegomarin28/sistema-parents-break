@@ -26,6 +26,22 @@ const PASSKEY_SOPORTADO = typeof window !== 'undefined' && !!window.PublicKeyCre
 function marcarPostLoginPendiente(){ faceidPendiente = true; try{ localStorage.setItem(LS_POST_LOGIN_PENDIENTE,'1'); }catch(e){} }
 function limpiarPostLoginPendiente(){ faceidPendiente = false; try{ localStorage.removeItem(LS_POST_LOGIN_PENDIENTE); }catch(e){} }
 async function boot(){
+  if(!sb){
+    mostrarErrorArranque('No se pudo conectar con el sistema',
+      'No cargó la librería de conexión con la base (supabase-js). Revisá que haya internet y tocá Reintentar. Si sigue pasando, avisale a Diego.');
+    return;
+  }
+  try{
+    await arrancar();
+  }catch(e){
+    console.error('[boot]', e);
+    // Si la app ya se pintó con la sesión guardada, no se tapa: el error queda en la consola.
+    if(document.getElementById('pantalla-carga') || !document.getElementById('modcontent')){
+      mostrarErrorArranque('No se pudo abrir el sistema', 'Puede ser la conexión. Tocá Reintentar; si sigue pasando, avisale a Diego.');
+    }
+  }
+}
+async function arrancar(){
   if(new URLSearchParams(window.location.search).get('acceso') === 'temporal'){
     esAccesoTemporal = true;
     window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); });
@@ -174,6 +190,8 @@ async function login(){
     return;
   }
   if(!recordar){ window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); }); }
+  // Mientras se revisa Face ID / contraseña pendiente (va a la base), el logo con la ruedita.
+  mostrarPantallaCarga('Entrando…');
   await continuarPostLogin();
 }
 // Cadena de pasos obligatorios después de un login con contraseña exitoso: primero cambio
@@ -192,6 +210,7 @@ async function entrarConPasskey(){
   const btn = document.getElementById('passkeybtn');
   if(btn){ btn.disabled = true; document.getElementById('passkeybtn-label').innerHTML = `<span class="spinner"></span> Verificando…`; }
   const { error } = await sb.auth.signInWithPasskey();
+  if(!error && !session) mostrarPantallaCarga('Entrando…'); // hasta que Supabase avise del login y se pinte la app
   if(error){
     if(btn){ btn.disabled = false; document.getElementById('passkeybtn-label').textContent = 'Entrar con Face ID / Touch ID'; }
     const warn = document.getElementById('loginwarn');
