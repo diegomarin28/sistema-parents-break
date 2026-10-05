@@ -86,6 +86,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
 - `tests/entrevista.spec.js`: bloques del formulario en la entrevista y datos corregidos en la
   ficha de la niñera.
+- `tests/conciliacion.spec.js`: conciliación con el extracto (tildadas, dudosas, confirmar) y
+  lectores por formato. Los extractos de los tests son inventados: nunca uno real, ni recortado.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -126,6 +128,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   la plata ya entró o salió (error E1, 05/10/2026).
 - Candidatas: lo corregido en la entrevista vive en `notas_ficha` y pisa la respuesta del
   formulario; para mostrar datos de una candidata/niñera usar `datosFichaCandidata()` (core.js).
+- Extractos (05/10/2026): leer y conciliar están separados. Cada banco o billetera es un lector
+  en `LECTORES_EXTRACTO` (finanzas.js) que devuelve movimientos `{fecha, concepto, cuenta,
+  credito, debito}`; hoy está Itaú. Para Mercado Pago se agrega un lector, sin tocar el matching.
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 
