@@ -1302,6 +1302,8 @@ async function guardarSitting(){
     registro.origen = document.getElementById('sit-origen').value || null;
     registro.destino = document.getElementById('sit-destino').value || null;
   }
+  // Un monto negativo (un "-" de más al tipear) deformaba Finanzas sin avisar (05/10/2026).
+  if(registro.cobro_familia < 0 || registro.pago_ninera < 0){ toast('Los montos no pueden ser negativos.', 'bad'); return; }
   let yaAvisadoDuplicado = false;
   if(!sitEditId){
     const existentes = await chequearRegistroExistenteMismoDia(nineraNombre, registro.familia_id, fecha, sitEditId);

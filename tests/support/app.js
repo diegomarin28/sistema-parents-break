@@ -153,7 +153,7 @@ async function abrirApp(page, opciones = {}) {
   // simular una base lenta (doble toque) o que falle un guardado. fallar recibe
   // {tabla, metodo, cuerpo} y devuelve undefined (anda), 'red' (se corta la conexión) o
   // {status, message} (Supabase responde con error).
-  const estado = { escrituras: [], errores: [], noSimulados: [], db, demoraEscrituras: 0, fallar: null };
+  const estado = { escrituras: [], errores: [], noSimulados: [], db, demoraEscrituras: 0, demoraLecturas: 0, fallar: null };
 
   page.on('console', m => { if (m.type() === 'error') estado.errores.push('consola: ' + m.text()); });
   page.on('pageerror', e => estado.errores.push('excepción: ' + e.message));
@@ -170,7 +170,40 @@ async function abrirApp(page, opciones = {}) {
   // Fotos y links externos de los datos ficticios: imagen vacía, nunca red real.
   await page.route(/ejemplo\.test|example\.com/, r => r.fulfill({ status: 404, body: '' }));
 
-  await page.routeWebSocket(/supabase\.co/, () => { /* Realtime mudo: no conecta a ningún lado */ });
+  // Realtime simulado (protocolo Phoenix v2 de supabase-js): acepta las suscripciones y deja
+  // que el test "haga un cambio desde otro celular" con estado.emitirRealtime(tabla, tipo, fila).
+  // Sin eso no manda nada, como antes.
+  const canalesRT = new Map(); // topic -> { joinRef, cambios: [{id, table}] }
+  let sockets = [], idRT = 1;
+  await page.routeWebSocket(/supabase\.co/, ws => {
+    sockets.push(ws);
+    ws.onMessage(m => {
+      let msg; try { msg = JSON.parse(String(m)); } catch { return; }
+      if (!Array.isArray(msg)) return;
+      const [joinRef, ref, topic, evento, payload] = msg;
+      const responder = resp => ws.send(JSON.stringify([joinRef, ref, topic, 'phx_reply', { status: 'ok', response: resp }]));
+      if (evento === 'heartbeat') return responder({});
+      if (evento === 'phx_join') {
+        const cambios = (payload?.config?.postgres_changes || []).map(c => ({ ...c, id: idRT++ }));
+        canalesRT.set(topic, { joinRef, cambios, ws });
+        return responder({ postgres_changes: cambios });
+      }
+      if (evento === 'phx_leave') { canalesRT.delete(topic); return responder({}); }
+    });
+  });
+  estado.emitirRealtime = (tabla, tipo = 'INSERT', fila = {}) => {
+    let enviados = 0;
+    for (const [topic, c] of canalesRT) {
+      const ids = c.cambios.filter(x => x.table === tabla).map(x => x.id);
+      if (!ids.length) continue;
+      c.ws.send(JSON.stringify([c.joinRef, null, topic, 'postgres_changes', { ids, data: {
+        schema: 'public', table: tabla, commit_timestamp: new Date().toISOString(), type: tipo,
+        record: fila, old_record: {}, columns: [], errors: null,
+      } }]));
+      enviados++;
+    }
+    return enviados;
+  };
 
   await page.route(/supabase\.co/, async route => {
     const req = route.request();
@@ -224,6 +257,7 @@ async function abrirApp(page, opciones = {}) {
     };
 
     if (metodo === 'GET' || metodo === 'HEAD') {
+      if (estado.demoraLecturas) await new Promise(r => setTimeout(r, estado.demoraLecturas * (0.5 + Math.random())));
       let filas = ordenar(filtrar(db[tabla], params), url.searchParams.get('order'));
       const total = filas.length;
       const offset = Number(url.searchParams.get('offset') || 0);

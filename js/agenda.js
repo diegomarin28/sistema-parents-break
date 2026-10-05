@@ -1308,6 +1308,11 @@ let rtRefrescarTimer = null;
 const RT_RECARGA_LIVIANA = {
   ninieras: 'cargarNinieras',
   familias: 'cargarFamilias',
+  // 05/10/2026 (testing exploratorio): reconstruir Finanzas borraba el resultado de la
+  // conciliación con el extracto, y reconstruir RR.HH. borraba una entrevista a medio llenar
+  // cada vez que entraba una candidata nueva por el formulario público.
+  finanzas: 'refrescarFinanzasCompleto',
+  rrhh: 'refrescarRrhhSinPisarEntrevista',
 };
 function suscribirRealtimeModuloActivo(){
   if(rtChannel){ sb.removeChannel(rtChannel); rtChannel = null; }
@@ -1318,14 +1323,19 @@ function suscribirRealtimeModuloActivo(){
   tablas.forEach(t=>{
     rtChannel.on('postgres_changes', {event:'*', schema:'public', table:t}, ()=>{
       clearTimeout(rtRefrescarTimer);
-      rtRefrescarTimer = setTimeout(async ()=>{
-        if(document.querySelector('.confirmoverlay.show')) return; // no interrumpir un modal abierto
+      const refrescar = async ()=>{
+        const claveAhora = moduloActivo && !moduloActivo.startsWith('pend-') ? moduloActivo : 'hoy';
+        if(claveAhora !== clave) return; // ya se cambió de módulo: ese módulo cargó datos frescos
+        // Con un formulario abierto no se interrumpe, pero el cambio no se pierde: se aplica
+        // apenas se cierra (antes se descartaba y la pantalla quedaba vieja hasta recargar).
+        if(document.querySelector('.confirmoverlay.show')){ rtRefrescarTimer = setTimeout(refrescar, 800); return; }
         const recargaLiviana = RT_RECARGA_LIVIANA[clave] && window[RT_RECARGA_LIVIANA[clave]];
         const scrollRT = guardarScrollMainarea();
         if(recargaLiviana){ await recargaLiviana(); }
         else { renderModulo(); }
         restaurarScrollMainarea(scrollRT);
-      }, 600);
+      };
+      rtRefrescarTimer = setTimeout(refrescar, 600);
     });
   });
   rtChannel.subscribe();

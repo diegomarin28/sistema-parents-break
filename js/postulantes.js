@@ -3,6 +3,13 @@ function rrhhShell(){
   const tabs = [['intake','Candidatas a entrevistar'],['entrevista','Entrevista'],['guardadas','Candidatas guardadas']];
   return `<div class="card" id="rrhh-carsitting-pend"></div><div class="subnav">${tabs.map(([k,l])=>`<button class="subtab ${rrhhTab===k?'active':''}" data-rrhhtab="${k}">${l}</button>`).join('')}</div><div id="rrhh-body"></div>`;
 }
+// Cambio en vivo en RR.HH. (otra usuaria, o una candidata nueva del formulario público): en la
+// pestaña Entrevista no se repinta nada, porque reconstruirla borra lo que se está escribiendo;
+// el resto de las pestañas sí se actualiza. El aviso de carsitting de arriba se refresca siempre.
+function refrescarRrhhSinPisarEntrevista(){
+  if(rrhhTab==='entrevista'){ cargarCarsittingPendientes(); return; }
+  return renderModulo();
+}
 function afterRrhhRender(){
   document.querySelectorAll('[data-rrhhtab]').forEach(b=>b.addEventListener('click', ()=>{ rrhhTab=b.dataset.rrhhtab; renderModulo(); }));
   cargarCarsittingPendientes();

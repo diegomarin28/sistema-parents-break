@@ -402,6 +402,14 @@ async function addAsignacion(famId){
   const nombre = document.getElementById('asig-nombre-'+famId).value.trim();
   if(!nombre){ toast('Falta el nombre de la niñera.','bad'); return; }
   const dias = Array.from(document.querySelectorAll(`#asig-dias-${famId} .daybtn.selected`)).map(b=>b.textContent);
+  // Mismos controles que al crear un fijo desde Sittings o la Agenda (05/10/2026): antes se
+  // podía guardar sin días (un fijo que nunca aparece), con la hora de fin antes que la de
+  // inicio, y sin el aviso de que la niñera ya tiene otro fijo en ese horario.
+  if(!dias.length){ toast('Elegí al menos un día.','bad'); return; }
+  const hi = leerHora('asig-horaini-'+famId), hf = leerHora('asig-horafin-'+famId);
+  if(hi && hf && hf <= hi){ toast('La hora de fin tiene que ser después de la de inicio.','bad'); return; }
+  const choque = await chequearFijoNuevoContraTodo(nombre, dias, hi||null, hf||null);
+  if(!(await avisarSiDobleReserva(choque, nombre, 'Asignar igual'))) return;
   const ninera = (ninierasItems||[]).find(n=>normaliza(n.nombre)===normaliza(nombre));
   const asig = { familia_id:famId, ninera_nombre:nombre, ninera_id: ninera?.id || null, dias,
     hora_inicio:leerHora('asig-horaini-'+famId)||null, hora_fin:leerHora('asig-horafin-'+famId)||null,
