@@ -372,6 +372,13 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .confirmbox h2,.confirmbox .helper,.confirmbox td,.person-list .name,.agendarow{overflow-wrap:anywhere;}
 .pago-fila{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
 .pago-fila .pago-monto{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+/* Fijos automáticos (06/10/2026): días previstos en la Agenda, revisión en Hoy, previsto del mes. */
+.agenda-previsto{display:inline-block;font-size:10px;font-weight:700;color:var(--accent);background:var(--accent-soft);border:1px dashed var(--accent);padding:1px 6px;border-radius:100px;flex-shrink:0;}
+.autoconf-fila{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;flex-wrap:wrap;}
+.autoconf-fila:last-child{border-bottom:none;}
+.autoconf-btns{display:flex;gap:6px;flex-shrink:0;}
+.autoconf-txt{flex:1 1 220px;min-width:0;} /* en el celular los botones bajan a otra línea */
+.fin-previsto{border-left:3px dashed var(--accent);font-size:13.5px;}
 .conc-fila{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink);}
 .conc-fila .helper{font-weight:400;}
 .conc-fila input{margin-top:3px;width:18px;height:18px;flex-shrink:0;}

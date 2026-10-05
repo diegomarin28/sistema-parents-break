@@ -1122,7 +1122,7 @@ async function chequearFijoNuevoContraTodo(nineraNombre, dias, horaInicio, horaF
   const key = normaliza(nineraNombre);
   const [{data:fijos}, {data:regs}, {data:sols}] = await Promise.all([
     sb.from('asignaciones').select('*, familias(nombre)'),
-    sb.from('sittings_traslados').select('familia_nombre,fecha,hora_inicio,hora_fin,ninera_nombre').gte('fecha', hoy),
+    sb.from('sittings_traslados').select('familia_nombre,fecha,hora_inicio,hora_fin,ninera_nombre,asignacion_id').gte('fecha', hoy),
     sb.from('solicitudes').select('familia_nombre,fecha,hora_inicio,hora_fin,estado,solicitud_ninieras(ninera_nombre,estado)').gte('fecha', hoy),
   ]);
   for(const ex of (fijos||[])){
@@ -1131,6 +1131,8 @@ async function chequearFijoNuevoContraTodo(nineraNombre, dias, horaInicio, horaF
     if(rangosSolapan(horaInicio, horaFin, ex.hora_inicio, ex.hora_fin)) return {familia_nombre:ex.familias?.nombre||'(familia)', hora_inicio:ex.hora_inicio, hora_fin:ex.hora_fin};
   }
   for(const r of (regs||[])){
+    // Los días de este mismo fijo (por ejemplo sus previstos automáticos) no chocan con él.
+    if(excluirAsigId && r.asignacion_id===excluirAsigId) continue;
     if(normaliza(r.ninera_nombre)!==key || !dias.includes(diaDeFecha(r.fecha))) continue;
     if(rangosSolapan(horaInicio, horaFin, r.hora_inicio, r.hora_fin)) return {familia_nombre:r.familia_nombre, hora_inicio:r.hora_inicio, hora_fin:r.hora_fin, fecha:r.fecha};
   }
@@ -1217,6 +1219,63 @@ async function escribirAsignacion(consulta, payload){
     res = await consulta(sinColumnasVigencia(payload));
   }
   return res;
+}
+
+/* ============================================================
+   Fijos automáticos (06/10/2026). Un proceso en la base (generar_previstos_fijos, pg_cron
+   a las 03:00) mantiene cargados como sittings "previstos" los próximos 14 días de cada
+   fijo vigente; el día que ocurren pasan solos a "confirmado". Decisiones de Diego y las
+   dueñas (05/10/2026): los previstos se ven solo en la Agenda (Sittings, Finanzas y el
+   resto muestran lo que ya pasó), se confirman solos con una lista corta para revisar en
+   Hoy, y Finanzas muestra aparte el "previsto del mes".
+   Todo esto rige solo si la base lo tiene activado (app_config 'fijos_automaticos', lo
+   prende 20261006_fijos_automaticos_ACTIVAR.sql). Apagado, la app funciona como antes,
+   también con la base sin migrar.
+   ============================================================ */
+const DIAS_PREVISTOS = 14;
+let fijosAutomaticosActivos = false;
+let promesaConfigFijos = null;
+async function cargarConfigFijosAutomaticos(){
+  try{
+    const { data, error } = await sb.from('app_config').select('valor').eq('id', 'fijos_automaticos').maybeSingle();
+    fijosAutomaticosActivos = !error && !!data?.valor?.activo;
+  }catch(e){ fijosAutomaticosActivos = false; }
+  return fijosAutomaticosActivos;
+}
+// Se lee una vez por sesión, la primera vez que alguna pantalla lo necesita.
+function esperarConfigFijos(){
+  if(!promesaConfigFijos) promesaConfigFijos = cargarConfigFijosAutomaticos();
+  return promesaConfigFijos;
+}
+// Previsto = lo cargó el proceso para un día que todavía no llegó. Uno de hoy o de antes
+// cuenta como confirmado aunque el proceso no haya corrido todavía.
+function esPrevisto(r){ return !!r && r.estado==='previsto' && !!r.fecha && r.fecha > todayISO(); }
+// Saca los previstos de una consulta de sittings_traslados (solo si están activados: con
+// la base sin migrar la columna estado no existe).
+function sinPrevistos(consulta){
+  return fijosAutomaticosActivos ? consulta.or(`estado.neq.previsto,fecha.lte.${todayISO()}`) : consulta;
+}
+// Después de cambiar un fijo (niñera, horario, vigencia, pausa, tarifa de la familia) se
+// llama al proceso para que los previstos queden al día enseguida, sin esperar a la noche.
+async function sincronizarPrevistosFijos(){
+  await esperarConfigFijos();
+  if(!fijosAutomaticosActivos) return true;
+  const { error } = await sb.rpc('generar_previstos_fijos', { p_dias: DIAS_PREVISTOS });
+  if(error){
+    toast('Se guardó, pero no se pudieron actualizar los días previstos ('+error.message+'). Se corrigen solos a la noche.', 'bad');
+    return false;
+  }
+  return true;
+}
+// Pausas de los fijos (vacaciones): solo existen con los fijos automáticos activados.
+async function cargarPausasFijos(){
+  await esperarConfigFijos();
+  if(!fijosAutomaticosActivos) return [];
+  const { data, error } = await sb.from('asignaciones_pausas').select('*').order('desde');
+  return error ? [] : (data||[]);
+}
+function fijoPausadoEn(pausas, asigId, fechaISO){
+  return (pausas||[]).some(p=>p.asignacion_id===asigId && fechaISO>=p.desde && fechaISO<=p.hasta);
 }
 
 /* ============================================================

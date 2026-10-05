@@ -84,7 +84,8 @@ let ninUtilUltimaActividad = {};
    a quién no sobrecargar, y a quién dar de baja si ya no trabaja más con
    el equipo. No bloquea el resto de la pantalla si falla — es secundario. */
 async function cargarUtilizacionNinieras(){
-  const { data, error } = await sb.from('sittings_traslados').select('ninera_nombre,fecha');
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
+  const { data, error } = await sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre,fecha'));
   if(error || !document.getElementById('nin-utilizacion-wrap')) return;
   const desde30 = sumarDiasISO(todayISO(), -NIN_UTIL_DIAS);
   const porNinera = {};
@@ -297,6 +298,7 @@ async function cargarCarsittingSeccion(nombre, boxId, tipo, mail){
   }
 }
 async function verNinera(id){
+  await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   const n = ninierasItems.find(x=>x.id===id);
   const cd = datosFichaCandidata(n.candidatas);
   const edadCalculada = calcularEdad(cd.fecha_nacimiento);
@@ -337,7 +339,7 @@ async function verNinera(id){
   // cargar los sittings de esta niñera y sus reseñas (si no están cargadas ya globalmente) en paralelo
   const necesitaResenas = !Object.keys(sitHistResenas).length;
   const [{data}, resenasRes] = await Promise.all([
-    sb.from('sittings_traslados').select('*').eq('ninera_nombre', n.nombre).order('fecha', {ascending:false}),
+    sinPrevistos(sb.from('sittings_traslados').select('*')).eq('ninera_nombre', n.nombre).order('fecha', {ascending:false}),
     necesitaResenas ? sb.from('resenas_ninieras').select('ninera_nombre,puntuacion') : Promise.resolve({data:null}),
   ]);
   nineraHistItems = data || [];
