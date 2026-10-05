@@ -785,7 +785,60 @@ async function calcularPendientesAgrupados(){
     gruposPagar[key].total += Number(r.pago_ninera)||0;
     gruposPagar[key].ids.push(r.id);
   });
+  // Gastos extra que pagó la niñera (08/10/2026): se le cobran a la familia tal cual y se le
+  // reintegran a la niñera, en el mismo grupo que el sitting (o en uno propio si ese sitting
+  // ya estaba cobrado/pagado). No suman al facturado ni al margen.
+  const { gastos, sits: sitsGastos } = await cargarGastosExtraPendientes();
+  const hoyG = todayISO();
+  gastos.forEach(gx=>{
+    const r = sitsGastos.find(x=>x.id===gx.sitting_id);
+    if(!r) return;
+    const item = { id: gx.id, concepto: gx.concepto, monto: Number(gx.monto)||0 };
+    if(!gx.cobrado){
+      const frec = r.familia_id ? (famFrecPorId[r.familia_id]||'mensual') : (famFrecPorNombre[normaliza(r.familia_nombre)]||'mensual');
+      const bucket = bucketKeyFecha(r.fecha, frec);
+      const key = (r.familia_id||normaliza(r.familia_nombre))+'|'+bucket;
+      if(!gruposCobrar[key]) gruposCobrar[key] = {nombre:r.familia_nombre, familia_id:r.familia_id||null, frec, bucket, total:0, ids:[]};
+      (gruposCobrar[key].gastos ||= []).push(item);
+      gruposCobrar[key].total += item.monto;
+    }
+    if(!gx.reintegrado && r.fecha <= hoyG){
+      const frec = esTrabajoFijo(r) ? 'semanal' : 'diario';
+      const bucket = bucketKeyFecha(r.fecha, frec);
+      const info = r.ninera_id ? ninInfoPorId[r.ninera_id] : ninInfoPorNombre[normaliza(r.ninera_nombre)];
+      const key = (r.ninera_id||normaliza(r.ninera_nombre))+'|'+bucket;
+      if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuenta:(info?.cuenta_bancaria&&info.cuenta_bancaria.length)?info.cuenta_bancaria.join(' · '):''};
+      (gruposPagar[key].gastos ||= []).push(item);
+      gruposPagar[key].total += item.monto;
+    }
+  });
   return { gruposCobrar:Object.values(gruposCobrar), gruposPagar:Object.values(gruposPagar), fams:fams||[], nins:nins||[] };
+}
+/* ---- Gastos extra (08/10/2026) ----
+   Sin la tabla (base sin migrar) no hay gastos y todo sigue como antes. */
+let gastosExtraDisponible = true;
+function esFaltaTabla(error){ return !!error && (error.code==='PGRST205' || error.code==='42P01'); }
+async function cargarGastosExtraPendientes(){
+  if(!gastosExtraDisponible) return { gastos:[], sits:[] };
+  const { data, error } = await sb.from('gastos_extra').select('*').eq('pagado_por', 'ninera').or('cobrado.eq.false,reintegrado.eq.false');
+  if(error){
+    if(esFaltaTabla(error)) gastosExtraDisponible = false;
+    else toast('No se pudieron leer los gastos extra: '+error.message, 'bad');
+    return { gastos:[], sits:[] };
+  }
+  if(!data || !data.length) return { gastos:[], sits:[] };
+  const { data: sits } = await sb.from('sittings_traslados').select('id,fecha,familia_id,familia_nombre,ninera_id,ninera_nombre,asignacion_id')
+    .in('id', [...new Set(data.map(g=>g.sitting_id))]);
+  return { gastos: data, sits: sits||[] };
+}
+function lineasGastosHtml(gastos, prefijo){
+  return (gastos||[]).map(g=>`<div class="helper fin-gasto-linea" style="margin:2px 0 0;">${prefijo}: <b>$${Number(g.monto).toLocaleString('es-UY')}</b> · ${escaparHtml(g.concepto)}</div>`).join('');
+}
+// "Servicios: $X" (lo que es sitting/traslado) cuando el total incluye saldo o gastos.
+function lineaServiciosHtml(g){
+  if(!g.ajustes?.length && !g.gastos?.length) return '';
+  const gastos = (g.gastos||[]).reduce((t,x)=>t+x.monto,0);
+  return `<div class="helper" style="margin:2px 0 0;">Servicios: $${(g.total - gastos).toLocaleString('es-UY')}</div>`;
 }
 async function cargarPorCobrarPorPagar(){
   const { gruposCobrar, gruposPagar } = await calcularPendientesAgrupados();
@@ -831,11 +884,11 @@ function renderPorCobrar(lista, sueltos=[]){
         <div>
           <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
           <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec)} · ${escaparHtml(g.frec)}</div>
-          ${g.ajustes?.length ? `<div class="helper" style="margin:2px 0 0;">Servicios: $${g.total.toLocaleString('es-UY')}</div>${lineasAjustesHtml(g.ajustes)}` : ''}
+          ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Gasto extra')}${lineasAjustesHtml(g.ajustes)}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${(g.totalNeto ?? g.total).toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado', ${argJs(g.ajustes||[])}))">Marcar cobrado</button>
+          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado', ${argJs(g.ajustes||[])}, ${argJs((g.gastos||[]).map(x=>x.id))}))">Marcar cobrado</button>
         </div>
       </div>`).join('')}
     ${saldosSueltosHtml(sueltos, 'cobro')}
@@ -857,22 +910,31 @@ function renderPorPagar(lista, sueltos=[]){
           <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
           <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec, g.finde)} · ${escaparHtml(g.frec)}</div>
           ${g.cuenta ? `<div class="helper" style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;">${escaparHtml(g.cuenta)}</div>` : ''}
-          ${g.ajustes?.length ? `<div class="helper" style="margin:2px 0 0;">Servicios: $${g.total.toLocaleString('es-UY')}</div>${lineasAjustesHtml(g.ajustes)}` : ''}
+          ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Reintegro de gasto')}${lineasAjustesHtml(g.ajustes)}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${(g.totalNeto ?? g.total).toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}))">Marcar pagado</button>
+          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}, ${argJs(g.gastos||[])}))">Marcar pagado</button>
         </div>
       </div>`).join('')}
     ${saldosSueltosHtml(sueltos, 'pago')}
   `;
 }
-async function marcarGrupoResuelto(ids, campo, ajustes=[]){
-  if(campo==='pagado' && !(await confirmarPagoSittings(ids, {}, ajustes))) return;
-  const { error } = await sb.from('sittings_traslados').update({[campo]:true}).in('id', ids);
-  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+// gastos: ids (cobro) o {id, concepto, monto} (pago, para mostrarlos en la confirmación).
+async function marcarGrupoResuelto(ids, campo, ajustes=[], gastos=[]){
+  const gastosIds = (gastos||[]).map(g=>typeof g==='string' ? g : g.id);
+  if(campo==='pagado' && !(await confirmarPagoSittings(ids, {}, ajustes, gastos.filter(g=>typeof g!=='string')))) return;
+  if(ids.length){
+    const { error } = await sb.from('sittings_traslados').update({[campo]:true}).in('id', ids);
+    if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+  }
+  let okGastos = true;
+  if(gastosIds.length){
+    const { error: eg } = await sb.from('gastos_extra').update({[campo==='cobrado'?'cobrado':'reintegrado']:true}).in('id', gastosIds);
+    if(eg){ okGastos = false; toast(`Se marcó ${campo}, pero no se pudieron marcar los gastos extra (${eg.message}). Van a seguir apareciendo: avisale a Diego.`, 'bad'); }
+  }
   const okSaldo = await registrarAplicacionAjustes(ajustes, ids, campo);
-  if(okSaldo) toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
+  if(okSaldo && okGastos) toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
   refrescarFinanzasCompleto();
 }
 /* Confirmación antes de marcar pagado (05/10/2026, E3). Un "Marcar pagado" apurado no se
@@ -880,15 +942,19 @@ async function marcarGrupoResuelto(ids, campo, ajustes=[]){
    monto) y el total, con Cancelar / Confirmar. Sirve para un sitting solo o para un grupo de
    Por pagar. montosNuevos pisa el monto guardado cuando se está editando ese movimiento.
    Devuelve true solo si se confirma. */
-async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[]){
-  const { data, error } = await sb.from('sittings_traslados')
-    .select('id,tipo,familia_nombre,ninera_nombre,fecha,hora_inicio,hora_fin,termina_dia_siguiente,pago_ninera')
-    .in('id', ids);
-  if(error){ toast('No se pudo leer el detalle del pago: '+error.message, 'bad'); return false; }
-  const filas = (data||[]).map(r=>({...r, monto: r.id in montosNuevos ? Number(montosNuevos[r.id])||0 : Number(r.pago_ninera)||0}))
+async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[], gastos=[]){
+  let data = [];
+  if(ids.length){
+    const res = await sb.from('sittings_traslados')
+      .select('id,tipo,familia_nombre,ninera_nombre,fecha,hora_inicio,hora_fin,termina_dia_siguiente,pago_ninera')
+      .in('id', ids);
+    if(res.error){ toast('No se pudo leer el detalle del pago: '+res.error.message, 'bad'); return false; }
+    data = res.data||[];
+  }
+  const filas = data.map(r=>({...r, monto: r.id in montosNuevos ? Number(montosNuevos[r.id])||0 : Number(r.pago_ninera)||0}))
     .sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||'') || (a.hora_inicio||'').localeCompare(b.hora_inicio||''));
-  if(!filas.length){ toast('Esos registros ya no existen. Actualizá la pantalla.', 'bad'); return false; }
-  const subtotal = filas.reduce((s,r)=>s+r.monto, 0);
+  if(!filas.length && !(gastos||[]).length){ toast('Esos registros ya no existen. Actualizá la pantalla.', 'bad'); return false; }
+  const subtotal = filas.reduce((s,r)=>s+r.monto, 0) + (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0);
   const total = Math.round((subtotal + (ajustes||[]).reduce((s,a)=>s+(Number(a.monto)||0), 0))*100)/100;
   const hoy = todayISO();
   const futuros = filas.filter(r=>r.fecha > hoy).length;
@@ -912,12 +978,16 @@ async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[]){
             </div>
             <div class="pago-monto">${plata(r.monto)}</div>
           </div>`).join('')}
+          ${(gastos||[]).map(g=>`<div class="pago-fila pago-gasto">
+            <div style="min-width:0;"><div style="font-weight:600;">Reintegro de gasto extra</div><div class="helper" style="margin:2px 0 0;">${escaparHtml(g.concepto)}</div></div>
+            <div class="pago-monto">${plata(g.monto)}</div>
+          </div>`).join('')}
           ${(ajustes||[]).map(a=>`<div class="pago-fila pago-ajuste">
             <div style="min-width:0;"><div style="font-weight:600;">Saldo a favor</div><div class="helper" style="margin:2px 0 0;">${escaparHtml(a.motivo)}</div></div>
             <div class="pago-monto">${textoMontoAjuste(a.monto)}</div>
           </div>`).join('')}
           <div class="pago-fila pago-total-fila">
-            <div style="font-weight:700;">Total (${filas.length} ${filas.length===1?'registro':'registros'}${(ajustes||[]).length?' y saldo':''})</div>
+            <div style="font-weight:700;">Total (${filas.length} ${filas.length===1?'registro':'registros'}${(gastos||[]).length?' y gastos':''}${(ajustes||[]).length?' y saldo':''})</div>
             <div class="pago-monto" id="pago-total" style="font-weight:700;">${plata(total)}</div>
           </div>
         </div>
@@ -1188,6 +1258,7 @@ async function procesarExtractoConciliacion(){
   const pagos = proponerCoincidencias(debAgr, gruposPagar.filter(g=>g.ninera_id), 'ninera_id');
   const conCodigo = (lista, tipo) => lista.map((p,i)=>({ ...p, i, tipo,
     ids: [...new Set(p.grupos.flatMap(g=>g.ids))],
+    gastos: p.grupos.flatMap(g=>g.gastos||[]),
     pendiente: p.grupos.reduce((t,g)=>t+g.total,0),
     nombre: p.grupos[0].nombre,
     periodo: p.grupos.map(g=>bucketLabelFecha(g.bucket, g.frec, g.finde)).join(' + '),
@@ -1257,9 +1328,17 @@ async function confirmarConciliacion(tipo){
   if(!sel.length){ toast('No hay nada tildado.', 'bad'); return; }
   const ids = [...new Set(sel.flatMap(p=>p.ids))];
   if(tipo==='cobro' && !(await confirmarCobrosConciliacion(sel))) return;
-  if(tipo==='pago' && !(await confirmarPagoSittings(ids))) return;
-  const { error } = await sb.from('sittings_traslados').update({[tipo==='cobro'?'cobrado':'pagado']:true}).in('id', ids);
-  if(error){ toast('No se pudo marcar: '+error.message, 'bad'); return; }
+  const gastos = sel.flatMap(p=>p.gastos||[]);
+  if(tipo==='pago' && !(await confirmarPagoSittings(ids, {}, [], gastos))) return;
+  if(ids.length){
+    const { error } = await sb.from('sittings_traslados').update({[tipo==='cobro'?'cobrado':'pagado']:true}).in('id', ids);
+    if(error){ toast('No se pudo marcar: '+error.message, 'bad'); return; }
+  }
+  // Gastos extra del mismo grupo (08/10/2026): se marcan cobrados / reintegrados junto.
+  if(gastos.length){
+    const { error: eg } = await sb.from('gastos_extra').update({[tipo==='cobro'?'cobrado':'reintegrado']:true}).in('id', gastos.map(g=>g.id));
+    if(eg) toast('Se marcaron los registros, pero no los gastos extra ('+eg.message+'). Avisale a Diego.', 'bad');
+  }
   sel.forEach(p=>{
     p.hecha = true;
     const fila = document.querySelector(`[data-conc-fila="${tipo}-${p.i}"]`);

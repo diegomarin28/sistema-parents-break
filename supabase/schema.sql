@@ -521,6 +521,26 @@ create table public.ajustes_saldo (
   constraint ajustes_saldo_aplicado_check CHECK (((aplicado >= (0)::numeric) AND (aplicado <= abs(monto))))
 );
 
+-- Gastos extra con comprobante (08/10/2026): los paga la niñera (se cobran a la familia y se
+-- le reintegran) o la familia (quedan como saldo a favor). No cuentan como ganancia. El
+-- ticket está en el bucket privado "comprobantes".
+create table public.gastos_extra (
+  id uuid default gen_random_uuid() not null,
+  sitting_id uuid not null,
+  concepto text not null,
+  monto numeric not null,
+  pagado_por text not null,
+  comprobante text not null,
+  cobrado boolean default false not null,
+  reintegrado boolean default false not null,
+  ajuste_id uuid,
+  creado_por text,
+  created_at timestamp with time zone default now() not null,
+  constraint gastos_extra_pkey PRIMARY KEY (id),
+  constraint gastos_extra_monto_check CHECK ((monto > (0)::numeric)),
+  constraint gastos_extra_pagado_por_check CHECK ((pagado_por = ANY (ARRAY['ninera'::text, 'familia'::text])))
+);
+
 -- Historial de cambios de sittings_traslados (lo escribe el trigger sittings_historial_trg).
 create table public.sittings_historial (
   id bigint generated always as identity primary key,
@@ -630,6 +650,8 @@ alter table public.resenas_ninieras add constraint resenas_ninieras_ninera_id_fk
 alter table public.asignaciones_pausas add constraint asignaciones_pausas_asignacion_id_fkey FOREIGN KEY (asignacion_id) REFERENCES asignaciones(id) ON DELETE CASCADE;
 alter table public.ajustes_saldo add constraint ajustes_saldo_familia_id_fkey FOREIGN KEY (familia_id) REFERENCES familias(id);
 alter table public.ajustes_saldo add constraint ajustes_saldo_ninera_id_fkey FOREIGN KEY (ninera_id) REFERENCES ninieras(id);
+alter table public.gastos_extra add constraint gastos_extra_sitting_id_fkey FOREIGN KEY (sitting_id) REFERENCES sittings_traslados(id) ON DELETE CASCADE;
+alter table public.gastos_extra add constraint gastos_extra_ajuste_id_fkey FOREIGN KEY (ajuste_id) REFERENCES ajustes_saldo(id) ON DELETE SET NULL;
 alter table public.sittings_traslados add constraint sittings_traslados_asignacion_id_fkey FOREIGN KEY (asignacion_id) REFERENCES asignaciones(id) ON DELETE SET NULL;
 alter table public.sittings_traslados add constraint sittings_traslados_familia_id_fkey FOREIGN KEY (familia_id) REFERENCES familias(id) ON DELETE SET NULL;
 alter table public.sittings_traslados add constraint sittings_traslados_ninera_id_fkey FOREIGN KEY (ninera_id) REFERENCES ninieras(id) ON DELETE SET NULL;
@@ -659,6 +681,8 @@ CREATE INDEX idx_resenas_ninera_nombre ON public.resenas_ninieras USING btree (n
 CREATE INDEX idx_asignaciones_pausas ON public.asignaciones_pausas USING btree (asignacion_id, desde, hasta);
 CREATE INDEX idx_ajustes_saldo_familia ON public.ajustes_saldo USING btree (familia_id) WHERE (familia_id IS NOT NULL);
 CREATE INDEX idx_ajustes_saldo_ninera ON public.ajustes_saldo USING btree (ninera_id) WHERE (ninera_id IS NOT NULL);
+CREATE INDEX idx_gastos_extra_sitting ON public.gastos_extra USING btree (sitting_id);
+CREATE INDEX idx_gastos_extra_pendientes ON public.gastos_extra USING btree (pagado_por) WHERE ((NOT cobrado) OR (NOT reintegrado));
 CREATE UNIQUE INDEX sittings_fijo_dia_automatico ON public.sittings_traslados USING btree (asignacion_id, fecha) WHERE generado_automatico;
 CREATE INDEX idx_sittings_previstos ON public.sittings_traslados USING btree (estado, fecha) WHERE (estado = 'previsto'::text);
 CREATE INDEX idx_sittings_asignacion_fecha ON public.sittings_traslados USING btree (asignacion_id, fecha) WHERE (asignacion_id IS NOT NULL);
@@ -714,6 +738,7 @@ alter table public.sittings_historial enable row level security;
 alter table public.sittings_traslados enable row level security;
 alter table public.asignaciones_pausas enable row level security;
 alter table public.ajustes_saldo enable row level security;
+alter table public.gastos_extra enable row level security;
 alter table public.respaldo_sittings_traslados_20261006 enable row level security;
 alter table public.solicitud_ninieras enable row level security;
 alter table public.solicitudes enable row level security;
@@ -803,6 +828,8 @@ create policy solo_autenticados_todo on public.asignaciones_pausas as permissive
   using ((select auth.role()) = 'authenticated') with check ((select auth.role()) = 'authenticated');
 create policy solo_autenticados_todo on public.ajustes_saldo as permissive for all to public
   using ((select auth.role()) = 'authenticated') with check ((select auth.role()) = 'authenticated');
+create policy solo_autenticados_todo on public.gastos_extra as permissive for all to public
+  using ((select auth.role()) = 'authenticated') with check ((select auth.role()) = 'authenticated');
 create policy sittings_traslados_authenticated_all on public.sittings_traslados as permissive for all to public
   using ((( SELECT auth.role() AS role) = 'authenticated'::text))
   with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
@@ -823,14 +850,23 @@ create policy "authenticated all" on public.zonas_confirmadas as permissive for 
   with check (true);
 
 -- ----------------------------------------------------------------------------
--- Storage: 3 buckets públicos de lectura
+-- Storage: 3 buckets públicos de lectura y uno privado (comprobantes, 08/10/2026)
 -- ----------------------------------------------------------------------------
 
 insert into storage.buckets (id, name, public) values
   ('candidatas-fotos', 'candidatas-fotos', true),
   ('juguetes-fotos', 'juguetes-fotos', true),
-  ('ninieras-fotos', 'ninieras-fotos', true)
+  ('ninieras-fotos', 'ninieras-fotos', true),
+  ('comprobantes', 'comprobantes', false)
 on conflict (id) do nothing;
+
+-- comprobantes: privado, solo usuarias logueadas (tickets de gastos extra).
+create policy comprobantes_autenticados_leer on storage.objects as permissive for select to public
+  using (((bucket_id = 'comprobantes'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+create policy comprobantes_autenticados_subir on storage.objects as permissive for insert to public
+  with check (((bucket_id = 'comprobantes'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+create policy comprobantes_autenticados_borrar on storage.objects as permissive for delete to public
+  using (((bucket_id = 'comprobantes'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
 
 -- candidatas-fotos no tiene políticas desde el 05/10/2026: solo sube la Edge Function
 -- candidatas-webhook (clave de servicio) y las fotos se ven por URL pública. Antes había
@@ -1089,6 +1125,7 @@ alter publication supabase_realtime add table public.app_config;
 alter publication supabase_realtime add table public.asignaciones;
 alter publication supabase_realtime add table public.asignaciones_pausas;
 alter publication supabase_realtime add table public.ajustes_saldo;
+alter publication supabase_realtime add table public.gastos_extra;
 alter publication supabase_realtime add table public.candidatas;
 alter publication supabase_realtime add table public.carsitting_datos;
 alter publication supabase_realtime add table public.contratos;
