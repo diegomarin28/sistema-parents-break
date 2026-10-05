@@ -406,10 +406,13 @@ async function marcarAutoNoFue(id){
   await cargarConfirmadosAutomaticos();
 }
 let dashReemplazoSel = null;
-function abrirReemplazoAuto(id){
+async function abrirReemplazoAuto(id){
   const r = dashAutoConfirmados.find(x=>x.id===id);
   if(!r) return;
   dashReemplazoSel = null;
+  // La lista se trae ANTES de abrir el modal: si se conectaba después, quien escribía rápido
+  // no veía ninguna opción (el autocompletar todavía no estaba enganchado).
+  const { data: ninieras } = await sb.from('ninieras').select('id,nombre').eq('activa', true).order('nombre');
   abrirModal(`
     <h2 style="margin:0 0 4px;">¿Quién fue en lugar de ${escaparHtml(r.ninera_nombre)}?</h2>
     <div class="helper" style="margin-bottom:12px;">${escaparHtml(r.familia_nombre)} · ${new Date(r.fecha+'T12:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'})}. Mismo horario y montos; si cambiaron, editalo después en Sittings &amp; traslados.</div>
@@ -422,9 +425,7 @@ function abrirReemplazoAuto(id){
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="conGuardado(this, ()=>guardarReemplazoAuto(${argJs(id)}))">Guardar</button>
     </div>`);
-  sb.from('ninieras').select('id,nombre').eq('activa', true).order('nombre').then(({data})=>{
-    attachAutocomplete('autoconf-ninera', 'autoconf-ninera-dropdown', ()=>data||[], o=>{ dashReemplazoSel = o; });
-  });
+  attachAutocomplete('autoconf-ninera', 'autoconf-ninera-dropdown', ()=>ninieras||[], o=>{ dashReemplazoSel = o; });
 }
 async function guardarReemplazoAuto(id){
   const r = dashAutoConfirmados.find(x=>x.id===id);
