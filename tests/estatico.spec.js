@@ -16,6 +16,20 @@ test.describe('estático', () => {
     expect(m.start_url).toBe('./');
   });
 
+  test('los handlers inline reciben los datos con argJs(), nunca entre comillas a mano', () => {
+    // 05/10/2026: onclick="f('${nombre}')" se rompía con D'Alessandro y dejaba inyectar código.
+    // El dato va como onclick="f(${argJs(nombre)})" (ver core.js, "Escape de datos").
+    const malos = [];
+    for (const archivo of ORDEN_SCRIPTS) {
+      leer(archivo).split('\n').forEach((l, i) => {
+        for (const m of l.matchAll(/\bon[a-z]+=(["'])(.*?)\1/g)) {
+          if (/\\?'\$\{|"\$\{/.test(m[2]) || (m[1] === "'" && m[2].includes('${'))) malos.push(`${archivo}:${i + 1}: ${m[0].slice(0, 90)}`);
+        }
+      });
+    }
+    expect(malos).toEqual([]);
+  });
+
   test('index.html carga los scripts en el orden acordado (bootstrap.js último)', () => {
     expect(scriptsDeIndex()).toEqual(ORDEN_SCRIPTS);
     expect(leer('index.html')).not.toMatch(/type=["']module["']/);

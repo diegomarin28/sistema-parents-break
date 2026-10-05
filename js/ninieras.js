@@ -49,7 +49,7 @@ function renderCumpleaneras(){
   if(!cumpleaneras.length){ wrap.innerHTML = ''; return; }
   wrap.innerHTML = `<div class="card" style="padding:12px 18px;border-left:3px solid var(--accent);margin-bottom:10px;">
     <div style="font-weight:600;margin-bottom:2px;">🎂 Cumpleañera${cumpleaneras.length>1?'s':''} hoy</div>
-    <div class="helper" style="margin:0;">${cumpleaneras.map(n=>n.nombre).join(', ')}</div>
+    <div class="helper" style="margin:0;">${escaparHtml(cumpleaneras.map(n=>n.nombre).join(', '))}</div>
   </div>`;
 }
 async function cargarNinieras(){
@@ -134,13 +134,13 @@ function renderUtilizacionNinieras(){
             return `
             <div class="agendarow" style="border-bottom:1px solid var(--line);padding:7px 0;align-items:center;flex-wrap:wrap;gap:6px;">
               <div style="flex:1;min-width:160px;">
-                <div>${n.nombre}</div>
+                <div>${escaparHtml(n.nombre)}</div>
                 <div class="helper" style="margin:0;">${hace}</div>
               </div>
               ${n.telefono
-                ? `<button class="smallbtn" onclick="enviarWhatsappNinera('${n.id}')">Enviar por WhatsApp</button>`
+                ? `<button class="smallbtn" onclick="enviarWhatsappNinera(${argJs(n.id)})">Enviar por WhatsApp</button>`
                 : `<span class="helper" style="margin:0;">Sin teléfono cargado</span>`}
-              <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="eliminarNinera('${n.id}')">Eliminar niñera</button>
+              <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="eliminarNinera(${argJs(n.id)})">Eliminar niñera</button>
             </div>`;
           }).join('')}
         </div>` : ''}` : ''}
@@ -209,7 +209,7 @@ function filtrarNinieras(){
     if(c==='desconocido'){ sinDatoOcultas++; return false; }
     return c!=='nada';
   });
-  const zonaLabel = nombresZonasFiltro(ninFiltroZonas).join(' o ');
+  const zonaLabel = escaparHtml(nombresZonasFiltro(ninFiltroZonas).join(' o '));
   const hayZonaAfuera = [...ninFiltroZonas].some(k=>grupoFueraDeZona(k));
   const mesesTxt = [...ninFiltroMeses].sort((a,b)=>a-b).map(m=>TEMP_MESES_LARGO[m]).join(', ');
   const completas = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]!=='parte') : filtradas;
@@ -224,24 +224,24 @@ function filtrarNinieras(){
   const mostrarTira = filtraPeriodo || hayZonaAfuera;
   const filaNinera = n=>`
     <div class="person-row">
-      <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')"`:''}>${n.foto?`<img loading="lazy" decoding="async" src="${n.foto}" alt="Foto de ${n.nombre}" onerror="this.parentElement.textContent='${(n.nombre||'?').charAt(0).toUpperCase()}'">`:(n.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="av" ${n.foto?`style="cursor:zoom-in;" onclick="abrirLightboxFoto(${argJs(n.foto)}, ${argJs('Foto de '+n.nombre)})"`:''}>${n.foto?`<img loading="lazy" decoding="async" src="${urlSegura(n.foto)}" alt="Foto de ${escaparHtml(n.nombre)}" onerror="this.parentElement.textContent=${argJs((n.nombre||'?').charAt(0).toUpperCase())}">`:escaparHtml((n.nombre||'?').charAt(0).toUpperCase())}</div>
       <div class="info">
-        <div class="name">${n.nombre}${cvEstaDesactualizado(n) ? ` <span style="color:var(--warn);font-weight:600;font-size:12px;">· Actualizar CV</span>` : ''}</div>
-        <div class="meta">${textoZonasConBarrios(n.zona, n.barrios)||'zona s/d'}${(() => { const e = calcularEdad(n.candidatas?.fecha_nacimiento); return e!==null ? ' · '+e+' años' : (n.candidatas?.edad ? ' · '+n.candidatas.edad : ''); })()}${n.candidatas?.universidad?' · '+n.candidatas.universidad:''}</div>
+        <div class="name">${escaparHtml(n.nombre)}${cvEstaDesactualizado(n) ? ` <span style="color:var(--warn);font-weight:600;font-size:12px;">· Actualizar CV</span>` : ''}</div>
+        <div class="meta">${escaparHtml(textoZonasConBarrios(n.zona, n.barrios)||'zona s/d')}${escaparHtml((() => { const e = calcularEdad(n.candidatas?.fecha_nacimiento); return e!==null ? ' · '+e+' años' : (n.candidatas?.edad ? ' · '+n.candidatas.edad : ''); })())}${n.candidatas?.universidad?escaparHtml(' · '+n.candidatas.universidad):''}</div>
         ${mostrarTira ? htmlMiniTemporada(n, qsFiltro) : ''}
       </div>
       <div class="badge-slot">
-        <span class="badge brand" style="font-size:10px;padding:2px 8px;">${n.tipo||'Niñera'}</span>
+        <span class="badge brand" style="font-size:10px;padding:2px 8px;">${escaparHtml(n.tipo||'Niñera')}</span>
         ${!n.candidatas?.fecha_nacimiento ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin fecha de nac.</span>` : ''}
         ${ninIncidentesCount[normaliza(n.nombre)] ? `<span class="badge bad" style="font-size:10px;padding:2px 8px;">${ninIncidentesCount[normaliza(n.nombre)]} incidente${ninIncidentesCount[normaliza(n.nombre)]===1?'':'s'}</span>` : ''}
         ${badgeTemporada(n)}
         ${n.telefono_pendiente ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Celular nuevo por confirmar</span>` : ''}
       </div>
       <div class="rowbtns">
-        <button class="smallbtn" onclick="verNinera('${n.id}')">Ver ficha</button>
-        <button class="smallbtn" onclick="editarNinera('${n.id}')">Editar</button>
-        <button class="smallbtn" onclick="generarMensajeCV('${n.id}')">CV</button>
-        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarNinera('${n.id}')" title="Eliminar niñera" aria-label="Eliminar niñera">${ICONS.trash}</button>
+        <button class="smallbtn" onclick="verNinera(${argJs(n.id)})">Ver ficha</button>
+        <button class="smallbtn" onclick="editarNinera(${argJs(n.id)})">Editar</button>
+        <button class="smallbtn" onclick="generarMensajeCV(${argJs(n.id)})">CV</button>
+        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarNinera(${argJs(n.id)})" title="Eliminar niñera" aria-label="Eliminar niñera">${ICONS.trash}</button>
       </div>
     </div>`;
   grid.innerHTML = countMsg + '<div class="person-list">' + completas.map(filaNinera).join('') + '</div>'
@@ -271,8 +271,8 @@ async function cargarCarsittingSeccion(nombre, boxId, tipo, mail){
     box.innerHTML = `
       <div style="margin-top:14px;">
         <h2 class="card-section-title" style="margin-top:0;">Datos de carsitting</h2>
-        <div class="fichadl">${campos.map(([l,v])=>`<div><b>${l}</b>${v}</div>`).join('')}</div>
-        ${fotos.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${fotos.map(([l,v])=>`<a href="${v}" target="_blank" class="smallbtn">${l}</a>`).join('')}</div>`:''}
+        <div class="fichadl">${campos.map(([l,v])=>`<div><b>${l}</b>${escaparHtml(v)}</div>`).join('')}</div>
+        ${fotos.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${fotos.map(([l,v])=>`<a href="${urlSegura(v)}" target="_blank" rel="noopener" class="smallbtn">${l}</a>`).join('')}</div>`:''}
       </div>`;
     return;
   }
@@ -281,16 +281,16 @@ async function cargarCarsittingSeccion(nombre, boxId, tipo, mail){
     const primerNombre = (nombre||'').split(' ')[0];
     const asunto = encodeURIComponent('¡Bienvenida al equipo de traslados de Parents’ Break!');
     const cuerpo = encodeURIComponent(`Hola ${primerNombre},\n\n¡Qué alegría contar con vos para hacer traslados con Parents’ Break! Ya vimos en tu entrevista que tenés licencia de conducir y ganas de sumarte a esta parte del equipo.\n\nPara terminar de darte de alta como carsitter, necesitamos que completes este formulario con los datos de tu auto y algunos datos más:\n\nhttps://forms.gle/J4QXgNJQ8kXMsA4C6\n\nCon esto ya vas a quedar lista para que te empecemos a asignar traslados.\n\nCualquier duda, escribinos.\n\nUn abrazo,\nParents’ Break`);
-    const href = `mailto:${mail||''}?subject=${asunto}&body=${cuerpo}`;
+    const href = `mailto:${escaparHtml(mail)}?subject=${asunto}&body=${cuerpo}`;
     const asuntoPersonal = encodeURIComponent('Parents’ Break');
     const cuerpoPersonal = encodeURIComponent(`Hola ${primerNombre},\n\n\n\nUn abrazo,\nParents’ Break`);
-    const hrefPersonal = `mailto:${mail||''}?subject=${asuntoPersonal}&body=${cuerpoPersonal}`;
+    const hrefPersonal = `mailto:${escaparHtml(mail)}?subject=${asuntoPersonal}&body=${cuerpoPersonal}`;
     box.innerHTML = `
       <div style="margin-top:14px;background:var(--accent-soft);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
         <div style="font-size:13px;color:var(--ink);">Hace traslados pero todavía no completó el form de carsitting.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <a class="btn" style="padding:7px 14px;font-size:12.5px;text-decoration:none;" href="${hrefPersonal}">Mail personalizado</a>
-          <a class="btn primary" style="padding:7px 14px;font-size:12.5px;text-decoration:none;" href="${href}">Enviar mail de carsitting</a>
+          <a class="btn" style="padding:7px 14px;font-size:12.5px;text-decoration:none;" href="${urlSegura(hrefPersonal)}">Mail personalizado</a>
+          <a class="btn primary" style="padding:7px 14px;font-size:12.5px;text-decoration:none;" href="${urlSegura(href)}">Enviar mail de carsitting</a>
         </div>
       </div>`;
   }
@@ -301,29 +301,29 @@ async function verNinera(id){
   const edadCalculada = calcularEdad(cd.fecha_nacimiento);
   // Si hay fecha de nacimiento cargada, la edad calculada pisa al texto viejo ("19 años")
   // en la lista de campos — así nunca se muestran las dos ni queda la vieja dando vueltas.
-  const rows = FICHA_CAMPOS.filter(f=>cd[f.key] && !(f.key==='edad' && edadCalculada!==null)).map(f=>`<div><b>${f.label}</b>${cd[f.key]}</div>`).join('');
+  const rows = FICHA_CAMPOS.filter(f=>cd[f.key] && !(f.key==='edad' && edadCalculada!==null)).map(f=>`<div><b>${f.label}</b>${escaparHtml(cd[f.key])}</div>`).join('');
   const edadRow = edadCalculada!==null ? `<div><b>Edad</b>${edadCalculada} años</div>` : '';
   // Aviso si el CV de Canva quedó viejo: cumplió años después de la última vez que se generó.
   const cvDesactualizado = cvEstaDesactualizado(n);
-  const fotoHtml = n.foto ? `<img src="${n.foto}" alt="Foto de ${n.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;cursor:zoom-in;" onclick="abrirLightboxFoto('${n.foto}', 'Foto de ${n.nombre}')" onerror="this.style.display='none'">` : '';
+  const fotoHtml = n.foto ? `<img src="${urlSegura(n.foto)}" alt="Foto de ${escaparHtml(n.nombre)}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;cursor:zoom-in;" onclick="abrirLightboxFoto(${argJs(n.foto)}, ${argJs('Foto de '+n.nombre)})" onerror="this.style.display='none'">` : '';
   abrirModal(`
     ${fotoHtml}
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;padding-right:44px;">
-      <h2 style="margin:0 0 10px;">${n.nombre} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
-      <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({ninera_id:n.id, ninera_nombre:n.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
+      <h2 style="margin:0 0 10px;">${escaparHtml(n.nombre)} ${resenaBadge ? resenaBadge(n.nombre) : ''}</h2>
+      <button class="smallbtn" onclick="abrirModalIncidente(${argJs({ninera_id:n.id, ninera_nombre:n.nombre})})">+ Registrar incidente</button>
     </div>
     ${htmlCambioTelefono(n)}
     ${cvDesactualizado ? `<div class="warnbox" style="margin-bottom:10px;">Cumplió años desde que se generó el CV — convendría rehacerlo.</div>` : ''}
-    <div class="fichadl">${edadRow}${rows||(edadRow?'':'<div>Sin más datos.</div>')}<div><b>Zona</b>${textoZonasConBarrios(n.zona, n.barrios)||'—'}</div><div><b>Teléfono</b><span id="vn-telefono">${n.telefono||'—'}</span></div><div><b>Tipo</b>${n.tipo||'Niñera'}</div>${n.cv_url?`<div><b>CV</b><a href="${n.cv_url}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${textoCuentasBancarias(n.cuenta_bancaria)}</div><div><b>Notas</b>${n.notas||'—'}</div></div>
+    <div class="fichadl">${edadRow}${rows||(edadRow?'':'<div>Sin más datos.</div>')}<div><b>Zona</b>${escaparHtml(textoZonasConBarrios(n.zona, n.barrios)||'—')}</div><div><b>Teléfono</b><span id="vn-telefono">${escaparHtml(n.telefono||'—')}</span></div><div><b>Tipo</b>${escaparHtml(n.tipo||'Niñera')}</div>${n.cv_url?`<div><b>CV</b><a href="${urlSegura(n.cv_url)}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${escaparHtml(textoCuentasBancarias(n.cuenta_bancaria))}</div><div><b>Notas</b>${escaparHtml(n.notas||'—')}</div></div>
     <div id="vn-carsitting"></div>
     <div id="vn-juguetes"></div>
     <div id="vn-incidentes" style="margin-top:18px;"></div>
     <div id="vn-intermediaciones" style="margin-top:18px;"></div>
     <div style="margin-top:18px;">
-      <h2 class="card-section-title" style="margin-top:0;">Sittings y traslados de ${n.nombre.split(' ')[0]}</h2>
+      <h2 class="card-section-title" style="margin-top:0;">Sittings y traslados de ${escaparHtml(n.nombre.split(' ')[0])}</h2>
       <div class="grid2">
-        <div class="field"><label>Familia</label><select id="vn-familia" onchange="renderNineraHistorial('${n.id}')"><option value="">Todas</option></select></div>
-        <div class="field"><label>Período</label><select id="vn-periodo" onchange="renderNineraHistorial('${n.id}')">
+        <div class="field"><label>Familia</label><select id="vn-familia" onchange="renderNineraHistorial(${argJs(n.id)})"><option value="">Todas</option></select></div>
+        <div class="field"><label>Período</label><select id="vn-periodo" onchange="renderNineraHistorial(${argJs(n.id)})">
           <option value="0">Todo</option><option value="7">Últimos 7 días</option><option value="15">Últimos 15 días</option><option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option>
         </select></div>
       </div>
@@ -360,7 +360,7 @@ async function verNinera(id){
       if(!famMap.has(key)) famMap.set(key, raw);
     });
     const fams = [...famMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
-    sel.innerHTML = `<option value="">Todas</option>` + fams.map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
+    sel.innerHTML = `<option value="">Todas</option>` + fams.map(([key,label])=>`<option value="${escaparHtml(key)}">${escaparHtml(label)}</option>`).join('');
   }
   renderNineraHistorial(n.id);
 }
@@ -373,11 +373,11 @@ function htmlCambioTelefono(n){
     <div id="cambio-tel-box" style="background:var(--accent-soft);border-radius:12px;padding:12px 14px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
       <div style="font-size:13px;line-height:1.5;">
         <div style="font-weight:600;">Pidió cambiar su celular${cuando?` el ${cuando}`:''}</div>
-        <div>Nuevo: <span style="font-family:'IBM Plex Mono',monospace;">${n.telefono_pendiente}</span>. Ahora: <span style="font-family:'IBM Plex Mono',monospace;">${n.telefono||'sin celular'}</span></div>
+        <div>Nuevo: <span style="font-family:'IBM Plex Mono',monospace;">${escaparHtml(n.telefono_pendiente)}</span>. Ahora: <span style="font-family:'IBM Plex Mono',monospace;">${escaparHtml(n.telefono||'sin celular')}</span></div>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="btn ghost" style="padding:7px 14px;font-size:12.5px;" onclick="resolverCambioTelefono('${n.id}', false)">Descartar</button>
-        <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="resolverCambioTelefono('${n.id}', true)">Aceptar</button>
+        <button class="btn ghost" style="padding:7px 14px;font-size:12.5px;" onclick="resolverCambioTelefono(${argJs(n.id)}, false)">Descartar</button>
+        <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="resolverCambioTelefono(${argJs(n.id)}, true)">Aceptar</button>
       </div>
     </div>`;
 }
@@ -420,7 +420,7 @@ function renderNineraHistorial(id){
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Familia</th><th>Cobro</th><th>Pago</th></tr></thead>
     <tbody>${items.map(r=>{
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td>${r.familia_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td>${escaparHtml(r.familia_nombre)}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 function editarNinera(id){
@@ -434,11 +434,11 @@ function editarNinera(id){
   ninEditCandidataCache = n.candidatas || {};
   registrarRenderizadorZona('ed', ()=>editarNinera(id));
   abrirModal(`
-    <h2 style="margin:0 0 12px;">Editar a ${n.nombre}</h2>
+    <h2 style="margin:0 0 12px;">Editar a ${escaparHtml(n.nombre)}</h2>
     ${htmlCambioTelefono(n)}
     <div style="margin-bottom:14px;">
       <div id="ed-foto-preview" style="width:100%;height:160px;border-radius:12px;background:var(--bg);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:12px;color:var(--ink-soft);">
-        ${n.foto?`<img src="${n.foto}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
+        ${n.foto?`<img src="${urlSegura(n.foto)}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap;">
         <input type="file" accept="image/*" id="ed-foto-input" style="font-size:12px;" onchange="subirFotoNinera(this)">
@@ -447,8 +447,8 @@ function editarNinera(id){
       <div id="ed-foto-status" class="helper" style="margin:2px 0 0;"></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Nombre</label><input type="text" id="ed-nombre" value="${n.nombre||''}"></div>
-      <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${n.telefono||''}"></div>
+      <div class="field"><label>Nombre</label><input type="text" id="ed-nombre" value="${escaparHtml(n.nombre)}"></div>
+      <div class="field"><label>Teléfono</label><input type="tel" id="ed-telefono" value="${escaparHtml(n.telefono)}"></div>
       <div class="field"><label>Tipo</label><select id="ed-tipo">${tipos.map(t=>`<option ${n.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
     </div>
     ${htmlCuentasBancarias('ed', n.cuenta_bancaria)}
@@ -465,17 +465,17 @@ function editarNinera(id){
         <button type="button" class="smallbtn" onclick="setTodasQuincenas('ed-temp', false)">No va</button>
       </div>
     </div>` : ''}
-    <div class="field"><label>Notas</label><textarea id="ed-notas">${n.notas||''}</textarea></div>
+    <div class="field"><label>Notas</label><textarea id="ed-notas">${escaparHtml(n.notas)}</textarea></div>
     <div class="field">
       <label>Fecha de nacimiento</label>
-      <input type="date" id="ed-fecha-nac" value="${(n.candidatas && n.candidatas.fecha_nacimiento) || ''}" onchange="ocultarEdadViejaSiHayFecha(this)">
+      <input type="date" id="ed-fecha-nac" value="${escaparHtml(n.candidatas && n.candidatas.fecha_nacimiento)}" onchange="ocultarEdadViejaSiHayFecha(this)">
       <div class="helper" style="margin:4px 0 0;">Con esto cargado, la edad se calcula sola en todos lados (ficha y CV) — no vuelve a quedar vieja.</div>
     </div>
     <div id="ed-extra-fields"></div>
     <button class="btn" type="button" style="width:100%;margin-top:10px;" onclick="abrirSelectorCategoriaNinera()">+ Agregar categorías</button>
     <div class="confirmbtns" style="margin-top:18px;">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionNinera('${id}')">Guardar</button>
+      <button class="btn primary" onclick="guardarEdicionNinera(${argJs(id)})">Guardar</button>
     </div>`);
   ninFotoUrlPendiente = n.foto || null;
   // precargar los campos de categorías que ya tenían datos cargados —
@@ -571,7 +571,7 @@ function agregarCampoExtraNinera(key){
       <label style="margin:0;">${campo.label}</label>
       <button type="button" title="Quitar esta categoría" aria-label="Quitar esta categoría" onclick="this.closest('.field').remove()" style="width:20px;height:20px;border-radius:50%;border:none;background:var(--bad);color:#fff;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;">−</button>
     </div>
-    <textarea data-campo="${key}" rows="2">${ninEditCandidataCache[key]||''}</textarea>`;
+    <textarea data-campo="${key}" rows="2">${escaparHtml(ninEditCandidataCache[key])}</textarea>`;
   cont.appendChild(row);
 }
 async function subirFotoNinera(input){
@@ -584,7 +584,7 @@ async function subirFotoNinera(input){
   if(error){ status.textContent = 'Error al subir: '+error.message; return; }
   const { data:pub } = sb.storage.from('ninieras-fotos').getPublicUrl(path);
   ninFotoUrlPendiente = pub.publicUrl;
-  document.getElementById('ed-foto-preview').innerHTML = `<img src="${ninFotoUrlPendiente}" style="width:100%;height:100%;object-fit:cover;">`;
+  document.getElementById('ed-foto-preview').innerHTML = `<img src="${urlSegura(ninFotoUrlPendiente)}" style="width:100%;height:100%;object-fit:cover;">`;
   status.textContent = 'Foto lista.';
 }
 let ninFotoUrlPendiente = null;
@@ -691,11 +691,11 @@ Datos de la niñera:
 ${datos.map(d=>'- '+d).join('\n')}`;
   abrirModal(`
     <h2 style="margin:0 0 10px;">Mensaje para pedirle el CV a Claude</h2>
-    <div class="helper">Copiá esto (o descargalo) y pegalo en un chat con Claude dentro de este Project — tiene todo lo que necesita para generar el CV de ${n.nombre} y mandártelo en PDF. Para que funcione, el Project tiene que tener cargados el archivo de instrucciones y una imagen de ejemplo de CV en su sección de Files.</div>
-    <textarea id="cv-msg-${id}" readonly style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">${mensaje}</textarea>
+    <div class="helper">Copiá esto (o descargalo) y pegalo en un chat con Claude dentro de este Project — tiene todo lo que necesita para generar el CV de ${escaparHtml(n.nombre)} y mandártelo en PDF. Para que funcione, el Project tiene que tener cargados el archivo de instrucciones y una imagen de ejemplo de CV en su sección de Files.</div>
+    <textarea id="cv-msg-${id}" readonly style="min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">${escaparHtml(mensaje)}</textarea>
     <div class="confirmbtns">
-      <button class="btn ghost" onclick="descargarMensajeCV('${id}')">Descargar .txt</button>
-      <button class="btn primary" onclick="copiarMensajeCV('${id}')">Copiar mensaje</button>
+      <button class="btn ghost" onclick="descargarMensajeCV(${argJs(id)})">Descargar .txt</button>
+      <button class="btn primary" onclick="copiarMensajeCV(${argJs(id)})">Copiar mensaje</button>
     </div>`);
 }
 async function copiarMensajeCV(id){
@@ -883,7 +883,7 @@ function htmlEditorTemporada(prefix, grupos, temporada, opts={}){
     const qs = new Set(quincenasDeGrupo(temporada, g.id));
     return `
     <div class="temp-editor" data-prefix="${prefix}" data-grupo="${g.id}" style="margin-top:6px;">
-      ${grupos.length>1 || opts.mostrarNombreGrupo ? `<div class="helper" style="margin:0 0 4px;">${g.nombre}</div>` : ''}
+      ${grupos.length>1 || opts.mostrarNombreGrupo ? `<div class="helper" style="margin:0 0 4px;">${escaparHtml(g.nombre)}</div>` : ''}
       <div class="temp-meses">${TEMP_MESES.map((m,i)=>`<button type="button" onclick="toggleMesTemporada(this, ${i})" title="Marcar o desmarcar ${TEMP_MESES_LARGO[i]} completo">${m}</button>`).join('')}</div>
       <div class="temp-strip${opts.propuesta?' propuesta':''}">${TEMP_TODAS.map(q=>`<button type="button" class="tq${qs.has(q)?' on':''}" data-q="${q}" onclick="toggleQuincena(this)" title="${q%2?'2da':'1ra'} quincena de ${TEMP_MESES_LARGO[q>>1]}" aria-label="${q%2?'2da':'1ra'} quincena de ${TEMP_MESES_LARGO[q>>1]}" aria-pressed="${qs.has(q)}"></button>`).join('')}</div>
       <div class="helper temp-resumen" style="margin:4px 0 0;">${textoQuincenas([...qs])}</div>
@@ -1005,25 +1005,24 @@ function filaTemporadaPanel(n){
     <div class="temp-row" id="temp-row-${n.id}">
       <div class="temp-row-head">
         <div>
-          <div style="font-weight:600;">${n.nombre}</div>
-          <div class="helper" style="margin:0;">${textoZonasConBarrios(n.zona, n.barrios)||'zona s/d'}</div>
+          <div style="font-weight:600;">${escaparHtml(n.nombre)}</div>
+          <div class="helper" style="margin:0;">${escaparHtml(textoZonasConBarrios(n.zona, n.barrios)||'zona s/d')}</div>
           <div class="helper" style="margin:2px 0 0;color:${est!=='ok'?'var(--warn)':'var(--ink-soft)'};">${estadoTxt}</div>
-          ${n.temporada_comentario ? `<div class="helper" style="margin:2px 0 0;">Comentario: ${escaparHtmlTemp(n.temporada_comentario)}</div>` : ''}
+          ${n.temporada_comentario ? `<div class="helper" style="margin:2px 0 0;">Comentario: ${escaparHtml(n.temporada_comentario)}</div>` : ''}
         </div>
         <div class="temp-acciones">
-          ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior('${n.id}')">Repetir lo del año pasado</button>` : ''}
-          <button type="button" class="smallbtn" onclick="pedirTemporadaWhatsapp('${n.id}')">Pedirle por WhatsApp</button>
-          <button type="button" class="smallbtn" onclick="setTodasQuincenas('${prefix}', true)">Todo el año</button>
-          <button type="button" class="smallbtn" onclick="setTodasQuincenas('${prefix}', false)">No va</button>
+          ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior(${argJs(n.id)})">Repetir lo del año pasado</button>` : ''}
+          <button type="button" class="smallbtn" onclick="pedirTemporadaWhatsapp(${argJs(n.id)})">Pedirle por WhatsApp</button>
+          <button type="button" class="smallbtn" onclick="setTodasQuincenas(${argJs(prefix)}, true)">Todo el año</button>
+          <button type="button" class="smallbtn" onclick="setTodasQuincenas(${argJs(prefix)}, false)">No va</button>
         </div>
       </div>
       ${htmlEditorTemporada(prefix, grupos, n.temporada)}
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-        <button type="button" class="smallbtn" data-temp-guardar="${prefix}" style="display:${est==='ok'?'none':''};background:var(--accent);color:#fff;border-color:var(--accent);" onclick="guardarTemporadaPanel('${n.id}')">${est==='ok'?'Guardar cambios':'Guardar temporada'}</button>
+        <button type="button" class="smallbtn" data-temp-guardar="${prefix}" style="display:${est==='ok'?'none':''};background:var(--accent);color:#fff;border-color:var(--accent);" onclick="guardarTemporadaPanel(${argJs(n.id)})">${est==='ok'?'Guardar cambios':'Guardar temporada'}</button>
       </div>
     </div>`;
 }
-function escaparHtmlTemp(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 async function guardarTemporadaEnBase(id, temporada, extra={}){
   const n = ninierasItems.find(x=>x.id===id);
   const cambios = {
@@ -1069,7 +1068,7 @@ function mensajeDifusionTemporada(){
 }
 async function copiarMensajeDifusionTemporada(){
   try{ await navigator.clipboard.writeText(mensajeDifusionTemporada()); toast('Mensaje copiado. Pegalo en la lista de difusión de WhatsApp.'); }
-  catch(e){ abrirModal(`<h2 style="margin:0 0 8px;">Mensaje para difusión</h2><div class="helper">Copialo y pegalo en la lista de difusión.</div><textarea style="width:100%;min-height:180px;">${escaparHtmlTemp(mensajeDifusionTemporada())}</textarea>`); }
+  catch(e){ abrirModal(`<h2 style="margin:0 0 8px;">Mensaje para difusión</h2><div class="helper">Copialo y pegalo en la lista de difusión.</div><textarea style="width:100%;min-height:180px;">${escaparHtml(mensajeDifusionTemporada())}</textarea>`); }
 }
 /* Recordatorio anual (campanita, cada 1 de octubre): el mensaje listo para mandar por
    difusión, con el link. WhatsApp no deja abrir una lista de difusión directo desde un link,
@@ -1079,7 +1078,7 @@ function abrirRecordatorioTemporada(){
   abrirModal(`
     <h2 style="margin:0 0 6px;padding-right:44px;">Pedir la temporada de Punta</h2>
     <div class="helper" style="margin:0 0 12px;">Mandales este mensaje a las niñeras por la lista de difusión. Lo que carguen se guarda solo en su ficha.${faltan?` Hoy hay ${faltan} sin temporada al día.`:''}</div>
-    <div style="background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;white-space:pre-wrap;font-size:14px;line-height:1.5;">${escaparHtmlTemp(mensajeDifusionTemporada())}</div>
+    <div style="background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;white-space:pre-wrap;font-size:14px;line-height:1.5;">${escaparHtml(mensajeDifusionTemporada())}</div>
     <div class="confirmbtns" style="margin-top:16px;">
       <a class="btn ghost" style="text-decoration:none;text-align:center;" href="https://wa.me/?text=${encodeURIComponent(mensajeDifusionTemporada())}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
       <button class="btn primary" onclick="copiarMensajeDifusionTemporada()">Copiar mensaje</button>
@@ -1093,20 +1092,20 @@ function abrirPasoTemporada(id){
   asegurarEstilosTemporada();
   const est = estadoTemporada(n);
   abrirModal(`
-    <h2 style="margin:0 0 4px;padding-right:32px;">Temporada de ${n.nombre.split(' ')[0]}</h2>
+    <h2 style="margin:0 0 4px;padding-right:32px;">Temporada de ${escaparHtml(n.nombre.split(' ')[0])}</h2>
     <div class="helper" style="margin:0 0 10px;">${est==='vieja'
       ? `Su temporada es del año pasado (${textoFuenteTemporada(n)}). ¿Sigue igual este verano?`
       : 'Todavía no sabemos si veranea afuera de Montevideo. Marcá las quincenas en que está en Punta del Este, o dejalo vacío si no va.'}</div>
     ${htmlEditorTemporada('paso-temp', gruposParaEditor(n), n.temporada)}
     <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-      ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior('${id}', ()=>editarNinera('${id}'))">Repetir lo del año pasado</button>` : ''}
+      ${est==='vieja' ? `<button type="button" class="smallbtn" onclick="repetirTemporadaAnterior(${argJs(id)}, ()=>editarNinera(${argJs(id)}))">Repetir lo del año pasado</button>` : ''}
       <button type="button" class="smallbtn" onclick="setTodasQuincenas('paso-temp', true)">Todo el año</button>
       <button type="button" class="smallbtn" onclick="setTodasQuincenas('paso-temp', false)">No va</button>
-      <button type="button" class="smallbtn" onclick="pedirTemporadaWhatsapp('${id}')">Pedirle por WhatsApp</button>
+      <button type="button" class="smallbtn" onclick="pedirTemporadaWhatsapp(${argJs(id)})">Pedirle por WhatsApp</button>
     </div>
     <div class="confirmbtns" style="margin-top:16px;">
-      <button class="btn ghost" onclick="omitirPasoTemporada('${id}')">Omitir por ahora</button>
-      <button class="btn primary" onclick="guardarPasoTemporada('${id}')">Guardar y seguir</button>
+      <button class="btn ghost" onclick="omitirPasoTemporada(${argJs(id)})">Omitir por ahora</button>
+      <button class="btn primary" onclick="guardarPasoTemporada(${argJs(id)})">Guardar y seguir</button>
     </div>`);
 }
 function omitirPasoTemporada(id){ ninTempOmitidas.add(id); editarNinera(id); }

@@ -176,7 +176,7 @@ test.describe('vigencia editable desde la app', () => {
     await irAModulo(page, 'familias');
     await page.evaluate(id => verFamilia(id), ID.fUno);
     await expect(page.locator('#editmodal')).toContainText('desde el 01/09/26');
-    await page.locator(`#editmodal button[onclick="abrirModalVigenciaAsignacion('${ID.aFijo}')"]`).click();
+    await page.locator(`#editmodal button[onclick="abrirModalVigenciaAsignacion(\\"${ID.aFijo}\\")"]`).click();
     await expect(page.locator('#vig-desde')).toHaveValue('2026-09-01');
     await page.fill('#vig-desde', '2026-09-09');
     await page.fill('#vig-hasta', '2026-12-20');

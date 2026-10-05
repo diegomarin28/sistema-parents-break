@@ -164,7 +164,7 @@ async function cargarLegNombres(){
     sb.from('familias').select('nombre'),
   ]);
   const dl = document.getElementById('leg-nombres-dl');
-  if(dl) dl.innerHTML = [...(nins||[]), ...(fams||[])].map(x=>`<option value="${x.nombre}">`).join('');
+  if(dl) dl.innerHTML = [...(nins||[]), ...(fams||[])].map(x=>`<option value="${escaparHtml(x.nombre)}">`).join('');
 }
 function onLegTipoChange(){ /* placeholder por si más adelante autocompleta tarifa según asignación */ }
 function generarContrato(){
@@ -185,11 +185,11 @@ function generarContrato(){
     .replace(/{{FRECUENCIA_PAGO}}/g, frecuencia)
     .replace(/{{FECHA}}/g, fechaFmt);
   document.getElementById('leg-resultado').innerHTML = `
-    <h2 class="card-section-title">${tpl.titulo} — ${nombre}</h2>
-    <textarea id="leg-texto-generado" readonly style="min-height:320px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">${texto}</textarea>
+    <h2 class="card-section-title">${tpl.titulo} — ${escaparHtml(nombre)}</h2>
+    <textarea id="leg-texto-generado" readonly style="min-height:320px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">${escaparHtml(texto)}</textarea>
     <div class="actions">
       <button class="btn primary" onclick="copiarContrato()">Copiar texto</button>
-      <button class="btn ghost" onclick="descargarContrato('${tipo}','${nombre.replace(/'/g,"")}')">Descargar .txt</button>
+      <button class="btn ghost" onclick="descargarContrato(${argJs(tipo)},${argJs(nombre)})">Descargar .txt</button>
     </div>
   `;
 }
@@ -225,14 +225,14 @@ async function cargarContratos(){
   cont.innerHTML = `<div class="tablewrap"><table class="asigtable"><thead><tr><th>Tipo</th><th>Nombre</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody>
     ${contratosItems.map(c=>`<tr>
       <td>${c.tipo==='ninera'?'Niñera':'Traslados'}</td>
-      <td>${c.parte_nombre}</td>
+      <td>${escaparHtml(c.parte_nombre)}</td>
       <td>${c.fecha ? new Date(c.fecha+'T00:00:00').toLocaleDateString('es-UY') : '—'}</td>
-      <td><select onchange="cambiarEstadoContrato('${c.id}', this.value)" style="color:${estColor[c.estado]};font-weight:600;border:1px solid var(--line);border-radius:7px;padding:4px 8px;">
+      <td><select onchange="cambiarEstadoContrato(${argJs(c.id)}, this.value)" style="color:${estColor[c.estado]};font-weight:600;border:1px solid var(--line);border-radius:7px;padding:4px 8px;">
         <option value="borrador" ${c.estado==='borrador'?'selected':''}>Borrador</option>
         <option value="enviado" ${c.estado==='enviado'?'selected':''}>Enviado</option>
         <option value="firmado" ${c.estado==='firmado'?'selected':''}>Firmado</option>
       </select></td>
-      <td><button class="smallbtn danger" onclick="eliminarContrato('${c.id}')">Eliminar</button></td>
+      <td><button class="smallbtn danger" onclick="eliminarContrato(${argJs(c.id)})">Eliminar</button></td>
     </tr>`).join('')}
   </tbody></table></div>`;
 }

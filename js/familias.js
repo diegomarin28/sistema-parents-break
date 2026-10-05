@@ -15,7 +15,7 @@ function renderFamilias(body){
     <div id="fam-riesgo-wrap"></div>
     <div id="fam-zonasnuevas-wrap"></div>
     <div class="card" style="padding:14px 18px;"><div class="grid2">
-      <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" autocomplete="off" placeholder="Nombre..." value="${famBusqueda}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
+      <div class="field" style="margin:0;"><label>Buscar familia</label><input type="text" id="fam-buscar" autocomplete="off" placeholder="Nombre..." value="${escaparHtml(famBusqueda)}" oninput="famBusqueda=this.value;renderFamiliasList();"></div>
       <div class="field" style="margin:0;"><button class="btn primary" style="width:100%;margin-top:22px;" onclick="abrirModalNuevaFamilia()">+ Agregar familia</button></div>
     </div>
     <div class="field" style="margin:12px 0 0;"><label>Zonas</label><div id="fam-zonas-filtro">${htmlFiltroZonas(famFiltroZonas, 'toggleFiltroZonaFam')}</div></div>
@@ -162,16 +162,16 @@ function renderFamiliasEnRiesgo(){
         return `
         <div class="agendarow" style="border-bottom:1px solid var(--line);align-items:flex-start;flex-wrap:wrap;">
           <div style="flex:1;min-width:220px;">
-            <div style="font-weight:600;">${f.nombre}</div>
+            <div style="font-weight:600;">${escaparHtml(f.nombre)}</div>
             <div class="helper" style="margin:2px 0 8px;">Hace ${semanas} semana${semanas===1?'':'s'} sin sittings</div>
-            <textarea readonly style="width:100%;min-height:70px;font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;" id="fam-riesgo-msj-${f.id}">${mensajeRiesgoPara(f)}</textarea>
+            <textarea readonly style="width:100%;min-height:70px;font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;" id="fam-riesgo-msj-${f.id}">${escaparHtml(mensajeRiesgoPara(f))}</textarea>
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;min-width:150px;">
             ${f.telefono
-              ? `<button class="btn primary" style="padding:6px 10px;font-size:12.5px;" onclick="enviarWhatsappRiesgo('${f.id}')">Enviar por WhatsApp</button>`
+              ? `<button class="btn primary" style="padding:6px 10px;font-size:12.5px;" onclick="enviarWhatsappRiesgo(${argJs(f.id)})">Enviar por WhatsApp</button>`
               : `<div class="helper" style="margin:0;color:var(--clay-text);">Sin teléfono cargado</div>`}
-            <button class="smallbtn" onclick="copiarMensajeRiesgo('${f.id}')">Copiar mensaje</button>
-            <button class="smallbtn" onclick="marcarContactadaRiesgo('${f.id}')">Ya la contacté</button>
+            <button class="smallbtn" onclick="copiarMensajeRiesgo(${argJs(f.id)})">Copiar mensaje</button>
+            <button class="smallbtn" onclick="marcarContactadaRiesgo(${argJs(f.id)})">Ya la contacté</button>
           </div>
         </div>`;
       }).join('')}` : ''}
@@ -243,19 +243,19 @@ function renderFamiliasList(){
       : `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin tarifa</span>`;
     return `
     <div class="person-row">
-      <div class="av">${(f.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="av">${escaparHtml((f.nombre||'?').charAt(0).toUpperCase())}</div>
       <div class="info">
-        <div class="name">${f.nombre}</div>
-        <div class="meta">${f.zona||'zona s/d'}${(() => { const r = resumenHijosFamilia(f.hijos); return r ? ' · niños: '+r : (f.ninos ? ' · niños: '+f.ninos : ''); })()}</div>
+        <div class="name">${escaparHtml(f.nombre)}</div>
+        <div class="meta">${escaparHtml(f.zona||'zona s/d')}${escaparHtml((() => { const r = resumenHijosFamilia(f.hijos); return r ? ' · niños: '+r : (f.ninos ? ' · niños: '+f.ninos : ''); })())}</div>
       </div>
       <div class="badge-slot">
         ${badge}
         ${famIncidentesCount[normaliza(f.nombre)] ? `<span class="badge bad" style="font-size:10px;padding:2px 8px;">${famIncidentesCount[normaliza(f.nombre)]} incidente${famIncidentesCount[normaliza(f.nombre)]===1?'':'s'}</span>` : ''}
       </div>
       <div class="rowbtns">
-        <button class="smallbtn" onclick="verFamilia('${f.id}')">Ver ficha</button>
-        <button class="smallbtn" onclick="editarFamilia('${f.id}')">Editar</button>
-        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarFamilia('${f.id}')" title="Eliminar familia" aria-label="Eliminar familia">${ICONS.trash}</button>
+        <button class="smallbtn" onclick="verFamilia(${argJs(f.id)})">Ver ficha</button>
+        <button class="smallbtn" onclick="editarFamilia(${argJs(f.id)})">Editar</button>
+        <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarFamilia(${argJs(f.id)})" title="Eliminar familia" aria-label="Eliminar familia">${ICONS.trash}</button>
       </div>
     </div>`;
   }).join('') + '</div>';
@@ -272,7 +272,7 @@ function verFamilia(id){
   const filaAsig = a=>{
     const dias = (a.dias||[]).join(' ');
     const horario = a.hora_inicio ? `${a.hora_inicio.slice(0,5)}${a.hora_fin?'–'+a.hora_fin.slice(0,5):''}` : '—';
-    return `<tr><td>${a.ninera_nombre}</td><td>${tipoAsignacion(a)==='traslado'?'Traslado':'Sitting'} · ${dias||'—'} · ${horario}<div class="helper" style="margin:2px 0 0;">${textoVigencia(a)}</div></td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalVigenciaAsignacion('${a.id}')">Vigencia</button><button class="smallbtn danger" onclick="quitarAsignacion('${a.id}')">Quitar</button></div></td></tr>`;
+    return `<tr><td>${escaparHtml(a.ninera_nombre)}</td><td>${tipoAsignacion(a)==='traslado'?'Traslado':'Sitting'} · ${dias||'—'} · ${horario}<div class="helper" style="margin:2px 0 0;">${textoVigencia(a)}</div></td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalVigenciaAsignacion(${argJs(a.id)})">Vigencia</button><button class="smallbtn danger" onclick="quitarAsignacion(${argJs(a.id)})">Quitar</button></div></td></tr>`;
   };
   const ordenAsig = (x,y)=>(y.vigente_desde||'').localeCompare(x.vigente_desde||'');
   const asigRows = (f.asignaciones||[]).filter(a=>!asignacionTerminada(a, hoyFam)).sort(ordenAsig).map(filaAsig).join('');
@@ -288,26 +288,26 @@ function verFamilia(id){
         const promedio = res ? (res.suma/res.cant).toFixed(1) : null;
         const colorProm = promedio===null ? 'var(--ink-soft)' : (Number(promedio)>=4 ? 'var(--good)' : Number(promedio)>=3 ? '#7A5A16' : 'var(--clay-text)');
         return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
-          <div>${nn} <span style="color:var(--ink-soft);font-size:12px;">· ${cant} ${cant===1?'sitting/traslado':'sittings/traslados'}</span></div>
+          <div>${escaparHtml(nn)} <span style="color:var(--ink-soft);font-size:12px;">· ${cant} ${cant===1?'sitting/traslado':'sittings/traslados'}</span></div>
           <div style="font-weight:600;color:${colorProm};">${promedio!==null ? '★ '+promedio+'/5 ('+res.cant+')' : 'Sin reseñas'}</div>
         </div>`;
       }).join('')}
     </div>` : '';
   abrirModal(`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;padding-right:44px;">
-      <h2 style="margin:0;">${f.nombre}</h2>
+      <h2 style="margin:0;">${escaparHtml(f.nombre)}</h2>
       <div style="display:flex;gap:6px;">
-        <button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({familia_id:f.id, familia_nombre:f.nombre}).replace(/'/g,"&#39;")})'>+ Registrar incidente</button>
-        <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="editarFamilia('${f.id}')">Editar</button>
+        <button class="smallbtn" onclick="abrirModalIncidente(${argJs({familia_id:f.id, familia_nombre:f.nombre})})">+ Registrar incidente</button>
+        <button class="btn primary" style="padding:7px 14px;font-size:12.5px;" onclick="editarFamilia(${argJs(f.id)})">Editar</button>
       </div>
     </div>
-    <div class="helper">${f.zona||'zona s/d'} ${f.telefono?'· '+f.telefono:''}</div>
+    <div class="helper">${escaparHtml(f.zona||'zona s/d')} ${escaparHtml(f.telefono?'· '+f.telefono:'')}</div>
     ${precioHtml}
-    ${f.frecuencia_cobro?`<div class="helper">Frecuencia de cobro: ${f.frecuencia_cobro}</div>`:''}
-    ${f.direccion?`<div class="helper">Dirección: ${f.direccion}</div>`:''}
-    ${textoHijosFamilia(f.hijos) ? `<div class="helper">Niños:<br>${textoHijosFamilia(f.hijos)}</div>` : (f.ninos ? `<div class="helper">Niños: ${f.ninos}</div>` : '')}
-    ${f.cuenta_bancaria && f.cuenta_bancaria.length ? `<div class="helper">Cuenta: ${textoCuentasBancarias(f.cuenta_bancaria)}</div>` : ''}
-    ${f.notas?`<div class="helper">${f.notas}</div>`:''}
+    ${f.frecuencia_cobro?`<div class="helper">Frecuencia de cobro: ${escaparHtml(f.frecuencia_cobro)}</div>`:''}
+    ${f.direccion?`<div class="helper">Dirección: ${escaparHtml(f.direccion)}</div>`:''}
+    ${textoHijosFamilia(f.hijos) ? `<div class="helper">Niños:<br>${textoHijosFamilia(f.hijos)}</div>` : (f.ninos ? `<div class="helper">Niños: ${escaparHtml(f.ninos)}</div>` : '')}
+    ${f.cuenta_bancaria && f.cuenta_bancaria.length ? `<div class="helper">Cuenta: ${escaparHtml(textoCuentasBancarias(f.cuenta_bancaria))}</div>` : ''}
+    ${f.notas?`<div class="helper">${escaparHtml(f.notas)}</div>`:''}
     ${historialHtml}
     <div id="fam-incidentes" style="margin-top:14px;"></div>
     <div class="card-section-title">Niñeras asignadas</div>
@@ -315,7 +315,7 @@ function verFamilia(id){
       <tbody>${asigRows || '<tr><td colspan="3" style="color:var(--ink-soft);">Sin niñeras asignadas todavía.</td></tr>'}</tbody></table></div>
     ${asigTerminadas.length ? `<div class="helper" style="margin:10px 0 4px;">Fijos que ya terminaron</div>
     <div class="tablewrap"><table class="asigtable"><tbody>${asigTerminadas.map(filaAsig).join('')}</tbody></table></div>` : ''}
-    <datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${n.nombre}">`).join('')}</datalist>
+    <datalist id="ninieras-dl">${(ninierasItems||[]).map(n=>`<option value="${escaparHtml(n.nombre)}">`).join('')}</datalist>
     <div class="grid3" style="margin-top:14px;">
       <div class="field"><label>Niñera</label><input type="text" list="ninieras-dl" id="asig-nombre-${f.id}"></div>
       <div class="field"><label>Hora inicio</label>${selectHora('asig-horaini-'+f.id)}</div>
@@ -330,7 +330,7 @@ function verFamilia(id){
         ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" onclick="this.classList.toggle('selected')">${d}</button>`).join('')}
       </div>
     </div>
-    <button class="smallbtn" onclick="addAsignacion('${f.id}')">+ Asignar niñera</button>`);
+    <button class="smallbtn" onclick="addAsignacion(${argJs(f.id)})">+ Asignar niñera</button>`);
   renderIncidentesEnFicha('fam-incidentes', 'familia', f.id, f.nombre);
 }
 function editarFamilia(id){
@@ -339,15 +339,15 @@ function editarFamilia(id){
   registrarRenderizadorZona('ed-fam', ()=>editarFamilia(id));
   abrirModal(`
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
-      <div style="width:46px;height:46px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-family:'Baloo 2',sans-serif;font-weight:600;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${(f.nombre||'?').charAt(0).toUpperCase()}</div>
-      <h2 style="margin:0;">Editar a ${f.nombre}</h2>
+      <div style="width:46px;height:46px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-family:'Baloo 2',sans-serif;font-weight:600;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${escaparHtml((f.nombre||'?').charAt(0).toUpperCase())}</div>
+      <h2 style="margin:0;">Editar a ${escaparHtml(f.nombre)}</h2>
     </div>
     <div class="grid2">
-      <div class="field"><label>Nombre</label><input type="text" id="ed-fam-nombre" value="${f.nombre||''}"></div>
-      <div class="field"><label>Teléfono</label><input type="tel" id="ed-fam-telefono" value="${f.telefono||''}"></div>
+      <div class="field"><label>Nombre</label><input type="text" id="ed-fam-nombre" value="${escaparHtml(f.nombre)}"></div>
+      <div class="field"><label>Teléfono</label><input type="tel" id="ed-fam-telefono" value="${escaparHtml(f.telefono)}"></div>
       <div class="field"><label>Cobro a familia ($/h)</label><input type="number" id="ed-fam-cobro" value="${f.cobro_hora??''}"></div>
       <div class="field"><label>Pago a niñera ($/h)</label><input type="number" id="ed-fam-pago" value="${f.pago_hora??''}"></div>
-      <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion" value="${f.direccion||''}"></div>
+      <div class="field"><label>Dirección</label><input type="text" id="ed-fam-direccion" value="${escaparHtml(f.direccion)}"></div>
       <div class="field"><label>Frecuencia de cobro</label><select id="ed-fam-frecuencia">
         <option value="diario" ${f.frecuencia_cobro==='diario'?'selected':''}>Diario (puntual)</option>
         <option value="semanal" ${f.frecuencia_cobro==='semanal'?'selected':''}>Semanal</option>
@@ -357,10 +357,10 @@ function editarFamilia(id){
     ${htmlHijosFamilia('ed-fam', f.hijos)}
     ${htmlCuentasBancarias('ed-fam', f.cuenta_bancaria)}
     ${checklistZonas('ed-fam', f.zona)}
-    <div class="field"><label>Notas</label><textarea id="ed-fam-notas">${f.notas||''}</textarea></div>
+    <div class="field"><label>Notas</label><textarea id="ed-fam-notas">${escaparHtml(f.notas)}</textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionFamilia('${id}')">Guardar</button>
+      <button class="btn primary" onclick="guardarEdicionFamilia(${argJs(id)})">Guardar</button>
     </div>`);
 }
 async function guardarEdicionFamilia(id){

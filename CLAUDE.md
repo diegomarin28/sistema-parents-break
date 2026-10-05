@@ -93,6 +93,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - No repintar la app entera ante eventos de auth ni al volver de segundo plano: ya causó
   pérdida de entrevistas (ver comentarios en auth.js y bootstrap.js).
 - Una función global nueva no puede repetir el nombre de otra en ningún archivo.
+- Escape (05/10/2026): helpers únicos en core.js. `escaparHtml()` para texto y atributos,
+  `argJs()` para pasar un dato a un handler inline (`f(${argJs(x)})`, nunca `'${x}'`) y
+  `urlSegura()` para href/src. `tests/escape.spec.js` recorre todo con datos tramposos y
+  `estatico.spec.js` controla los handlers.
 - Fijos (asignaciones): tienen vigencia (`vigente_desde`/`vigente_hasta`, inclusive) y tipo.
   Nunca pisar la niñera de una asignación con historia: cerrarla y abrir otra desde una
   fecha. Lo que se registra desde un fijo lleva `asignacion_id`. Para saber si un fijo

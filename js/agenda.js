@@ -268,15 +268,15 @@ function renderAgendaFilaMobile(s){
   const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : '--:--';
   const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
   const esRegistro = s._fuente==='registro' && !s.cancelado;
-  return `<div style="padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;" onclick="abrirModalSolicitud('${s.id}')">
+  return `<div style="padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;" onclick="abrirModalSolicitud(${argJs(s.id)})">
     <div style="display:flex;align-items:center;gap:8px;">
       <div style="color:var(--ink-soft);font-variant-numeric:tabular-nums;width:38px;flex-shrink:0;">${horaTxt}</div>
-      <div style="flex:1;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.familia_nombre}</div>
+      <div style="flex:1;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escaparHtml(s.familia_nombre)}</div>
       ${s.cancelado
         ? `<span class="badge warn" style="font-size:10px;padding:2px 7px;flex-shrink:0;">Cancelado</span>`
         : esRegistro
-          ? (s.zona ? `<span class="badge accent" style="font-size:10px;padding:2px 7px;flex-shrink:0;">${s.zona}</span>` : '')
-          : `<div style="font-size:11px;font-weight:700;color:${sinAsignar?'var(--warn)':'var(--good)'};flex-shrink:0;">${sinAsignar ? 'Sin asignar' : ninTxt}</div>`}
+          ? (s.zona ? `<span class="badge accent" style="font-size:10px;padding:2px 7px;flex-shrink:0;">${escaparHtml(s.zona)}</span>` : '')
+          : `<div style="font-size:11px;font-weight:700;color:${sinAsignar?'var(--warn)':'var(--good)'};flex-shrink:0;">${sinAsignar ? 'Sin asignar' : escaparHtml(ninTxt)}</div>`}
     </div>
     ${esRegistro ? `<div style="display:flex;gap:14px;margin-top:4px;padding-left:46px;font-size:11px;color:var(--ink-soft);">
       <span>Cobro <b style="color:var(--ink);font-family:'IBM Plex Mono',monospace;">$${Number(s.cobro_familia||0).toLocaleString('es-UY')}</b></span>
@@ -289,16 +289,16 @@ function renderAgendaTarjetaDia(s){
   const horaTxt = s.hora_inicio ? s.hora_inicio.slice(0,5) : 'Sin hora';
   const ninTxt = s.ninieras.length ? s.ninieras.map(x=>(x.ninera_nombre||'').split(' ')[0]).join(' + ') : null;
   const esRegistro = s._fuente==='registro' && !s.cancelado;
-  return `<div style="background:var(--bg);border-radius:8px;padding:7px 8px;margin-bottom:6px;cursor:pointer;font-size:12px;" onclick="abrirModalSolicitud('${s.id}')">
-    <div style="font-weight:700;color:var(--ink);margin-bottom:2px;">${s.familia_nombre}</div>
+  return `<div style="background:var(--bg);border-radius:8px;padding:7px 8px;margin-bottom:6px;cursor:pointer;font-size:12px;" onclick="abrirModalSolicitud(${argJs(s.id)})">
+    <div style="font-weight:700;color:var(--ink);margin-bottom:2px;">${escaparHtml(s.familia_nombre)}</div>
     <div class="helper" style="margin:0 0 4px;">${horaTxt}</div>
     ${s.cancelado
       ? `<span class="badge warn" style="font-size:10.5px;padding:3px 8px;">Cancelado</span>`
       : esRegistro
         ? `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft);margin-bottom:1px;"><span>Cobro</span><span style="font-family:'IBM Plex Mono',monospace;color:var(--ink);font-weight:600;">$${Number(s.cobro_familia||0).toLocaleString('es-UY')}</span></div>
            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft);margin-bottom:${s.zona?'6px':'0'};"><span>Pago</span><span style="font-family:'IBM Plex Mono',monospace;color:var(--ink);font-weight:600;">$${Number(s.pago_ninera||0).toLocaleString('es-UY')}</span></div>
-           ${s.zona ? `<span class="badge accent" style="font-size:10.5px;padding:3px 8px;">${s.zona}</span>` : ''}`
-        : `<span class="badge ${sinAsignar?'warn':'good'}" style="font-size:10.5px;padding:3px 8px;">${sinAsignar ? 'Sin asignar' : ninTxt}</span>`}
+           ${s.zona ? `<span class="badge accent" style="font-size:10.5px;padding:3px 8px;">${escaparHtml(s.zona)}</span>` : ''}`
+        : `<span class="badge ${sinAsignar?'warn':'good'}" style="font-size:10.5px;padding:3px 8px;">${sinAsignar ? 'Sin asignar' : escaparHtml(ninTxt)}</span>`}
   </div>`;
 }
 
@@ -342,7 +342,7 @@ function mostrarAgendaFamiliaDropdown(){
     dd.style.display = q ? 'block' : 'none';
     return;
   }
-  dd.innerHTML = matches.map(f=>`<div class="autocomplete-item" onmousedown="elegirAgendaFamilia('${f.id}')">${f.nombre}</div>`).join('');
+  dd.innerHTML = matches.map(f=>`<div class="autocomplete-item" onmousedown="elegirAgendaFamilia(${argJs(f.id)})">${escaparHtml(f.nombre)}</div>`).join('');
   dd.style.display = 'block';
 }
 function ocultarAgendaFamiliaDropdown(){
@@ -669,14 +669,14 @@ async function abrirModalAsignar(solicitudId){
   }
   const filaSel = (n, sub) => `
     <label class="agenda-ninera-pick">
-      <input type="radio" name="agenda-asignar-ninera" value="${n.id}" data-nombre="${n.nombre}" onchange="onAgendaNineraSel(${pagoSugerido})">
-      <div><b>${n.nombre}</b><div class="helper" style="margin:0;">${sub}</div></div>
+      <input type="radio" name="agenda-asignar-ninera" value="${escaparHtml(n.id)}" data-nombre="${escaparHtml(n.nombre)}" onchange="onAgendaNineraSel(${pagoSugerido})">
+      <div><b>${escaparHtml(n.nombre)}</b><div class="helper" style="margin:0;">${escaparHtml(sub)}</div></div>
     </label>`;
   const html = `
     <h2>Asignar niñera${s.tipo==='traslado'?' al traslado':''}</h2>
-    <div class="helper">${s.familia_nombre} · ${s.tipo==='traslado'?'Traslado':'Sitting'} · ${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}${s.zona?' · '+s.zona:''}${s.cobro_familia?` · Cobro a familia $${Number(s.cobro_familia).toLocaleString('es-UY')}`:''}</div>
+    <div class="helper">${escaparHtml(s.familia_nombre)} · ${s.tipo==='traslado'?'Traslado':'Sitting'} · ${s.hora_inicio.slice(0,5)}${s.hora_fin?'–'+s.hora_fin.slice(0,5):''}${s.zona?escaparHtml(' · '+s.zona):''}${s.cobro_familia?` · Cobro a familia $${Number(s.cobro_familia).toLocaleString('es-UY')}`:''}</div>
     ${tier1.length ? `<div class="agenda-tier-label">Ya trabajaron con esta familia</div>${tier1.map(n=>filaSel(n, `${n.veces} vez${n.veces===1?'':'es'}`)).join('')}` : ''}
-    ${tier2.length ? `<div class="agenda-tier-label">Cubren ${s.zona||'esta zona'}</div>${tier2.map(n=>filaSel(n, n.cercana ? 'Cubre zona cercana (mismo grupo)' : 'Cubre la zona')).join('')}` : ''}
+    ${tier2.length ? `<div class="agenda-tier-label">Cubren ${escaparHtml(s.zona||'esta zona')}</div>${tier2.map(n=>filaSel(n, n.cercana ? 'Cubre zona cercana (mismo grupo)' : 'Cubre la zona')).join('')}` : ''}
     ${!tier1.length && !tier2.length ? '<div class="helper">Nadie con historial o zona coincidente todavía — mostrando el resto del equipo.</div>' : ''}
     <button type="button" class="smallbtn" style="margin:6px 0;" onclick="document.getElementById('agenda-tier3').style.display='block';this.style.display='none';">+ Niñeras</button>
     <div id="agenda-tier3" style="display:${(!tier1.length && !tier2.length) ? 'block' : 'none'};">
@@ -686,7 +686,7 @@ async function abrirModalAsignar(solicitudId){
     <div id="agenda-asignar-pago-wrap" style="display:none;margin-top:10px;">
       <div class="field"><label>Pago a la niñera</label><div class="moneyfield"><input type="number" id="agenda-asignar-pago" oninput="marcarCampoEditadoManual('agenda-asignar-pago')"></div></div>
       <div id="agenda-asignar-warn"></div>
-      <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarAsignacionDirecta('${s.id}')">Guardar asignación</button>
+      <button class="btn primary" style="width:100%;margin-top:6px;" onclick="guardarAsignacionDirecta(${argJs(s.id)})">Guardar asignación</button>
     </div>
   `;
   abrirModal(html);
@@ -747,24 +747,24 @@ function abrirModalSolicitud(id){
     ninierasHtml = s.ninieras.map(n=>`
       <div class="agenda-ninerarow">
         <div>
-          <b>${n.ninera_nombre}</b>
+          <b>${escaparHtml(n.ninera_nombre)}</b>
           <span class="badge ${n.estado==='confirmada'?'good':n.estado==='rechazada'?'bad':'warn'}">${n.estado==='confirmada'?'Confirmada':n.estado==='rechazada'?'Rechazada':'Pendiente'}</span>
           ${n.pago_ninera ? `<div class="helper" style="margin:2px 0 0;">Pago $${Number(n.pago_ninera).toLocaleString('es-UY')}</div>` : ''}
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
-          ${n.estado!=='confirmada' ? `<button class="smallbtn" onclick="confirmarNinera('${n.id}')">Confirmar</button>` : ''}
-          <a class="smallbtn" href="${waLink(agendaTelefonoNinera(n.ninera_nombre), mensajeWA(s, n.ninera_nombre))}" target="_blank" rel="noopener">WhatsApp</a>
+          ${n.estado!=='confirmada' ? `<button class="smallbtn" onclick="confirmarNinera(${argJs(n.id)})">Confirmar</button>` : ''}
+          <a class="smallbtn" href="${urlSegura(waLink(agendaTelefonoNinera(n.ninera_nombre), mensajeWA(s, n.ninera_nombre)))}" target="_blank" rel="noopener">WhatsApp</a>
         </div>
       </div>`).join('');
   }
   const cuerpo = `
-    <h2>${s.familia_nombre}</h2>
-    <div class="helper">${s.tipo==='traslado'?'Traslado':'Sitting'} · ${fechaTxt} · ${horario}${s.zona?' · '+s.zona:''}</div>
+    <h2>${escaparHtml(s.familia_nombre)}</h2>
+    <div class="helper">${s.tipo==='traslado'?'Traslado':'Sitting'} · ${fechaTxt} · ${horario}${s.zona?escaparHtml(' · '+s.zona):''}</div>
     ${s.cobro_familia ? `<div class="helper">Cobro a la familia: $${Number(s.cobro_familia).toLocaleString('es-UY')}</div>`:''}
     <div style="margin:14px 0;">${ninierasHtml || '<div class="empty">Todavía no hay niñeras asignadas.</div>'}</div>
-    ${s.estado==='sin_asignar' ? `<button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="cerrarModal();abrirModalAsignar('${s.id}')">Asignar niñera</button>` : ''}
-    ${s.estado==='pendiente_confirmar' ? `<button class="btn" style="width:100%;margin-bottom:8px;" onclick="cerrarModal();abrirModalAsignar('${s.id}')">+ Agregar otra niñera</button>` : ''}
-    ${s.estado!=='cancelada' ? `<button class="btn danger" style="width:100%;" onclick="cancelarSolicitud('${s.id}')">Cancelar solicitud</button>` : `<div class="warnbox">Esta solicitud fue cancelada.</div>`}
+    ${s.estado==='sin_asignar' ? `<button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="cerrarModal();abrirModalAsignar(${argJs(s.id)})">Asignar niñera</button>` : ''}
+    ${s.estado==='pendiente_confirmar' ? `<button class="btn" style="width:100%;margin-bottom:8px;" onclick="cerrarModal();abrirModalAsignar(${argJs(s.id)})">+ Agregar otra niñera</button>` : ''}
+    ${s.estado!=='cancelada' ? `<button class="btn danger" style="width:100%;" onclick="cancelarSolicitud(${argJs(s.id)})">Cancelar solicitud</button>` : `<div class="warnbox">Esta solicitud fue cancelada.</div>`}
   `;
   abrirModal(cuerpo);
 }
@@ -783,11 +783,11 @@ function abrirModalAsignacionFija(s){
   // el horario ni se borra (perdería su historia).
   const terminado = asignacionTerminada(a, hoy);
   const cuerpo = `
-    <h2>${s.familia_nombre}</h2>
+    <h2>${escaparHtml(s.familia_nombre)}</h2>
     <div class="helper">${esTraslado?'Traslado':'Sitting'} fijo · ${diasTxt || 'sin días'} · ${horario}</div>
-    <div class="helper" style="margin-top:2px;">Lo hace <b>${a.ninera_nombre||'(sin niñera)'}</b> · vigente ${textoVigencia(a)}</div>
+    <div class="helper" style="margin-top:2px;">Lo hace <b>${escaparHtml(a.ninera_nombre||'(sin niñera)')}</b> · vigente ${textoVigencia(a)}</div>
     ${terminado ? `<div class="helper" style="margin:14px 0 8px;">Este fijo terminó el ${new Date(a.vigente_hasta+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit',year:'2-digit'})}. Para cambiar quién lo hace de acá en adelante, abrí una tarjeta de una semana actual.</div>
-    <button class="btn" style="width:100%;margin-bottom:8px;" onclick="abrirModalVigenciaAsignacion('${asigId}')">Editar vigencia y tipo</button>` : `
+    <button class="btn" style="width:100%;margin-bottom:8px;" onclick="abrirModalVigenciaAsignacion(${argJs(asigId)})">Editar vigencia y tipo</button>` : `
     <div class="grid2" style="margin-top:14px;">
       <div class="field" style="position:relative;"><label>Cambiar a la niñera</label>
         <input type="text" id="agenda-fija-ninera-${asigId}" autocomplete="off" placeholder="Elegí la niñera nueva">
@@ -797,8 +797,8 @@ function abrirModalAsignacionFija(s){
     </div>
     <div class="helper" style="margin:-4px 0 8px;">Lo anterior a esa fecha no cambia: sigue siendo de quien lo hizo.</div>
     <div id="agenda-fija-warn"></div>
-    <button class="btn primary" id="agenda-fija-guardar-${asigId}" style="width:100%;margin-bottom:8px;" onclick="cambiarNineraAsignacionFija('${asigId}')">Cambiar niñera desde esa fecha</button>
-    <button class="btn" style="width:100%;margin-bottom:8px;" onclick="abrirModalVigenciaAsignacion('${asigId}')">Editar vigencia y tipo</button>
+    <button class="btn primary" id="agenda-fija-guardar-${asigId}" style="width:100%;margin-bottom:8px;" onclick="cambiarNineraAsignacionFija(${argJs(asigId)})">Cambiar niñera desde esa fecha</button>
+    <button class="btn" style="width:100%;margin-bottom:8px;" onclick="abrirModalVigenciaAsignacion(${argJs(asigId)})">Editar vigencia y tipo</button>
 
     <div style="height:1px;background:var(--line);margin:14px 0;"></div>
     <button type="button" class="btn" id="agenda-fija-edit-toggle" style="width:100%;" onclick="document.getElementById('agenda-fija-edit-box').style.display='block';this.style.display='none';">Editar horarios futuros</button>
@@ -812,13 +812,13 @@ function abrirModalAsignacionFija(s){
         ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn ${(a.dias||[]).includes(d)?'selected':''}" data-dia="${d}" onclick="this.classList.toggle('selected')">${DIAS_CORTO[d]}</button>`).join('')}
       </div>
       <div id="agenda-fija-edit-warn"></div>
-      <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="guardarHorarioAsignacionFija('${asigId}')">Guardar horario/días para todos los próximos</button>
+      <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="guardarHorarioAsignacionFija(${argJs(asigId)})">Guardar horario/días para todos los próximos</button>
     </div>`}
 
     <div style="height:1px;background:var(--line);margin:14px 0;"></div>
     <div class="helper" style="margin-bottom:8px;">Corregir solo el día de hoy (${s.fecha}), sin tocar el fijo:</div>
     ${s._yaRegistrado
-      ? `<div class="helper" style="margin-bottom:8px;">Ya hay un registro cargado para ${a.ninera_nombre} este día en Sittings.</div>`
+      ? `<div class="helper" style="margin-bottom:8px;">Ya hay un registro cargado para ${escaparHtml(a.ninera_nombre)} este día en Sittings.</div>`
       : `<div class="grid2" style="margin-bottom:8px;">
            <div class="field"><label>Hora inicio</label>${selectHora('agenda-fija-hi')}</div>
            <div class="field"><label>Hora fin</label>${selectHora('agenda-fija-hf')}</div>
@@ -830,9 +830,9 @@ function abrirModalAsignacionFija(s){
          </div>
          <div class="helper" id="agenda-fija-precio-helper" style="margin:-4px 0 8px;"></div>` : ''}
          <div id="agenda-fija-horario-warn"></div>
-         <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="registrarSittingFijoDeHoy('${s.id}')">Registrar ${esTraslado?'traslado':'sitting'} de este día</button>
-         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionAsignacionFija('${s.id}')">Este día no fue</button>`}
-    ${terminado ? '' : `<button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda('${asigId}')">Quitar esta asignación fija</button>`}
+         <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="registrarSittingFijoDeHoy(${argJs(s.id)})">Registrar ${esTraslado?'traslado':'sitting'} de este día</button>
+         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="mostrarExcepcionAsignacionFija(${argJs(s.id)})">Este día no fue</button>`}
+    ${terminado ? '' : `<button class="btn danger" style="width:100%;" onclick="quitarAsignacionFijaDesdeAgenda(${argJs(asigId)})">Quitar esta asignación fija</button>`}
   `;
   abrirModal(cuerpo);
   setHoraSelect('agenda-fija-edit-hi', a.hora_inicio||'');
@@ -952,10 +952,10 @@ function mostrarExcepcionAsignacionFija(id){
   const a = s._raw;
   const fechaTxt = new Date(s.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
   const cuerpo = `
-    <h2 style="margin:0 0 6px;">¿${a.ninera_nombre} no fue el ${fechaTxt} a lo de ${s.familia_nombre}?</h2>
-    <div class="helper" style="margin-bottom:16px;">No se le cobra nada a la familia ni se le paga nada a ${a.ninera_nombre} por este día.</div>
-    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="registrarExcepcionFija('${id}')">No fue nadie ese día</button>
-    <button class="btn primary" style="width:100%;text-align:left;" onclick="mostrarReemplazoFijoHoy('${id}')">Vino otra niñera</button>
+    <h2 style="margin:0 0 6px;">¿${escaparHtml(a.ninera_nombre)} no fue el ${fechaTxt} a lo de ${escaparHtml(s.familia_nombre)}?</h2>
+    <div class="helper" style="margin-bottom:16px;">No se le cobra nada a la familia ni se le paga nada a ${escaparHtml(a.ninera_nombre)} por este día.</div>
+    <button class="btn" style="width:100%;margin-bottom:8px;text-align:left;" onclick="registrarExcepcionFija(${argJs(id)})">No fue nadie ese día</button>
+    <button class="btn primary" style="width:100%;text-align:left;" onclick="mostrarReemplazoFijoHoy(${argJs(id)})">Vino otra niñera</button>
     <div id="agenda-fija-reemplazo-box"></div>
   `;
   abrirModal(cuerpo);
@@ -1013,7 +1013,7 @@ function mostrarReemplazoFijoHoy(id){
       <div class="field"><label>Pago a la niñera</label><div class="moneyfield"><input type="number" id="agenda-fija-rpago"></div></div>
     </div>` : ''}
     <div id="agenda-fija-reemplazo-warn"></div>
-    <button class="btn primary" style="width:100%;" onclick="confirmarReemplazoFijoHoy('${id}')">Registrar reemplazo</button>`;
+    <button class="btn primary" style="width:100%;" onclick="confirmarReemplazoFijoHoy(${argJs(id)})">Registrar reemplazo</button>`;
   setHoraSelect('agenda-fija-rhi', a.hora_inicio||'');
   setHoraSelect('agenda-fija-rhf', a.hora_fin||'');
   setTimeout(()=>attachAutocomplete('agenda-fija-reemplazo-ninera', 'agenda-fija-reemplazo-ninera-dropdown', ()=>agendaNinierasBase, (o)=>{ agendaReemplazoNineraSel = o; }), 20);
@@ -1138,17 +1138,17 @@ async function abrirModalVigenciaAsignacion(asigId){
   const diasTxt = (a.dias||[]).map(d=>DIAS_CORTO[d]||d).join(' ');
   abrirModal(`
     <h2 style="margin:0 0 4px;">Vigencia y tipo del fijo</h2>
-    <div class="helper" style="margin-bottom:14px;">${a.familias?.nombre||'(familia)'} · ${a.ninera_nombre} · ${diasTxt||'sin días'}</div>
+    <div class="helper" style="margin-bottom:14px;">${escaparHtml(a.familias?.nombre||'(familia)')} · ${escaparHtml(a.ninera_nombre)} · ${diasTxt||'sin días'}</div>
     <div class="grid3">
-      <div class="field"><label>Vigente desde</label><input type="date" id="vig-desde" value="${a.vigente_desde||''}"></div>
-      <div class="field"><label>Vigente hasta</label><input type="date" id="vig-hasta" value="${a.vigente_hasta||''}"></div>
+      <div class="field"><label>Vigente desde</label><input type="date" id="vig-desde" value="${escaparHtml(a.vigente_desde)}"></div>
+      <div class="field"><label>Vigente hasta</label><input type="date" id="vig-hasta" value="${escaparHtml(a.vigente_hasta)}"></div>
       <div class="field"><label>Tipo</label><select id="vig-tipo"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
     </div>
     <div class="helper">"Hasta" vacío = sigue vigente. La Agenda solo muestra el fijo entre esas fechas; lo que ya está registrado no se toca.</div>
     <div id="vig-warn"></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarVigenciaAsignacion('${a.id}')">Guardar</button>
+      <button class="btn primary" onclick="guardarVigenciaAsignacion(${argJs(a.id)})">Guardar</button>
     </div>`);
   document.getElementById('vig-tipo').value = tipoAsignacion(a);
 }
@@ -1180,14 +1180,14 @@ function abrirModalRegistroDesdeAgenda(s){
     ? `${(s.hora_inicio||'--:--').slice(0,5)} → +1 día${s.hora_fin?' '+s.hora_fin.slice(0,5):''}`
     : (s.hora_inicio ? (s.hora_fin ? `${s.hora_inicio.slice(0,5)}–${s.hora_fin.slice(0,5)}` : s.hora_inicio.slice(0,5)) : 'Sin horario');
   const cuerpo = `
-    <h2>${s.familia_nombre}</h2>
+    <h2>${escaparHtml(s.familia_nombre)}</h2>
     <div class="helper">${s.tipo==='traslado'?'Traslado':'Sitting'} · ${horario} · ya registrado en Sittings &amp; traslados</div>
     <div style="margin:14px 0;">
-      <div class="agenda-ninerarow"><div><b>${s.ninieras[0].ninera_nombre}</b></div></div>
+      <div class="agenda-ninerarow"><div><b>${escaparHtml(s.ninieras[0].ninera_nombre)}</b></div></div>
       ${s.cobro_familia ? `<div class="helper">Cobro a la familia: $${Number(s.cobro_familia).toLocaleString('es-UY')}</div>` : ''}
     </div>
-    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="editarRegistroDesdeAgenda('${s._regId}')">Editar este registro</button>
-    <button class="btn danger" style="width:100%;" onclick="eliminarRegistroDesdeAgenda('${s._regId}')">Eliminar este registro</button>
+    <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="editarRegistroDesdeAgenda(${argJs(s._regId)})">Editar este registro</button>
+    <button class="btn danger" style="width:100%;" onclick="eliminarRegistroDesdeAgenda(${argJs(s._regId)})">Eliminar este registro</button>
   `;
   abrirModal(cuerpo);
 }
