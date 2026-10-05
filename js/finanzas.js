@@ -791,7 +791,13 @@ async function guardarMovimientoSitting(id){
   refrescarFinanzasCompleto();
 }
 
-/* ---- Conciliación de cobros contra extracto Itaú ---- */
+/* ---- Conciliación de cobros y pagos contra el extracto ----
+   Dos partes separadas (05/10/2026), porque Parents Break va a dejar Itaú y pasar a Mercado Pago:
+   1) LEER: un lector por formato (LECTORES_EXTRACTO) convierte la planilla del banco en una lista
+      de movimientos iguales para todos: { fecha:'AAAA-MM-DD', concepto, cuenta, credito, debito }.
+   2) CONCILIAR: proponer coincidencias, casillas y confirmar (más abajo) solo usan esos
+      movimientos y no saben de qué banco vienen.
+   Sumar Mercado Pago = agregar un lector a LECTORES_EXTRACTO con su reconoce() y su leer(). */
 function soloDigitos(s){ return String(s||'').replace(/\D/g,''); }
 function extraerCuentaDeTexto(texto){
   const matches = String(texto||'').match(/\d{5,12}/g) || [];
@@ -815,6 +821,7 @@ function parseFechaExtracto(v){
   if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
   return '';
 }
+// Filas crudas de la primera hoja (xls, xlsx o csv), sin interpretar: eso es cosa de cada lector.
 async function leerFilasExtracto(file){
   const buf = await file.arrayBuffer();
   let wb;
@@ -826,15 +833,43 @@ async function leerFilasExtracto(file){
   const sheet = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
 }
-function detectarColumnasExtracto(filas){
-  const norm = s => normaliza(String(s||''));
-  for(let i=0;i<Math.min(filas.length,10);i++){
-    const fila = filas[i].map(norm);
-    const iFecha = fila.findIndex(c=>c.includes('fecha'));
-    const iCredito = fila.findIndex(c=>c.includes('credito') || c.includes('haber'));
-    const iDebito = fila.findIndex(c=>c.includes('debito') || c==='debe');
-    const iConcepto = fila.findIndex(c=>c.includes('concepto') || c.includes('descripcion') || c.includes('referencia') || c.includes('detalle'));
-    if(iFecha>-1 && iCredito>-1) return { header:i, iFecha, iCredito, iDebito, iConcepto: iConcepto>-1?iConcepto:iFecha+1 };
+const LECTORES_EXTRACTO = [
+  {
+    // Itaú: busca en las primeras filas el encabezado con Fecha y Crédito (y Débito y Concepto
+    // si están); la cuenta de quien transfiere viene dentro del concepto.
+    id: 'itau', nombre: 'Itaú',
+    reconoce(filas){
+      for(let i=0;i<Math.min(filas.length,10);i++){
+        const fila = (filas[i]||[]).map(c=>normaliza(String(c||'')));
+        const iFecha = fila.findIndex(c=>c.includes('fecha'));
+        const iCredito = fila.findIndex(c=>c.includes('credito') || c.includes('haber'));
+        const iDebito = fila.findIndex(c=>c.includes('debito') || c==='debe');
+        const iConcepto = fila.findIndex(c=>c.includes('concepto') || c.includes('descripcion') || c.includes('referencia') || c.includes('detalle'));
+        if(iFecha>-1 && iCredito>-1) return { header:i, iFecha, iCredito, iDebito, iConcepto: iConcepto>-1?iConcepto:iFecha+1 };
+      }
+      return null;
+    },
+    leer(filas, cols){
+      const movs = [];
+      for(let i=cols.header+1;i<filas.length;i++){
+        const f = filas[i];
+        if(!f || !f.length) continue;
+        const fecha = parseFechaExtracto(f[cols.iFecha]);
+        if(!fecha) continue; // saldos, totales y filas en blanco
+        const concepto = String(f[cols.iConcepto]||'');
+        movs.push({ fecha, concepto, cuenta: extraerCuentaDeTexto(concepto),
+          credito: parseMontoExtracto(f[cols.iCredito]),
+          debito: cols.iDebito>-1 ? Math.abs(parseMontoExtracto(f[cols.iDebito])) : 0 });
+      }
+      return movs;
+    },
+  },
+];
+// Prueba los lectores en orden y usa el primero que reconoce el archivo. null si ninguno.
+function leerMovimientosExtracto(filas){
+  for(const lector of LECTORES_EXTRACTO){
+    const ctx = lector.reconoce(filas);
+    if(ctx) return { lector, movimientos: lector.leer(filas, ctx) };
   }
   return null;
 }
@@ -913,22 +948,10 @@ async function procesarExtractoConciliacion(){
   let filas;
   try{ await asegurarXLSX(); filas = await leerFilasExtracto(file); }
   catch(e){ box.innerHTML = `<div class="empty">No se pudo leer el archivo: ${escaparHtml(e.message)}</div>`; return; }
-  const cols = detectarColumnasExtracto(filas);
-  if(!cols){ box.innerHTML = '<div class="empty">No encontré columnas de Fecha y Crédito en el archivo. Revisá que sea el extracto tal cual lo exporta Itaú.</div>'; return; }
-
-  const creditos = [], debitos = [];
-  for(let i=cols.header+1;i<filas.length;i++){
-    const f = filas[i];
-    if(!f || !f.length) continue;
-    const fecha = parseFechaExtracto(f[cols.iFecha]);
-    if(!fecha) continue;
-    const concepto = String(f[cols.iConcepto]||'');
-    const mov = { fecha, concepto, cuenta: extraerCuentaDeTexto(concepto) };
-    const credito = parseMontoExtracto(f[cols.iCredito]);
-    if(credito) creditos.push({ ...mov, monto:credito });
-    const debito = cols.iDebito>-1 ? Math.abs(parseMontoExtracto(f[cols.iDebito])) : 0;
-    if(debito) debitos.push({ ...mov, monto:debito });
-  }
+  const leido = leerMovimientosExtracto(filas);
+  if(!leido){ box.innerHTML = `<div class="empty">No reconocí el formato del archivo. Formatos que entiendo: ${escaparHtml(LECTORES_EXTRACTO.map(l=>l.nombre).join(', '))}. Subilo tal cual lo exporta el banco.</div>`; return; }
+  const creditos = leido.movimientos.filter(m=>m.credito).map(m=>({ fecha:m.fecha, concepto:m.concepto, cuenta:m.cuenta, monto:m.credito }));
+  const debitos = leido.movimientos.filter(m=>m.debito).map(m=>({ fecha:m.fecha, concepto:m.concepto, cuenta:m.cuenta, monto:m.debito }));
   if(!creditos.length && !debitos.length){ box.innerHTML = '<div class="empty">No encontré movimientos en el archivo.</div>'; return; }
 
   const { gruposCobrar, gruposPagar, fams, nins } = await calcularPendientesAgrupados();

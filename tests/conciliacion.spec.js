@@ -140,3 +140,56 @@ test('una familia que paga dos meses juntos: se propone todo junto y tildado', a
   await expect(f).toContainText('$3.420');
   verificarLimpio(e);
 });
+
+// Lectores por formato (05/10/2026): leer el extracto está separado de conciliar, para sumar
+// Mercado Pago agregando un lector. Los extractos de acá son INVENTADOS (nunca uno real).
+test('extracto con encabezado de banco, saldos y débito/crédito: se leen solo los movimientos', async ({ page }) => {
+  const e = await abrirApp(page);
+  await irAModulo(page, 'finanzas');
+  const csv = [
+    'Estado de cuenta;;;;',
+    'Cuenta;CAJA DE AHORRO $ 0000000;;;',
+    'Período;01/10/2026 al 05/10/2026;;;',
+    ';;;;',
+    'Fecha;Descripción;Débito;Crédito;Saldo',
+    ';SALDO ANTERIOR;;;10.000,00',
+    '03/10/2026;TRANSF RECIBIDA 0001234567;;2.280,00;12.280,00',
+    '04/10/2026;COMPRA SUPERMERCADO;350,50;;11.929,50',
+    ';SALDO FINAL;;;11.929,50',
+  ].join('\n');
+  await procesar(page, csv);
+  await expect(page.locator('#fin-conciliar-resultado')).toContainText('1 crédito leído del extracto');
+  await expect(fila(page, 'Familia Prueba Uno').locator('input')).toBeChecked();
+  await expect(page.locator('#fin-conciliar-resultado')).not.toContainText('SALDO');
+  verificarLimpio(e);
+});
+
+test('archivo que ningún lector reconoce: avisa qué formatos entiende y no marca nada', async ({ page }) => {
+  const e = await abrirApp(page);
+  await irAModulo(page, 'finanzas');
+  await page.setInputFiles('#fin-conciliar-file', { name: 'otro.csv', mimeType: 'text/csv', buffer: Buffer.from('Día;Importe\n03/10/2026;2280\n') });
+  await page.locator('button[onclick*="procesarExtractoConciliacion"]').click();
+  await expect(page.locator('#fin-conciliar-resultado')).toContainText('No reconocí el formato del archivo. Formatos que entiendo: Itaú.');
+  expect(e.escrituras).toEqual([]);
+  verificarLimpio(e);
+});
+
+test('un lector nuevo (Mercado Pago de prueba) concilia sin tocar el resto', async ({ page }) => {
+  const e = await abrirApp(page);
+  await irAModulo(page, 'finanzas');
+  // Formato inventado con otra forma: monto con signo en una sola columna y la cuenta aparte.
+  await page.evaluate(() => {
+    LECTORES_EXTRACTO.unshift({
+      id: 'prueba-mp', nombre: 'Mercado Pago (prueba)',
+      reconoce: filas => (filas[0] || []).join('|') === 'FECHA_ORIGEN|CONTRAPARTE|CUENTA_ORIGEN|MONTO' ? {} : null,
+      leer: filas => filas.slice(1).filter(f => f[0]).map(f => {
+        const monto = parseMontoExtracto(f[3]);
+        return { fecha: parseFechaExtracto(f[0]), concepto: f[1], cuenta: soloDigitos(f[2]), credito: monto > 0 ? monto : 0, debito: monto < 0 ? -monto : 0 };
+      }),
+    });
+  });
+  await procesar(page, 'FECHA_ORIGEN;CONTRAPARTE;CUENTA_ORIGEN;MONTO\n2026-10-03;Familia;0001234567;2280\n2026-10-04;Ana;0099887766;-750\n');
+  await expect(fila(page, 'Familia Prueba Uno').locator('input')).toBeChecked();
+  await expect(page.locator('[data-conc-seccion="pago"] .conc-fila', { hasText: 'Ana Ficticia' }).locator('input')).toBeChecked();
+  verificarLimpio(e);
+});
