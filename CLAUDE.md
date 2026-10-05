@@ -81,16 +81,16 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - UI y comentarios en español rioplatense (voseo). Los comentarios explican el porqué y
   fechan los incidentes reales; mantener ese estilo.
 - Todo texto que venga de datos (nombres, notas, URLs) y vaya a innerHTML o a un handler
-  inline se tiene que escapar. Las candidatas llegan desde un formulario público. Helpers
-  únicos en core.js: `escaparHtml()` para texto y atributos, `argJs()` para pasar un dato a
-  un handler (`f(${argJs(x)})`, nunca `'${x}'`) y `urlSegura()` para href/src.
-  `tests/escape.spec.js` recorre todo con datos tramposos y `estatico.spec.js` controla los
-  handlers.
+  inline se tiene que escapar. Las candidatas llegan desde un formulario público.
 - Fechas: Montevideo es UTC-3. No usar `new Date().toISOString().slice(0,10)` para "hoy".
 - Guardados: usar `sbGuardar()` o chequear `error`; nunca mostrar éxito sin verificarlo.
 - No repintar la app entera ante eventos de auth ni al volver de segundo plano: ya causó
   pérdida de entrevistas (ver comentarios en auth.js y bootstrap.js).
 - Una función global nueva no puede repetir el nombre de otra en ningún archivo.
+- Escape (05/10/2026): helpers únicos en core.js. `escaparHtml()` para texto y atributos,
+  `argJs()` para pasar un dato a un handler inline (`f(${argJs(x)})`, nunca `'${x}'`) y
+  `urlSegura()` para href/src. `tests/escape.spec.js` recorre todo con datos tramposos y
+  `estatico.spec.js` controla los handlers.
 - Fijos (asignaciones): tienen vigencia (`vigente_desde`/`vigente_hasta`, inclusive) y tipo.
   Nunca pisar la niñera de una asignación con historia: cerrarla y abrir otra desde una
   fecha. Lo que se registra desde un fijo lleva `asignacion_id`. Para saber si un fijo
