@@ -930,8 +930,8 @@ async function sbGuardar(consulta, queCosa='los cambios'){
 
 /* ============================================================
    B2 · Anti-duplicados: detecta nombres parecidos antes de crear
-   una familia/niñera nueva (typos, variantes: "Paola Herpe" vs
-   "Paola Gerpe", "Andrea Camps" vs "Andy Camps").
+   una familia/niñera nueva (typos, variantes: "Carla Ejenplo" vs
+   "Carla Ejemplo", "Mariana Prueba" vs "Mari Prueba").
    ============================================================ */
 function distanciaEdicion(a, b){
   const m = a.length, n = b.length;

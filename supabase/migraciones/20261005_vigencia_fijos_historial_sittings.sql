@@ -8,6 +8,10 @@
 -- igual hasta que se publique la nueva.
 --
 -- Se ejecuta entera en una transacción. Si algo falla, no queda nada a medias.
+--
+-- EJECUTADA el 05/10/2026 a las 09:37 (Montevideo), puntos 1 a 3, con OK de Diego. El
+-- punto 4 (bucket) va en su propia transacción al final y quedó pendiente: la herramienta
+-- de Supabase pide aprobar en pantalla los DROP POLICY.
 -- ============================================================================
 
 begin;
@@ -31,21 +35,16 @@ alter table public.asignaciones
   add constraint asignaciones_tipo_check check (tipo is null or tipo in ('sitting', 'traslado')),
   add constraint asignaciones_vigencia_check check (vigente_hasta is null or vigente_desde is null or vigente_hasta >= vigente_desde);
 
--- Fechas de inicio (acordadas el 05/10/2026):
---   * Sol Lucía Quintans en María Paz Martínez: desde el 29/09, los dos fijos.
---   * El resto (Laura Pouquette): provisorio = día de creación en Montevideo. Se corrige
---     después desde la app (Editar vigencia), sin SQL.
-update public.asignaciones
-   set vigente_desde = (created_at at time zone 'America/Montevideo')::date;
-update public.asignaciones
-   set vigente_desde = date '2026-09-29'
- where id in ('24692770-60af-4af0-b69e-bfc4bdf2d654', '437cd45e-a271-43e0-ba1e-d9b164987926');
-
--- Tipo: los dos fijos de María Paz son traslados; el resto, sitting.
-update public.asignaciones set tipo = 'sitting';
-update public.asignaciones
-   set tipo = 'traslado'
- where id in ('24692770-60af-4af0-b69e-bfc4bdf2d654', '437cd45e-a271-43e0-ba1e-d9b164987926');
+-- Fechas de inicio y tipo, fila por fila (los 4 fijos que había el 05/10/2026). Fechas
+-- confirmadas por las dueñas; acá van solo los ids porque el repo es público.
+--   * Dos traslados fijos de la misma familia y niñera: desde el 29/09.
+--   * Dos sittings fijos de otra familia: desde el 09/09 y desde el 11/09.
+-- Va por id y no con un update de toda la tabla: la herramienta de Supabase frena los
+-- update sin where para pedir confirmación, y así además queda explícito qué se tocó.
+update public.asignaciones set vigente_desde = date '2026-09-09', tipo = 'sitting'  where id = '3dd61711-d793-4eb2-abc3-574f3d32fc86';
+update public.asignaciones set vigente_desde = date '2026-09-11', tipo = 'sitting'  where id = 'f302d7fa-95c8-4f5f-aade-efe67b453681';
+update public.asignaciones set vigente_desde = date '2026-09-29', tipo = 'traslado' where id = '24692770-60af-4af0-b69e-bfc4bdf2d654';
+update public.asignaciones set vigente_desde = date '2026-09-29', tipo = 'traslado' where id = '437cd45e-a271-43e0-ba1e-d9b164987926';
 
 -- ninera_id: hoy está vacío en todas. Se completa solo cuando el nombre coincide con
 -- exactamente UNA niñera (sin mayúsculas ni espacios de más); si no, queda como está.
@@ -123,12 +122,15 @@ create trigger sittings_historial_trg
   after insert or update or delete on public.sittings_traslados
   for each row execute function public.registrar_historial_sitting();
 
+commit;
+
 -- ----------------------------------------------------------------------------
--- 4) Bucket candidatas-fotos: cerrar subida y listado anónimos.
+-- 4) Bucket candidatas-fotos (transacción aparte, independiente de lo anterior): cerrar subida y listado anónimos.
 --    La única que sube fotos es la Edge Function candidatas-webhook, con la clave de
 --    servicio (no pasa por estas políticas). La app muestra las fotos por su URL
 --    pública, que sigue funcionando porque el bucket es público.
 -- ----------------------------------------------------------------------------
+begin;
 drop policy if exists candidatas_fotos_service_write on storage.objects;
 drop policy if exists candidatas_fotos_public_read on storage.objects;
 
