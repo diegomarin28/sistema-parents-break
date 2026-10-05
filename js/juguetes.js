@@ -31,7 +31,7 @@ async function cargarJuguetes(){
   const selFiltro = document.getElementById('jug-filt-ninera');
   if(selFiltro){
     const nombres = [...new Set(juguetesItems.map(j=>j.ninera_nombre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    selFiltro.innerHTML = `<option value="">Todas</option><option value="__sin__">Sin asignar</option>` + nombres.map(n=>`<option value="${n}">${n}</option>`).join('');
+    selFiltro.innerHTML = `<option value="">Todas</option><option value="__sin__">Sin asignar</option>` + nombres.map(n=>`<option value="${escaparHtml(n)}">${escaparHtml(n)}</option>`).join('');
   }
   filtrarJuguetes();
 }
@@ -57,18 +57,18 @@ function filtrarJuguetes(){
   grid.innerHTML = countMsg + '<div class="toy-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;">' + filtrados.map(j=>{
     const edadTxt = (j.edad_desde||j.edad_hasta) ? `${j.edad_desde??'0'}-${j.edad_hasta??'+'} años` : '';
     const meta = [j.tipo, edadTxt, GENERO_LABEL[j.genero]||'Unisex'].filter(Boolean).join(' · ');
-    const estadoBadge = j.estado && j.estado!=='disponible' ? `<span class="badge" style="font-size:10px;background:var(--clay-soft);color:var(--clay-text);">${j.estado}</span>` : '';
+    const estadoBadge = j.estado && j.estado!=='disponible' ? `<span class="badge" style="font-size:10px;background:var(--clay-soft);color:var(--clay-text);">${escaparHtml(j.estado)}</span>` : '';
     return `<div class="card" style="padding:0;overflow:hidden;">
-      <div style="height:100px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;overflow:hidden;${j.foto_url?'cursor:zoom-in;':''}" ${j.foto_url?`onclick="abrirLightboxFoto('${j.foto_url}', 'Foto de ${j.nombre}')"`:''}>
-        ${j.foto_url?`<img loading="lazy" decoding="async" src="${j.foto_url}" alt="Foto de ${j.nombre}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">`:`<span style="color:var(--accent);font-size:12px;">sin foto</span>`}
+      <div style="height:100px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;overflow:hidden;${j.foto_url?'cursor:zoom-in;':''}" ${j.foto_url?`onclick="abrirLightboxFoto(${argJs(j.foto_url)}, ${argJs('Foto de '+j.nombre)})"`:''}>
+        ${j.foto_url?`<img loading="lazy" decoding="async" src="${urlSegura(j.foto_url)}" alt="Foto de ${escaparHtml(j.nombre)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">`:`<span style="color:var(--accent);font-size:12px;">sin foto</span>`}
       </div>
       <div style="padding:10px 12px;">
-        <div style="font-weight:600;font-size:13px;display:flex;justify-content:space-between;gap:6px;">${j.nombre} ${estadoBadge}</div>
-        <div class="helper" style="margin:2px 0 0;">${meta||'—'}</div>
-        <div style="font-size:12px;color:var(--accent);margin-top:6px;">${j.ninera_nombre?('Con '+j.ninera_nombre):'Sin asignar'}</div>
+        <div style="font-weight:600;font-size:13px;display:flex;justify-content:space-between;gap:6px;">${escaparHtml(j.nombre)} ${estadoBadge}</div>
+        <div class="helper" style="margin:2px 0 0;">${escaparHtml(meta||'—')}</div>
+        <div style="font-size:12px;color:var(--accent);margin-top:6px;">${j.ninera_nombre?escaparHtml('Con '+j.ninera_nombre):'Sin asignar'}</div>
         <div style="display:flex;gap:6px;margin-top:8px;">
-          <button class="smallbtn" onclick="abrirModalJuguete('${j.id}')">Editar</button>
-          <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarJuguete('${j.id}')" title="Eliminar juguete" aria-label="Eliminar juguete">${ICONS.trash}</button>
+          <button class="smallbtn" onclick="abrirModalJuguete(${argJs(j.id)})">Editar</button>
+          <button class="pcard-delete" style="position:static;box-shadow:none;" onclick="eliminarJuguete(${argJs(j.id)})" title="Eliminar juguete" aria-label="Eliminar juguete">${ICONS.trash}</button>
         </div>
       </div>
     </div>`;
@@ -82,16 +82,16 @@ function abrirModalJuguete(id=null){
     <h2 style="margin:0 0 12px;">${j?'Editar juguete':'Agregar juguete'}</h2>
     <div style="margin-bottom:14px;">
       <div id="jug-foto-preview" style="width:100%;height:160px;border-radius:12px;background:var(--bg);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:12px;color:var(--ink-soft);">
-        ${jugFotoUrlPendiente?`<img src="${jugFotoUrlPendiente}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
+        ${jugFotoUrlPendiente?`<img src="${urlSegura(jugFotoUrlPendiente)}" style="width:100%;height:100%;object-fit:cover;">`:'sin foto'}
       </div>
       <input type="file" accept="image/*" id="jug-foto-input" style="font-size:12px;margin-top:8px;width:100%;" onchange="subirFotoJuguete(this)">
       <div style="margin-top:6px;"><button class="smallbtn" type="button" onclick="quitarFotoJuguete()">Quitar foto</button></div>
       <div id="jug-foto-status" class="helper" style="margin:2px 0 0;"></div>
     </div>
-    <div class="field"><label>Nombre</label><input type="text" id="jug-nombre" value="${j?.nombre||''}"></div>
+    <div class="field"><label>Nombre</label><input type="text" id="jug-nombre" value="${escaparHtml(j?.nombre)}"></div>
     <div class="grid2">
       <div class="field" style="position:relative;"><label>Tipo</label>
-        <input type="text" id="jug-tipo" autocomplete="off" value="${j?.tipo||''}" placeholder="cartas, memoria, construcción...">
+        <input type="text" id="jug-tipo" autocomplete="off" value="${escaparHtml(j?.tipo)}" placeholder="cartas, memoria, construcción...">
         <div id="jug-tipo-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
       </div>
       <div class="field"><label>Género</label><select id="jug-genero">
@@ -102,7 +102,7 @@ function abrirModalJuguete(id=null){
       <div class="field"><label>Edad desde</label><input type="number" id="jug-edad-desde" min="0" value="${j?.edad_desde??''}"></div>
       <div class="field"><label>Edad hasta</label><input type="number" id="jug-edad-hasta" min="0" value="${j?.edad_hasta??''}"></div>
       <div class="field" style="position:relative;"><label>Niñera que lo tiene</label>
-        <input type="text" id="jug-ninera" autocomplete="off" value="${j?.ninera_nombre||''}" placeholder="Vacío = sin asignar / en depósito">
+        <input type="text" id="jug-ninera" autocomplete="off" value="${escaparHtml(j?.ninera_nombre)}" placeholder="Vacío = sin asignar / en depósito">
         <div id="jug-ninera-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
       </div>
       <div class="field"><label>Estado</label><select id="jug-estado">
@@ -111,8 +111,8 @@ function abrirModalJuguete(id=null){
         <option value="roto" ${j?.estado==='roto'?'selected':''}>Roto</option>
       </select></div>
     </div>
-    <div class="field"><label>Notas</label><textarea id="jug-notas" rows="2">${j?.notas||''}</textarea></div>
-    <button class="btn primary" style="width:100%;margin-top:8px;" onclick="guardarJuguete(${j?`'${j.id}'`:'null'})">Guardar</button>
+    <div class="field"><label>Notas</label><textarea id="jug-notas" rows="2">${escaparHtml(j?.notas)}</textarea></div>
+    <button class="btn primary" style="width:100%;margin-top:8px;" onclick="guardarJuguete(${j?`${argJs(j.id)}`:'null'})">Guardar</button>
   `;
   abrirModal(cuerpo);
   setTimeout(()=>{
@@ -158,7 +158,7 @@ async function subirFotoJuguete(input){
   if(error){ status.textContent = 'Error al subir: '+error.message; return; }
   const { data:pub } = sb.storage.from('juguetes-fotos').getPublicUrl(path);
   jugFotoUrlPendiente = pub.publicUrl;
-  document.getElementById('jug-foto-preview').innerHTML = `<img src="${jugFotoUrlPendiente}" style="width:100%;height:100%;object-fit:cover;">`;
+  document.getElementById('jug-foto-preview').innerHTML = `<img src="${urlSegura(jugFotoUrlPendiente)}" style="width:100%;height:100%;object-fit:cover;">`;
   status.textContent = 'Foto lista.';
 }
 async function guardarJuguete(id){

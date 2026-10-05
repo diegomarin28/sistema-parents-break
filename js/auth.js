@@ -172,7 +172,7 @@ async function login(){
     limpiarPostLoginPendiente();
     btn.disabled = false;
     document.getElementById('loginbtn-label').textContent = 'Entrar';
-    document.getElementById('loginwarn').innerHTML = `<div class="warnbox">${error.message==='Invalid login credentials' ? 'Mail o contraseña incorrectos.' : error.message}</div>`;
+    document.getElementById('loginwarn').innerHTML = `<div class="warnbox">${error.message==='Invalid login credentials' ? 'Mail o contraseña incorrectos.' : escaparHtml(error.message)}</div>`;
     return;
   }
   if(!recordar){ window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); }); }
@@ -252,7 +252,7 @@ async function confirmarRegistroBiometria(){
   if(error){
     btn.disabled = false;
     document.getElementById('bio-btn-label').textContent = 'Activar ahora';
-    document.getElementById('bio-warn').innerHTML = `<div class="warnbox">${error.message} — probá de nuevo.</div>`;
+    document.getElementById('bio-warn').innerHTML = `<div class="warnbox">${escaparHtml(error.message)} — probá de nuevo.</div>`;
     return;
   }
   toast('Face ID / Touch ID activado.');
@@ -276,7 +276,7 @@ async function confirmarLoginBiometria(){
     const noHayEnEsteDispositivo = /not.?found|no.?credential/i.test(error.message||'');
     document.getElementById('bio-warn').innerHTML = noHayEnEsteDispositivo
       ? `<div class="warnbox">Este dispositivo no tiene Face ID/Touch ID activado para tu cuenta todavía. Tocá "Cancelar y volver al login" de abajo y usá "¿No tenés tu Face ID a mano?" para entrar por mail — una vez adentro, activala acá mismo desde "Face ID / Touch ID" en el menú. (O si tenés a mano el otro dispositivo donde ya la activaste, entrá ahí y hacé lo mismo desde ese lado.)</div>`
-      : `<div class="warnbox">${error.message} — probá de nuevo.</div>`;
+      : `<div class="warnbox">${escaparHtml(error.message)} — probá de nuevo.</div>`;
     return;
   }
   limpiarPostLoginPendiente();
@@ -303,10 +303,10 @@ async function gestionarPasskeys(){
     ${!passkeys || !passkeys.length ? '<div class="empty">Todavía no activaste ninguno.</div>' : passkeys.map(p=>`
       <div class="agendarow" style="border-bottom:1px solid var(--line);padding:8px 0;align-items:center;">
         <div style="flex:1;">
-          <div>${p.friendly_name || 'Dispositivo'}</div>
+          <div>${escaparHtml(p.friendly_name || 'Dispositivo')}</div>
           <div class="helper" style="margin:0;">Activado ${new Date(p.created_at).toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'})}</div>
         </div>
-        <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="eliminarPasskey('${p.id}')">Borrar</button>
+        <button class="smallbtn" style="color:var(--bad);border-color:var(--bad);" onclick="eliminarPasskey(${argJs(p.id)})">Borrar</button>
       </div>`).join('')}
     <button class="btn" type="button" style="width:100%;margin-top:14px;" onclick="registrarPasskeyDispositivo()">+ Activar en este dispositivo</button>`;
 }
@@ -323,7 +323,7 @@ function abrirRecuperarPassword(){
   abrirModal(`
     <h2 style="margin:0 0 10px;">Recuperar contraseña</h2>
     <div class="helper" style="margin-bottom:14px;">Si ese mail está registrado en el sistema, le va a llegar un link para elegir una contraseña nueva.</div>
-    <div class="field"><label>Mail</label><input type="email" id="rec-mail" value="${emailPrellenado}"></div>
+    <div class="field"><label>Mail</label><input type="email" id="rec-mail" value="${escaparHtml(emailPrellenado)}"></div>
     <div id="rec-warn"></div>
     <div class="confirmbtns" style="margin-top:16px;">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
@@ -349,7 +349,7 @@ function abrirAccesoTemporal(){
   abrirModal(`
     <h2 style="margin:0 0 10px;">Acceso temporal por mail</h2>
     <div class="helper" style="margin-bottom:14px;">Para cuando no tenés a mano el dispositivo con tu Face ID/Touch ID. Te mandamos un link a tu mail — al abrirlo, entrás directo, sin contraseña. Esa sesión se cierra sola al cerrar la pestaña, así que no queda un acceso permanente activado en un dispositivo prestado.</div>
-    <div class="field"><label>Mail</label><input type="email" id="temp-mail" value="${emailPrellenado}"></div>
+    <div class="field"><label>Mail</label><input type="email" id="temp-mail" value="${escaparHtml(emailPrellenado)}"></div>
     <div id="temp-warn"></div>
     <div class="confirmbtns" style="margin-top:16px;">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
@@ -427,7 +427,7 @@ async function confirmarCambioPasswordObligatorio(){
   if(error){
     btn.disabled = false;
     document.getElementById('op-btn-label').textContent = 'Guardar y continuar';
-    warn.innerHTML = `<div class="warnbox">${error.message}</div>`;
+    warn.innerHTML = `<div class="warnbox">${escaparHtml(error.message)}</div>`;
     return;
   }
   toast('Contraseña actualizada.');
@@ -480,7 +480,7 @@ async function guardarNuevaContrasena(){
   if(error){
     btn.disabled = false;
     document.getElementById('np-btn-label').textContent = 'Guardar contraseña';
-    warn.innerHTML = `<div class="warnbox">${error.message}</div>`;
+    warn.innerHTML = `<div class="warnbox">${escaparHtml(error.message)}</div>`;
     return;
   }
   modoRecuperacion = false;

@@ -53,15 +53,15 @@ async function cargarMarketing(){
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
         <div>
           <div class="eyebrow" style="margin-bottom:2px;">${fechaFmt}</div>
-          <h2 style="margin:0;">${f.titulo}</h2>
+          <h2 style="margin:0;">${escaparHtml(f.titulo)}</h2>
         </div>
         <label class="chk" style="font-size:12.5px;">
-          <input type="checkbox" onchange="togglePublicadoMarketing('${f.id}', this.checked)" ${f.publicado?'checked':''}> Publicado
+          <input type="checkbox" onchange="togglePublicadoMarketing(${argJs(f.id)}, this.checked)" ${f.publicado?'checked':''}> Publicado
         </label>
       </div>
-      ${f.sugerencia?`<div class="helper" style="margin-top:8px;">${f.sugerencia}</div>`:''}
-      ${f.notas?`<div class="helper">${f.notas}</div>`:''}
-      <div class="actions" style="margin-top:10px;"><button class="smallbtn" onclick="editarFechaMarketing('${f.id}')">Editar</button><button class="smallbtn danger" onclick="eliminarFechaMarketing('${f.id}')">Eliminar</button></div>
+      ${f.sugerencia?`<div class="helper" style="margin-top:8px;">${escaparHtml(f.sugerencia)}</div>`:''}
+      ${f.notas?`<div class="helper">${escaparHtml(f.notas)}</div>`:''}
+      <div class="actions" style="margin-top:10px;"><button class="smallbtn" onclick="editarFechaMarketing(${argJs(f.id)})">Editar</button><button class="smallbtn danger" onclick="eliminarFechaMarketing(${argJs(f.id)})">Eliminar</button></div>
     </div>`;
   };
   let html = '';
@@ -75,15 +75,15 @@ function editarFechaMarketing(id){
   abrirModal(`
     <h2 style="margin:0 0 18px;">Editar fecha especial</h2>
     <div class="grid3">
-      <div class="field"><label>Fecha</label><input type="date" id="ed-mk-fecha" value="${f.fecha||''}"></div>
-      <div class="field"><label>Título</label><input type="text" id="ed-mk-titulo" value="${f.titulo||''}"></div>
+      <div class="field"><label>Fecha</label><input type="date" id="ed-mk-fecha" value="${escaparHtml(f.fecha)}"></div>
+      <div class="field"><label>Título</label><input type="text" id="ed-mk-titulo" value="${escaparHtml(f.titulo)}"></div>
       <div class="field"><label>¿Ya publicado?</label><select id="ed-mk-publicado"><option value="false" ${!f.publicado?'selected':''}>No</option><option value="true" ${f.publicado?'selected':''}>Sí</option></select></div>
     </div>
-    <div class="field"><label>Idea de contenido</label><textarea id="ed-mk-sugerencia">${f.sugerencia||''}</textarea></div>
-    <div class="field"><label>Notas</label><textarea id="ed-mk-notas">${f.notas||''}</textarea></div>
+    <div class="field"><label>Idea de contenido</label><textarea id="ed-mk-sugerencia">${escaparHtml(f.sugerencia)}</textarea></div>
+    <div class="field"><label>Notas</label><textarea id="ed-mk-notas">${escaparHtml(f.notas)}</textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionFechaMarketing('${id}')">Guardar</button>
+      <button class="btn primary" onclick="guardarEdicionFechaMarketing(${argJs(id)})">Guardar</button>
     </div>`);
 }
 async function guardarEdicionFechaMarketing(id){

@@ -44,9 +44,9 @@ function renderInterPool(){
   if(!body) return;
   if(!interNinierasPool.length){ body.innerHTML = '<div class="empty">Todavía no hay niñeras colocadas vía Agencia Enrique.</div>'; return; }
   body.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">${interNinierasPool.map(p=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterPoolNinera('${p.id}')">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterPoolNinera(${argJs(p.id)})">
       <span class="badge ${p.estado==='activa'?'brand':'good'}">${p.estado==='activa'?'Activa':'Disponible'}</span>
-      <div style="flex:1;min-width:0;font-weight:700;color:var(--ink);">${p.ninera_nombre}</div>
+      <div style="flex:1;min-width:0;font-weight:700;color:var(--ink);">${escaparHtml(p.ninera_nombre)}</div>
       <div class="helper" style="margin:0;">${p.estado==='activa'?'Colocada, trabajando':'Libre para una nueva colocación'}</div>
     </div>`).join('')}</div>`;
 }
@@ -59,10 +59,10 @@ async function abrirModalInterPoolNinera(poolId){
     <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${Number(c.monto||0).toLocaleString('es-UY')}</span>
   </div>`).join('') || '<div class="helper">Sin colocaciones registradas.</div>';
   abrirModal(`
-    <h2>${p.ninera_nombre}</h2>
+    <h2>${escaparHtml(p.ninera_nombre)}</h2>
     <div class="helper">Estado actual: ${p.estado==='activa'?'Activa (colocada, trabajando)':'Disponible (libre para una nueva colocación)'}</div>
     <div style="margin-top:14px;">${historialHtml}</div>
-    <button class="btn primary" style="width:100%;margin-top:16px;" onclick="cambiarEstadoPoolEnrique('${p.id}', '${p.estado==='activa'?'disponible':'activa'}')">Marcar como ${p.estado==='activa'?'disponible':'activa'}</button>
+    <button class="btn primary" style="width:100%;margin-top:16px;" onclick="cambiarEstadoPoolEnrique(${argJs(p.id)}, ${argJs(p.estado==='activa'?'disponible':'activa')})">Marcar como ${p.estado==='activa'?'disponible':'activa'}</button>
   `);
 }
 async function cambiarEstadoPoolEnrique(poolId, nuevoEstado){
@@ -91,21 +91,21 @@ async function renderInterHistorial(){
 function filaInterHistorial(it){
   const fechaFmt = it.fecha ? new Date(it.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—';
   if(it._tipo==='enrique'){
-    return `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterEnriqueDetalle('${it.id}')">
+    return `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterEnriqueDetalle(${argJs(it.id)})">
       <span class="badge brand">Enrique</span>
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;color:var(--ink);">${it.ninera_nombre}</div>
+        <div style="font-weight:700;color:var(--ink);">${escaparHtml(it.ninera_nombre)}</div>
         <div class="helper" style="margin:0;">${fechaFmt} · entrada única</div>
       </div>
       <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink);">$${Number(it.monto||0).toLocaleString('es-UY')}</div>
     </div>`;
   }
   const ninieras = (it.intermediaciones_eventos_ninieras||[]).map(n=>n.ninera_nombre).join(', ');
-  return `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterEventoDetalle('${it.id}')">
+  return `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterEventoDetalle(${argJs(it.id)})">
     <span class="badge accent">Evento</span>
     <div style="flex:1;min-width:0;">
-      <div style="font-weight:700;color:var(--ink);">${it.empresa}</div>
-      <div class="helper" style="margin:0;">${fechaFmt} · ${ninieras || 'sin niñeras cargadas'}</div>
+      <div style="font-weight:700;color:var(--ink);">${escaparHtml(it.empresa)}</div>
+      <div class="helper" style="margin:0;">${fechaFmt} · ${escaparHtml(ninieras || 'sin niñeras cargadas')}</div>
     </div>
     <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink);">$${Number(it.cobro_total||0).toLocaleString('es-UY')}</div>
   </div>`;
@@ -164,10 +164,10 @@ async function abrirModalInterEnriqueDetalle(id){
   if(!it) return;
   const fechaFmt = new Date(it.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'long',year:'numeric'});
   abrirModal(`
-    <h2>${it.ninera_nombre}</h2>
+    <h2>${escaparHtml(it.ninera_nombre)}</h2>
     <div class="helper">Colocación vía Agencia Enrique · ${fechaFmt}</div>
-    <div class="fichadl" style="margin-top:14px;"><div><b>Monto cobrado</b>$${Number(it.monto||0).toLocaleString('es-UY')}</div>${it.comentarios?`<div><b>Comentarios</b>${it.comentarios}</div>`:''}</div>
-    <button class="btn danger" style="width:100%;margin-top:16px;" onclick="eliminarIntermediacionEnrique('${it.id}')">Eliminar registro</button>
+    <div class="fichadl" style="margin-top:14px;"><div><b>Monto cobrado</b>$${Number(it.monto||0).toLocaleString('es-UY')}</div>${it.comentarios?`<div><b>Comentarios</b>${escaparHtml(it.comentarios)}</div>`:''}</div>
+    <button class="btn danger" style="width:100%;margin-top:16px;" onclick="eliminarIntermediacionEnrique(${argJs(it.id)})">Eliminar registro</button>
   `);
 }
 async function eliminarIntermediacionEnrique(id){
@@ -192,7 +192,7 @@ function filaInterEventoHtml(f){
     <div class="field" style="margin-bottom:0;"><label>Pago a la niñera</label>
       <div style="display:flex;gap:4px;">
         <input type="number" id="inter-evtfila-${f.key}-pago" placeholder="0" style="flex:1;">
-        <button class="smallbtn danger" type="button" onclick="quitarFilaInterEvento('${f.key}')">−</button>
+        <button class="smallbtn danger" type="button" onclick="quitarFilaInterEvento(${argJs(f.key)})">−</button>
       </div>
     </div>
   </div>`;
@@ -275,13 +275,13 @@ async function abrirModalInterEventoDetalle(id){
   const { data: it } = await sb.from('intermediaciones_eventos').select('*, intermediaciones_eventos_ninieras(*)').eq('id', id).single();
   if(!it) return;
   const fechaFmt = new Date(it.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'long',year:'numeric'});
-  const filasHtml = (it.intermediaciones_eventos_ninieras||[]).map(n=>`<tr><td>${n.ninera_nombre}</td><td>${n.hora_inicio?n.hora_inicio.slice(0,5):'—'}${n.hora_fin?'–'+n.hora_fin.slice(0,5):''}</td><td>$${Number(n.pago||0).toLocaleString('es-UY')}</td></tr>`).join('');
+  const filasHtml = (it.intermediaciones_eventos_ninieras||[]).map(n=>`<tr><td>${escaparHtml(n.ninera_nombre)}</td><td>${n.hora_inicio?n.hora_inicio.slice(0,5):'—'}${n.hora_fin?'–'+n.hora_fin.slice(0,5):''}</td><td>$${Number(n.pago||0).toLocaleString('es-UY')}</td></tr>`).join('');
   abrirModal(`
-    <h2>${it.empresa}</h2>
+    <h2>${escaparHtml(it.empresa)}</h2>
     <div class="helper">Evento · ${fechaFmt} · Cobro total $${Number(it.cobro_total||0).toLocaleString('es-UY')}</div>
     <div class="tablewrap" style="margin-top:14px;"><table class="asigtable"><thead><tr><th>Niñera</th><th>Horario</th><th>Pago</th></tr></thead><tbody>${filasHtml}</tbody></table></div>
-    ${it.comentarios?`<div class="fichadl" style="margin-top:10px;"><div><b>Comentarios</b>${it.comentarios}</div></div>`:''}
-    <button class="btn danger" style="width:100%;margin-top:16px;" onclick="eliminarIntermediacionEvento('${it.id}')">Eliminar evento</button>
+    ${it.comentarios?`<div class="fichadl" style="margin-top:10px;"><div><b>Comentarios</b>${escaparHtml(it.comentarios)}</div></div>`:''}
+    <button class="btn danger" style="width:100%;margin-top:16px;" onclick="eliminarIntermediacionEvento(${argJs(it.id)})">Eliminar evento</button>
   `);
 }
 async function eliminarIntermediacionEvento(id){
@@ -308,9 +308,9 @@ async function renderIntermediacionesEnFicha(contId, nineraId){
   if(!items.length){ cont.innerHTML = ''; return; }
   cont.innerHTML = `
     <h2 class="card-section-title" style="margin-top:0;">Intermediaciones</h2>
-    ${items.map(it=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;cursor:pointer;" onclick="${it.tipo==='enrique'?`abrirModalInterEnriqueDetalle('${it.id}')`:`abrirModalInterEventoDetalle('${it.id}')`}">
+    ${items.map(it=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;cursor:pointer;" onclick="${it.tipo==='enrique'?`abrirModalInterEnriqueDetalle(${argJs(it.id)})`:`abrirModalInterEventoDetalle(${argJs(it.id)})`}">
       <span class="badge ${it.tipo==='enrique'?'brand':'accent'}">${it.tipo==='enrique'?'Enrique':'Evento'}</span>
-      <span style="flex:1;color:var(--ink);">${it.texto}</span>
+      <span style="flex:1;color:var(--ink);">${escaparHtml(it.texto)}</span>
       <span class="helper" style="margin:0;">${it.fecha ? new Date(it.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : ''}</span>
     </div>`).join('')}
   `;

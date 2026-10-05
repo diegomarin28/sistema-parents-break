@@ -123,7 +123,7 @@ function textoZonasConBarrios(zonaStr, barriosStr){
 function htmlBarriosMarcados(zonaStr, barriosStr, prefijo='Barrios que marcó'){
   const grupos = barriosPorZona(zonaStr, barriosStr).filter(r=>r.barrios.length);
   if(!grupos.length) return '';
-  return `<div class="helper" style="margin:-6px 0 12px;">${prefijo}: ${grupos.map(r=>`${r.zona} (${r.barrios.join(', ')})`).join(' · ')}</div>`;
+  return `<div class="helper" style="margin:-6px 0 12px;">${prefijo}: ${grupos.map(r=>escaparHtml(`${r.zona} (${r.barrios.join(', ')})`)).join(' · ')}</div>`;
 }
 function unirBarrios(...textos){
   const m = new Map();
@@ -195,19 +195,18 @@ function renderZonasNuevasPanel(){
   if(!wrap) return;
   const nuevas = zonasNuevasSinConfirmar();
   if(!nuevas.length){ wrap.innerHTML = ''; return; }
-  const esc = t => String(t).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
   wrap.innerHTML = `<div class="card" style="padding:12px 18px;border-left:3px solid var(--warn);border-radius:0 12px 12px 0;margin-bottom:10px;">
     <div style="font-weight:600;margin-bottom:2px;">Barrios sin zona (${nuevas.length})</div>
     <div class="helper" style="margin:0 0 6px;">Aparecen en alguna ficha pero no pertenecen a ninguna zona. Elegí a qué zona van y se corrigen solas todas las fichas.</div>
     ${nuevas.map((z,i)=>`
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line);">
-        <b style="min-width:120px;">${z}</b>
+        <b style="min-width:120px;">${escaparHtml(z)}</b>
         <select id="zn-sel-${i}" style="flex:1;min-width:140px;">
           <option value="">¿De qué zona es?</option>
-          ${listaZonas().map(g=>`<option value="${g.id}">${g.nombre}</option>`).join('')}
+          ${listaZonas().map(g=>`<option value="${escaparHtml(g.id)}">${escaparHtml(g.nombre)}</option>`).join('')}
         </select>
-        <button class="smallbtn" onclick="accionAsignarBarrioAZona('${esc(z)}','zn-sel-${i}')">Asignar</button>
-        <button class="smallbtn" onclick="accionCrearZonaConBarrio('${esc(z)}')">Crear zona nueva</button>
+        <button class="smallbtn" onclick="accionAsignarBarrioAZona(${argJs(z)},'zn-sel-${i}')">Asignar</button>
+        <button class="smallbtn" onclick="accionCrearZonaConBarrio(${argJs(z)})">Crear zona nueva</button>
       </div>`).join('')}
   </div>`;
 }
@@ -237,12 +236,12 @@ function formatearNombreZona(s){
   }).join(' ');
 }
 function filaZonaDeGrupo(z){
-  return `<span class="zg-zona-chip" data-zona="${z.replace(/"/g,'&quot;')}">${z} <button type="button" onclick="editarZonaChip(this)" title="Editar">${ICONO_LAPIZ}</button> <button type="button" onclick="this.closest('.zg-zona-chip').remove()" title="Quitar">✕</button></span>`;
+  return `<span class="zg-zona-chip" data-zona="${escaparHtml(z)}">${escaparHtml(z)} <button type="button" onclick="editarZonaChip(this)" title="Editar">${ICONO_LAPIZ}</button> <button type="button" onclick="this.closest('.zg-zona-chip').remove()" title="Quitar">✕</button></span>`;
 }
 function editarZonaChip(btn){
   const chip = btn.closest('.zg-zona-chip');
   const actual = chip.dataset.zona;
-  chip.innerHTML = `<input type="text" class="zg-zona-edit-input" value="${actual.replace(/"/g,'&quot;')}" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`;
+  chip.innerHTML = `<input type="text" class="zg-zona-edit-input" value="${escaparHtml(actual)}" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`;
   const inp = chip.querySelector('input');
   inp.addEventListener('blur', ()=>confirmarEdicionZonaChip(inp));
   inp.focus();
@@ -294,9 +293,9 @@ function filaZonaGrupo(g){
   return `
     <div class="zonagrupo-row" data-id="${g?.id||''}">
       <div class="zg-nombre-row">
-        <span class="zg-nombre-display" style="${sinNombreAun?'display:none;':''}">${nombre}</span>
+        <span class="zg-nombre-display" style="${sinNombreAun?'display:none;':''}">${escaparHtml(nombre)}</span>
         <button type="button" class="iconbtn zg-nombre-editbtn" onclick="activarEdicionNombreGrupo(this)" title="Editar nombre" style="${sinNombreAun?'display:none;':''}">${ICONO_LAPIZ}</button>
-        <input type="text" class="zg-nombre" value="${nombre.replace(/"/g,'&quot;')}" placeholder="Nombre de la zona" style="${sinNombreAun?'':'display:none;'}" oninput="refrescarSelectsDeGrupos()" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmarNombreGrupo(this);}" onblur="confirmarNombreGrupo(this)">
+        <input type="text" class="zg-nombre" value="${escaparHtml(nombre)}" placeholder="Nombre de la zona" style="${sinNombreAun?'':'display:none;'}" oninput="refrescarSelectsDeGrupos()" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmarNombreGrupo(this);}" onblur="confirmarNombreGrupo(this)">
       </div>
       <div class="zg-zonas-list">${zonas.map(filaZonaDeGrupo).join('') || '<span class="helper" style="margin:0;">Sin otros barrios.</span>'}</div>
       <label class="chk" style="margin:6px 0;white-space:normal;"><input type="checkbox" class="zg-fuera" ${g?.fuera_de_montevideo?'checked':''}> Fuera de Montevideo y Canelones (se pide la temporada: en qué quincenas del año está cada niñera)</label>
@@ -315,7 +314,7 @@ function refrescarSelectsDeGrupos(){
   // en el modal (incluidos los recién creados o renombrados, todavía sin guardar) — antes
   // quedaban congelados con la lista de cuando se abrió el modal.
   const nombres = [...document.querySelectorAll('.zonagrupo-row .zg-nombre')].map(inp=>inp.value.trim()).filter(Boolean);
-  const opciones = nombres.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+  const opciones = nombres.map(n=>`<option value="${escaparHtml(n)}">${escaparHtml(n)}</option>`).join('');
   document.querySelectorAll('.zsg-grupo-select').forEach(sel=>{
     const actual = sel.value;
     sel.innerHTML = opciones;
@@ -334,12 +333,12 @@ function abrirModalGruposZona(idPrefixOrigen){
   const zonasAgrupadas = new Set();
   grupos.forEach(g=>(g.zonas||[]).forEach(z=>zonasAgrupadas.add(normaliza(z))));
   const sinGrupo = obtenerTodasLasZonas().filter(z=>!zonasAgrupadas.has(normaliza(z)) && !grupoDeZona(z));
-  const opcionesGrupos = grupos.map(g=>`<option value="${(g.nombre||'').replace(/"/g,'&quot;')}">${g.nombre}</option>`).join('');
+  const opcionesGrupos = grupos.map(g=>`<option value="${escaparHtml(g.nombre)}">${escaparHtml(g.nombre)}</option>`).join('');
   const filaSinGrupo = (z) => `
     <div class="zonasingrupo-row">
-      <span class="zsg-nombre">${z}</span>
-      ${grupos.length ? `<select class="zsg-grupo-select">${opcionesGrupos}</select><button type="button" class="smallbtn" onclick="agregarZonaAGrupoExistente('${z.replace(/'/g,"\\'")}', this)">Sumar a esa zona</button>` : ''}
-      <button type="button" class="smallbtn" onclick="crearGrupoConZona('${z.replace(/'/g,"\\'")}', this)">Crear zona nueva</button>
+      <span class="zsg-nombre">${escaparHtml(z)}</span>
+      ${grupos.length ? `<select class="zsg-grupo-select">${opcionesGrupos}</select><button type="button" class="smallbtn" onclick="agregarZonaAGrupoExistente(${argJs(z)}, this)">Sumar a esa zona</button>` : ''}
+      <button type="button" class="smallbtn" onclick="crearGrupoConZona(${argJs(z)}, this)">Crear zona nueva</button>
     </div>`;
   const html = `
     <h2>Zonas</h2>
@@ -387,7 +386,7 @@ async function guardarGruposZona(){
     barrios: [...fila.querySelectorAll('.zg-zona-chip')].map(chip=>chip.dataset.zona).filter(Boolean),
     fuera_de_montevideo: !!fila.querySelector('.zg-fuera')?.checked,
   })).filter(z=>z.nombre || z.barrios.length); // fila totalmente vacía: se ignora
-  const mal = (fila, msg) => { warn.innerHTML = `<div class="warnbox">${msg}</div>`; fila.scrollIntoView({behavior:'smooth', block:'center'}); };
+  const mal = (fila, msg) => { warn.innerHTML = `<div class="warnbox">${escaparHtml(msg)}</div>`; fila.scrollIntoView({behavior:'smooth', block:'center'}); };
   const sinNombre = leidas.find(z=>!z.nombre);
   if(sinNombre) return mal(sinNombre.fila, 'Hay una zona sin nombre. Poneselo o eliminala con "Eliminar zona" antes de guardar.');
   const conSeparador = leidas.find(z=>/[/,]/.test(z.nombre));
@@ -470,13 +469,13 @@ async function renombrarZonaEnFichas(viejo, nuevo){
    ============================================================ */
 function filaHijoFamilia(hijo, abierta){
   const h = hijo || {};
-  const q = s => String(s||'').replace(/"/g,'&quot;');
+  const q = escaparHtml;
   const edadActual = edadHijo(h);
   const faltaInfo = edadActual===null || !h.colegio;
   const resumen = resumenUnHijo(h);
   return `<div class="hijofamilia-row" style="border:1px solid var(--line);border-radius:8px;margin-bottom:8px;overflow:hidden;" data-edad-declarada="${h.edad_declarada??''}" data-edad-declarada-en="${h.edad_declarada_en||''}">
     <div class="hijofamilia-summary" onclick="toggleHijoFamiliaRow(this)" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer;${faltaInfo?'color:var(--warn);':''}">
-      <span class="hf-summary-text" style="font-weight:600;">${resumen}${faltaInfo?' — Falta info':''}</span>
+      <span class="hf-summary-text" style="font-weight:600;">${escaparHtml(resumen)}${faltaInfo?' — Falta info':''}</span>
       <span class="hf-summary-arrow">${abierta?'▴':'▾'}</span>
     </div>
     <div class="hijofamilia-detail" style="display:${abierta?'block':'none'};padding:0 12px 12px;">
@@ -532,7 +531,7 @@ function htmlHijosFamilia(prefix, hijos){
   return `<div class="field">
     <label>Hijos</label>
     <div id="${prefix}-hijos-list">${lista.map(h=>filaHijoFamilia(h, false)).join('')}</div>
-    <button class="smallbtn" type="button" onclick="agregarFilaHijoFamilia('${prefix}')" style="margin-top:6px;">+ Agregar hijo</button>
+    <button class="smallbtn" type="button" onclick="agregarFilaHijoFamilia(${argJs(prefix)})" style="margin-top:6px;">+ Agregar hijo</button>
   </div>`;
 }
 function agregarFilaHijoFamilia(prefix){
@@ -567,8 +566,8 @@ function textoHijosFamilia(hijos){
   return hijos.map(h=>{
     const edad = edadHijo(h);
     const partes = [h.nombre || 'Hijo/a', edad!==null ? `${edad} años` : null, h.colegio || null].filter(Boolean);
-    return partes.join(' · ');
-  }).join('<br>');
+    return escaparHtml(partes.join(' · '));
+  }).join('<br>'); // devuelve HTML (cada hijo escapado, uno por renglón)
 }
 // Versión compacta en una sola línea, para la lista (ej. "Juan (5 años), Ana (8 años)").
 function resumenHijosFamilia(hijos){
@@ -578,11 +577,31 @@ function resumenHijosFamilia(hijos){
     return edad!==null ? `${h.nombre||'Hijo/a'} (${edad} años)` : (h.nombre||'Hijo/a');
   }).join(', ');
 }
+/* ============================================================
+   Escape de datos (05/10/2026, paso 4). Nombres, notas y URLs llegan de la base, y las
+   candidatas, desde un formulario público: un apóstrofo (D'Alessandro) rompía los
+   onclick y un "<img onerror=...>" se ejecutaba. Todo dato que va a innerHTML o a un
+   handler inline pasa por UNO de estos tres:
+   - escaparHtml(t): texto o valor de atributo (definida junto a la vigencia de fijos).
+   - argJs(v): un dato como argumento de un handler inline -> el handler queda como  f(${argJs(x)})  dentro del atributo.
+     Genera un literal JSON escapado para el atributo; el navegador lo desescapa antes
+     de correr el JS, así que llega exactamente el mismo valor (string, número o null).
+   - urlSegura(u): para href y src. Solo http(s), blob:, data:image, mailto:, tel: o
+     rutas relativas; cualquier otra cosa (javascript:...) queda vacía.
+   ============================================================ */
+function argJs(v){ return escaparHtml(JSON.stringify(v === undefined ? null : v)); }
+function urlSegura(u){
+  const t = String(u ?? '').trim();
+  // El navegador ignora tabs y saltos dentro del esquema ("java\nscript:"): se miran sin ellos.
+  const limpio = t.replace(/[\u0000-\u0020\u007f]/g, '');
+  if(!limpio) return '';
+  if(/^(https?:|blob:|mailto:|tel:|data:image\/)/i.test(limpio) || !/^[a-z][a-z0-9+.-]*:/i.test(limpio)) return escaparHtml(t);
+  return '';
+}
 /* Selector de zonas compartido (niñeras, familias, postulantes, Agenda): una casilla por
    zona, se pueden marcar varias. Lo que llega escrito como barrio ("Olivos") ya aparece
    marcado en su zona ("Carrasco"). Si algún texto viejo no pertenece a ninguna zona, se
    muestra marcado aparte (con borde punteado) para no perderlo al guardar. */
-function escAttrZona(t){ return String(t||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function checklistZonas(idPrefix, zonaActual, labelTexto='Zonas'){
   if(!zonaGruposCache){
     // Primera vez en la sesión: se piden las zonas y se vuelve a pintar este mismo bloque.
@@ -593,25 +612,25 @@ function checklistZonas(idPrefix, zonaActual, labelTexto='Zonas'){
     });
     return `<div class="field" id="${idPrefix}-zonas-field"><label>${labelTexto}</label>
       <div class="helper" style="margin:0;">Cargando zonas…</div>
-      <input type="hidden" id="${idPrefix}-zonas-orig" value="${escAttrZona(zonaActual)}"></div>`;
+      <input type="hidden" id="${idPrefix}-zonas-orig" value="${escaparHtml(zonaActual)}"></div>`;
   }
   const actuales = zonasNormalizadas(zonaActual);
   const marcadas = new Set(actuales.map(claveZona));
   const sueltas = actuales.filter(z=>!grupoDeZona(z));
-  const chip = (valor, texto, extraClase='', titulo='') => `<label class="zona-chip ${extraClase}"${titulo?` title="${escAttrZona(titulo)}"`:''}><input type="checkbox" value="${escAttrZona(valor)}" ${marcadas.has(claveZona(valor))?'checked':''}> ${texto}</label>`;
+  const chip = (valor, texto, extraClase='', titulo='') => `<label class="zona-chip ${extraClase}"${titulo?` title="${escaparHtml(titulo)}"`:''}><input type="checkbox" value="${escaparHtml(valor)}" ${marcadas.has(claveZona(valor))?'checked':''}> ${texto}</label>`;
   const zonas = listaZonas();
   const detalle = zonas.map(g=>{
     const barrios = (g.zonas||[]).filter(z=>claveZona(z)!==claveZona(g.nombre));
-    return `<div><b>${g.nombre}</b>${barrios.length?': '+barrios.join(', '):''}</div>`;
+    return `<div><b>${escaparHtml(g.nombre)}</b>${barrios.length?escaparHtml(': '+barrios.join(', ')):''}</div>`;
   }).join('');
   return `
-    <div class="field" id="${idPrefix}-zonas-field"><label>${labelTexto} <a href="#" onclick="event.preventDefault();alternarTodasZonasChecklist('${idPrefix}')" style="font-weight:400;font-size:11.5px;">todas / ninguna</a></label>
+    <div class="field" id="${idPrefix}-zonas-field"><label>${labelTexto} <a href="#" onclick="event.preventDefault();alternarTodasZonasChecklist(${argJs(idPrefix)})" style="font-weight:400;font-size:11.5px;">todas / ninguna</a></label>
       <div id="${idPrefix}-zonas-checklist" class="zona-chips">
-        ${zonas.map(g=>chip(g.nombre, g.nombre, '', (g.zonas||[]).join(', '))).join('')}
-        ${sueltas.map(z=>chip(z, `${z} <span class="zona-chip-nota">sin zona</span>`, 'suelta')).join('')}
+        ${zonas.map(g=>chip(g.nombre, escaparHtml(g.nombre), '', (g.zonas||[]).join(', '))).join('')}
+        ${sueltas.map(z=>chip(z, `${escaparHtml(z)} <span class="zona-chip-nota">sin zona</span>`, 'suelta')).join('')}
       </div>
-      ${sueltas.length ? `<div class="helper" style="margin:4px 0 0;color:var(--warn);">"${sueltas.join('", "')}" no pertenece a ninguna zona. Asignalo en <a href="#" onclick="abrirModalGruposZona('${idPrefix}');return false;">Editar zonas</a>.</div>` : ''}
-      <details class="zona-detalle"><summary>Qué barrios tiene cada zona</summary>${detalle}<div style="margin-top:4px;"><a href="#" onclick="abrirModalGruposZona('${idPrefix}');return false;">Editar zonas</a></div></details>
+      ${sueltas.length ? `<div class="helper" style="margin:4px 0 0;color:var(--warn);">"${sueltas.join('", "')}" no pertenece a ninguna zona. Asignalo en <a href="#" onclick="abrirModalGruposZona(${argJs(idPrefix)});return false;">Editar zonas</a>.</div>` : ''}
+      <details class="zona-detalle"><summary>Qué barrios tiene cada zona</summary>${detalle}<div style="margin-top:4px;"><a href="#" onclick="abrirModalGruposZona(${argJs(idPrefix)});return false;">Editar zonas</a></div></details>
     </div>`;
 }
 // Vuelve a pintar un selector ya puesto en pantalla con otro valor (ej. al cargar una ficha).
@@ -642,7 +661,7 @@ function htmlFiltroZonas(seleccion, onToggle){
   if(!zonaGruposCache) return '<span class="helper" style="margin:0;">Cargando zonas…</span>';
   return `<div class="zona-chips">${listaZonas().map(g=>{
     const k = claveZona(g.nombre);
-    return `<label class="zona-chip" title="${escAttrZona((g.zonas||[]).join(', '))}"><input type="checkbox" ${seleccion.has(k)?'checked':''} onchange="${onToggle}('${k.replace(/'/g,"\\'")}', this.checked)"> ${g.nombre}</label>`;
+    return `<label class="zona-chip" title="${escaparHtml((g.zonas||[]).join(', '))}"><input type="checkbox" ${seleccion.has(k)?'checked':''} onchange="${onToggle}(${argJs(k)}, this.checked)"> ${escaparHtml(g.nombre)}</label>`;
   }).join('')}${seleccion.size?`<button type="button" class="smallbtn" onclick="${onToggle}(null, false)">Limpiar</button>`:''}</div>`;
 }
 function coincideFiltroZonas(zonaStr, seleccion){
@@ -728,7 +747,7 @@ function parsearCuentaBancaria(valor){
 }
 function htmlFilaCuentaBancaria(cuenta){
   const {banco, numero, sucursal} = parsearCuentaBancaria(cuenta);
-  const q = s => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const q = escaparHtml;
   const esOtro = !!banco && !BANCOS_CUENTA.includes(banco);
   return `<div class="cb-fila" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;">
       <select class="cb-banco" onchange="cambioBancoFilaCuenta(this)" style="flex:1 1 110px;min-width:0;">
@@ -749,7 +768,7 @@ function htmlCuentasBancarias(prefix, cuentas){
   return `<div class="field" id="${prefix}-cuentas-wrap">
     <label>Cuenta bancaria</label>
     <div id="${prefix}-cb-filas">${filas}</div>
-    <button class="smallbtn" type="button" onclick="agregarFilaCuentaBancaria('${prefix}')">+ Agregar otra cuenta</button>
+    <button class="smallbtn" type="button" onclick="agregarFilaCuentaBancaria(${argJs(prefix)})">+ Agregar otra cuenta</button>
   </div>`;
 }
 function cambioBancoFilaCuenta(sel){
@@ -1129,11 +1148,11 @@ function confirmarAccionTresVias(mensaje, textoVer, textoContinuar){
     overlay.className = 'confirmoverlay';
     overlay.innerHTML = `
       <div class="confirmbox">
-        <div class="confirmmsg">${mensaje}</div>
+        <div class="confirmmsg">${escaparHtml(mensaje)}</div>
         <div class="confirmbtns" style="flex-wrap:wrap;">
           <button class="btn ghost" id="confirm3-cancelar">Cancelar</button>
-          ${textoVer ? `<button class="btn" id="confirm3-ver">${textoVer}</button>` : ''}
-          <button class="btn danger" id="confirm3-continuar">${textoContinuar}</button>
+          ${textoVer ? `<button class="btn" id="confirm3-ver">${escaparHtml(textoVer)}</button>` : ''}
+          <button class="btn danger" id="confirm3-continuar">${escaparHtml(textoContinuar)}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
@@ -1161,10 +1180,10 @@ function confirmarAccion(mensaje, textoBoton='Eliminar'){
     overlay.className = 'confirmoverlay';
     overlay.innerHTML = `
       <div class="confirmbox">
-        <div class="confirmmsg">${mensaje}</div>
+        <div class="confirmmsg">${escaparHtml(mensaje)}</div>
         <div class="confirmbtns">
           <button class="btn ghost" id="confirm-no">Cancelar</button>
-          <button class="btn danger" id="confirm-si">${textoBoton}</button>
+          <button class="btn danger" id="confirm-si">${escaparHtml(textoBoton)}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
@@ -1180,6 +1199,21 @@ function confirmarAccion(mensaje, textoBoton='Eliminar'){
   });
 }
 
+// Si la foto de la ficha no carga (link de Drive sin permiso, por ejemplo), en su lugar
+// queda un aviso con el link para abrirla. Se arma con el DOM: el link viene de la base.
+function fotoNoSePudoMostrar(img, url){
+  const aviso = document.createElement('div');
+  aviso.className = 'helper';
+  aviso.style.marginBottom = '12px';
+  aviso.append('No se pudo mostrar la foto — ');
+  const link = document.createElement('a');
+  link.href = urlSegura(url) ? String(url).trim() : '#';
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'abrirla en Drive';
+  aviso.append(link, '.');
+  img.replaceWith(aviso);
+}
 function abrirLightboxFoto(url, alt=''){
   if(!url) return;
   cerrarLightboxFoto(); // por si había uno colgado de antes
@@ -1188,7 +1222,7 @@ function abrirLightboxFoto(url, alt=''){
   ov.className = 'confirmoverlay';
   ov.style.zIndex = '400';
   ov.style.cursor = 'zoom-out';
-  ov.innerHTML = `<img id="fotolightbox-img" src="${url}" alt="${alt}" style="max-width:92vw;max-height:92vh;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+  ov.innerHTML = `<img id="fotolightbox-img" src="${urlSegura(url)}" alt="${escaparHtml(alt)}" style="max-width:92vw;max-height:92vh;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.4);">
     <button class="modal-close" onclick="cerrarLightboxFoto()" aria-label="Cerrar" style="position:fixed;top:18px;right:22px;">×</button>`;
   document.body.appendChild(ov);
   ov.addEventListener('click', (e)=>{ if(e.target===ov) cerrarLightboxFoto(); });
@@ -1317,11 +1351,11 @@ function abrirModalEditarPreguntas(){
       <div class="epregunta-list" data-competencia="${c.key}">
         ${porCompetencia(c.key).map(p=>`
           <div class="epregunta-row" data-id="${p.id}" style="display:flex;gap:6px;margin-bottom:6px;">
-            <input type="text" class="ep-texto" value="${(p.texto||'').replace(/"/g,'&quot;')}" style="flex:1;">
+            <input type="text" class="ep-texto" value="${escaparHtml(p.texto)}" style="flex:1;">
             <button type="button" class="smallbtn danger" onclick="this.closest('.epregunta-row').remove()">Quitar</button>
           </div>`).join('')}
       </div>
-      <button type="button" class="smallbtn" onclick="agregarFilaPreguntaEntrevista('${c.key}')">+ Agregar pregunta</button>
+      <button type="button" class="smallbtn" onclick="agregarFilaPreguntaEntrevista(${argJs(c.key)})">+ Agregar pregunta</button>
     </div>`;
   const html = `
     <h2>Editar preguntas de la entrevista</h2>

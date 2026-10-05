@@ -55,7 +55,7 @@ function renderApp(){
       </button>
       <img src="logo.png" alt="Parents’ Break — ir a Hoy" class="mobile-topbar-logo" role="button" tabindex="0" onclick="setModulo(null)" onkeydown="if(event.key==='Enter'||event.key===' '){setModulo(null);}">
       <div class="mobile-topbar-user">
-        <span class="mobile-topbar-name">${nombreUsuario()}</span>
+        <span class="mobile-topbar-name">${escaparHtml(nombreUsuario())}</span>
       </div>
       <button class="notif-btn" onclick="event.stopPropagation();toggleNotifPanel()" aria-label="Notificaciones" title="Notificaciones">
         ${ICONS.bell}<span class="notif-badge">0</span>
@@ -103,7 +103,7 @@ function renderSidebar(){
         <div class="navitem-ic">${ICONS.hoy}</div><div class="navitem-label">Hoy</div>
       </button>
       ${MODULOS.map(m=>`
-        <button class="navitem ${activeTop===m.key?'active':''}" onclick="setModulo('${m.key}')" title="${m.label}">
+        <button class="navitem ${activeTop===m.key?'active':''}" onclick="setModulo(${argJs(m.key)})" title="${m.label}">
           <div class="navitem-ic">${ICONS[m.key]}</div><div class="navitem-label">${m.label}</div>
           ${m.key==='agenda' ? `<span id="agenda-navdot"></span>` : ''}
           ${m.key==='finanzas' ? `<span id="finanzas-navdot"></span>` : ''}
@@ -111,7 +111,7 @@ function renderSidebar(){
         </button>`).join('')}
     </nav>
     <div class="sidebar-foot">
-      ${nombreUsuario()}<br>
+      ${escaparHtml(nombreUsuario())}<br>
       ${PASSKEY_SOPORTADO ? `<button onclick="gestionarPasskeys()">Face ID / Touch ID</button> · ` : ''}<button onclick="logout()">Cerrar sesión</button>
     </div>
   `;
@@ -290,7 +290,7 @@ async function loadDashboardData(){
           <div class="agendatime">${esHoy?'Hoy':'Mañana'} · ${horario}</div>
           <div class="agendaicon ${s.tipo==='traslado'?'traslado':'sitting'}">${s.tipo==='traslado'?ICONS.sittings:ICONS.ninieras}</div>
           <div class="agendabody">
-            <div><b>${s.familia_nombre}</b></div>
+            <div><b>${escaparHtml(s.familia_nombre)}</b></div>
             <div class="agendatype">${estadoTxt}</div>
           </div>
         </div>`;
@@ -345,10 +345,10 @@ function renderPendHoy(cont){
         return `
         <div class="agendarow" style="border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
           <div>
-            <div><b>${esHoy?'Hoy':fechaFmt}</b> · ${a.ninera_nombre} → ${a.familia_nombre || 'familia sin nombre'}</div>
+            <div><b>${esHoy?'Hoy':fechaFmt}</b> · ${escaparHtml(a.ninera_nombre)} → ${escaparHtml(a.familia_nombre || 'familia sin nombre')}</div>
             <div style="color:var(--ink-soft);">${a.hora_inicio ? a.hora_inicio.slice(0,5) : ''}${a.hora_fin ? '–'+a.hora_fin.slice(0,5) : ''}</div>
           </div>
-          <button class="smallbtn" onclick='cargarSittingDesdePendiente(${JSON.stringify(a).replace(/'/g,"&#39;")})'>Cargar sitting</button>
+          <button class="smallbtn" onclick="cargarSittingDesdePendiente(${argJs(a)})">Cargar sitting</button>
         </div>`;
       }).join('') : '<div class="empty">Está todo registrado.</div>'}
     </div>
@@ -518,13 +518,13 @@ function renderNotifBell(){
   const cuerpo = sinLeer.length ? sinLeer.map(i=>`
     <div class="notif-item" data-id="${i.id}">
       <div class="notif-item-bg">${ICONS.trash}</div>
-      <div class="notif-item-content" onclick="irANotificacion('${i.id}')">
+      <div class="notif-item-content" onclick="irANotificacion(${argJs(i.id)})">
         <div class="notif-item-ic">${ICONS.alert}</div>
         <div class="notif-item-body">
-          <div class="notif-item-title">${i.titulo}</div>
-          <div class="notif-item-msg">${i.mensaje}</div>
+          <div class="notif-item-title">${escaparHtml(i.titulo)}</div>
+          <div class="notif-item-msg">${escaparHtml(i.mensaje)}</div>
         </div>
-        <button class="notif-item-xbtn" onclick="event.stopPropagation();marcarNotifLeida('${i.id}')" aria-label="Descartar" title="Descartar">
+        <button class="notif-item-xbtn" onclick="event.stopPropagation();marcarNotifLeida(${argJs(i.id)})" aria-label="Descartar" title="Descartar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </div>
@@ -710,7 +710,7 @@ async function renderNotifConfig(cont){
               <div class="notifcfg-row-sub">${t.sub}</div>
             </div>
             <label class="toggle">
-              <input type="checkbox" ${checked?'checked':''} onchange="guardarPrefNotif('${t.tipo}', this.checked)">
+              <input type="checkbox" ${checked?'checked':''} onchange="guardarPrefNotif(${argJs(t.tipo)}, this.checked)">
               <span class="track"></span>
             </label>
           </div>`;

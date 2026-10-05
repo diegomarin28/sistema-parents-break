@@ -106,7 +106,6 @@ test.describe('fechas en Montevideo (UTC-3)', () => {
 
 test.describe('nombres con apóstrofo y HTML', () => {
   test("la foto de una niñera con apóstrofo en el nombre se abre (D'Alessandro)", async ({ page }) => {
-    test.fail(true, 'onclick con comillas sin escapar: se arregla en el PR 4');
     const datos = datosBase();
     datos.ninieras[0] = { ...datos.ninieras[0], nombre: "Ana D'Alessandro", foto: 'https://ejemplo.test/foto.jpg' };
     const e = await abrirApp(page, { datos });
@@ -117,7 +116,6 @@ test.describe('nombres con apóstrofo y HTML', () => {
   });
 
   test('un nombre con HTML que llega del formulario público no se ejecuta', async ({ page }) => {
-    test.fail(true, 'innerHTML sin escapar (XSS): se arregla en el PR 4');
     const datos = datosBase();
     datos.candidatas[0] = { ...datos.candidatas[0], nombre: '<img src=x onerror="window.__xss=1">Lucía' };
     const e = await abrirApp(page, { datos });
@@ -128,7 +126,6 @@ test.describe('nombres con apóstrofo y HTML', () => {
   });
 
   test('un nombre con <script> se muestra como texto', async ({ page }) => {
-    test.fail(true, 'innerHTML sin escapar: se arregla en el PR 4');
     const datos = datosBase();
     datos.candidatas[0] = { ...datos.candidatas[0], nombre: '<script>window.__xss2=1</script>Lucía' };
     const e = await abrirApp(page, { datos });

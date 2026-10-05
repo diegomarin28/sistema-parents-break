@@ -115,7 +115,7 @@ function llenarSelectFamiliasHistorial(filas){
     if(!famMap.has(key)) famMap.set(key, raw);
   });
   const fams = [...famMap.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
-  sel.innerHTML = `<option value="">Todas</option>` + fams.map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
+  sel.innerHTML = `<option value="">Todas</option>` + fams.map(([key,label])=>`<option value="${escaparHtml(key)}">${escaparHtml(label)}</option>`).join('');
   if(valorPrevio) sel.value = valorPrevio;
 }
 async function cargarSitHistorialMas(){
@@ -156,15 +156,15 @@ function horasEfectuadasTexto(r){
 // justo donde se ve, sin tener que ir a buscarlo a la lista de arriba).
 function filaHistorialTr(r){
   const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—';
-  return `<tr style="cursor:pointer;" onclick="abrirModalSitForm('${r.id}')" title="Tocar para editar">
+  return `<tr style="cursor:pointer;" onclick="abrirModalSitForm(${argJs(r.id)})" title="Tocar para editar">
     <td>${fechaFmt}</td>
-    <td>${r.ninera_nombre}</td>
-    <td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td>
+    <td>${escaparHtml(r.ninera_nombre)}</td>
+    <td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td>
     <td>${horarioEfectuadoTexto(r)}</td>
     <td>${horasEfectuadasTexto(r)}</td>
     <td>$${r.cobro_familia||0}</td>
     <td>$${r.pago_ninera||0}</td>
-    <td class="hist-detalle" title="${(r.notas||'').replace(/"/g,'&quot;')}">${r.notas||'—'}</td>
+    <td class="hist-detalle" title="${escaparHtml(r.notas)}">${escaparHtml(r.notas||'—')}</td>
     <td>${resenaBadge(r.ninera_nombre)}</td>
   </tr>`;
 }
@@ -235,7 +235,7 @@ function abrirModalExportarHistorialPDF(){
       <div class="field"><label>Desde</label><input type="date" id="exphist-desde" value="${desdeActual}"></div>
       <div class="field"><label>Hasta</label><input type="date" id="exphist-hasta" value="${hastaActual}"></div>
     </div>
-    <div class="helper" style="margin-top:2px;">Familia: ${famSel?.selectedOptions?.[0]?.textContent || 'Todas'} · Tipo: ${tipoSel?.selectedOptions?.[0]?.textContent || 'Todos'} — los mismos filtros de arriba.</div>
+    <div class="helper" style="margin-top:2px;">Familia: ${escaparHtml(famSel?.selectedOptions?.[0]?.textContent || 'Todas')} · Tipo: ${escaparHtml(tipoSel?.selectedOptions?.[0]?.textContent || 'Todos')} — los mismos filtros de arriba.</div>
     <div id="exphist-warn"></div>
     <button class="btn primary" style="width:100%;margin-top:14px;" onclick="generarVistaPreviaHistorialPDF()">Ver vista previa</button>
     <div id="exphist-preview" style="margin-top:16px;"></div>
@@ -269,15 +269,15 @@ async function generarVistaPreviaHistorialPDF(){
       <thead><tr><th>Fecha</th><th>Niñera</th><th>Familia</th><th>Horario</th><th>Horas</th><th>Cobro</th><th>Detalle</th></tr></thead>
       <tbody>${items.map(r=>`<tr>
         <td>${r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</td>
-        <td>${r.ninera_nombre}</td>
-        <td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td>
+        <td>${escaparHtml(r.ninera_nombre)}</td>
+        <td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td>
         <td>${horarioEfectuadoTexto(r)}</td>
         <td>${horasEfectuadasTexto(r)}</td>
         <td>$${r.cobro_familia||0}</td>
-        <td class="hist-detalle" title="${(r.notas||'').replace(/"/g,'&quot;')}">${r.notas||'—'}</td>
+        <td class="hist-detalle" title="${escaparHtml(r.notas)}">${escaparHtml(r.notas||'—')}</td>
       </tr>`).join('')}</tbody>
     </table></div>
-    <button class="btn primary" style="width:100%;margin-top:12px;" onclick="descargarHistorialPDF('${desde}','${hasta}')">Descargar PDF</button>
+    <button class="btn primary" style="width:100%;margin-top:12px;" onclick="descargarHistorialPDF(${argJs(desde)},${argJs(hasta)})">Descargar PDF</button>
   `;
 }
 async function descargarHistorialPDF(desde, hasta){
@@ -378,7 +378,7 @@ function sitFormHTML(){
       <button type="button" class="tipobtn ${sitTipo==='traslado'?'selected':''}" id="sit-tipo-traslado" onclick="setSitTipo('traslado')">Traslado</button>
     </div>
     <div class="grid3">
-      <div class="field"><label>Registró</label><input type="text" id="sit-registro" value="${sitEditId ? '' : registradoPorUsuario()}" placeholder="Nombre"></div>
+      <div class="field"><label>Registró</label><input type="text" id="sit-registro" value="${sitEditId ? '' : escaparHtml(registradoPorUsuario())}" placeholder="Nombre"></div>
       <div class="field" style="position:relative;">
         <label>Familia</label>
         <input type="text" id="sit-familia" autocomplete="off">
@@ -426,7 +426,7 @@ function sitFormHTML(){
       <button class="btn primary" onclick="guardarSitting()">${sitEditId ? 'Guardar cambios' : 'Guardar registro'}</button>
       <div style="margin-left:auto;align-self:center;font-size:13px;color:var(--ink-soft);">Margen: <b id="sit-margen" style="color:var(--good);font-family:'IBM Plex Mono',monospace;">$0</b></div>
     </div>
-    ${sitEditId ? `<div id="sit-historial-box" style="margin-top:12px;"><button type="button" class="smallbtn" onclick="verHistorialSitting('${sitEditId}')">Historial de cambios</button></div>` : ''}
+    ${sitEditId ? `<div id="sit-historial-box" style="margin-top:12px;"><button type="button" class="smallbtn" onclick="verHistorialSitting(${argJs(sitEditId)})">Historial de cambios</button></div>` : ''}
   `;
 }
 /* Historial de cambios de un sitting (05/10/2026): quién cambió qué y cuándo. Lo escribe un
@@ -585,7 +585,7 @@ function onSitFamiliaInput(){
   const val = document.getElementById('sit-familia').value.trim();
   sitFamiliaSel = findFamilia(val);
   const box = document.getElementById('sit-familia-create');
-  box.innerHTML = (val && !sitFamiliaSel) ? `<button type="button" class="createbtn" onclick="crearFamiliaRapida()">+ Crear familia "${val}"</button>` : '';
+  box.innerHTML = (val && !sitFamiliaSel) ? `<button type="button" class="createbtn" onclick="crearFamiliaRapida()">+ Crear familia "${escaparHtml(val)}"</button>` : '';
   sitOrigenAuto = true;
   if(sitTipo==='traslado') aplicarDireccionSugerida();
   actualizarCobroPagoPorHorario();
@@ -594,7 +594,7 @@ function onSitNineraInput(){
   const val = document.getElementById('sit-ninera').value.trim();
   sitNineraSel = findNinera(val);
   const box = document.getElementById('sit-ninera-create');
-  box.innerHTML = (val && !sitNineraSel) ? `<button type="button" class="createbtn" onclick="crearNineraRapida()">+ Crear niñera "${val}"</button>` : '';
+  box.innerHTML = (val && !sitNineraSel) ? `<button type="button" class="createbtn" onclick="crearNineraRapida()">+ Crear niñera "${escaparHtml(val)}"</button>` : '';
 }
 async function crearFamiliaRapida(){
   const val = document.getElementById('sit-familia').value.trim();
@@ -694,7 +694,7 @@ function abrirModalIncidente(prefill){
   const html = `
     <h2>Registrar incidente</h2>
     <div class="grid2">
-      <div class="field"><label>Fecha</label><input type="date" id="inc-fecha" value="${prefill.fecha||todayISO()}"></div>
+      <div class="field"><label>Fecha</label><input type="date" id="inc-fecha" value="${escaparHtml(prefill.fecha||todayISO())}"></div>
       <div class="field"><label>Tipo</label><select id="inc-tipo">
         <option value="accidente">Accidente</option>
         <option value="queja">Queja de familia</option>
@@ -708,17 +708,17 @@ function abrirModalIncidente(prefill){
     </select></div>
     <div class="grid2">
       <div class="field" style="position:relative;"><label>Niñera (opcional)</label>
-        <input type="text" id="inc-ninera" autocomplete="off" value="${prefill.ninera_nombre||''}">
+        <input type="text" id="inc-ninera" autocomplete="off" value="${escaparHtml(prefill.ninera_nombre)}">
         <div id="inc-ninera-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
       </div>
       <div class="field" style="position:relative;"><label>Familia (opcional)</label>
-        <input type="text" id="inc-familia" autocomplete="off" value="${prefill.familia_nombre||''}">
+        <input type="text" id="inc-familia" autocomplete="off" value="${escaparHtml(prefill.familia_nombre)}">
         <div id="inc-familia-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
       </div>
     </div>
     <div class="field"><label>Descripción</label><textarea id="inc-descripcion" rows="4" placeholder="Qué pasó, cuándo se enteraron, cómo se resolvió…"></textarea></div>
     <div id="inc-warn"></div>
-    <button class="btn primary" style="width:100%;" onclick="guardarIncidente('${prefill.sitting_id||''}')">Guardar incidente</button>
+    <button class="btn primary" style="width:100%;" onclick="guardarIncidente(${argJs(prefill.sitting_id||'')})">Guardar incidente</button>
   `;
   abrirModal(html);
   setTimeout(()=>{
@@ -786,13 +786,13 @@ function renderIncidentesLista(){
         return `
         <div class="agendarow" style="border-bottom:1px solid var(--line);align-items:flex-start;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
-            <div style="font-weight:700;">${fechaFmt}${quienes?' — '+quienes:''}</div>
-            <div class="helper" style="margin:2px 0 4px;">${i.descripcion}</div>
+            <div style="font-weight:700;">${fechaFmt}${quienes?escaparHtml(' — '+quienes):''}</div>
+            <div class="helper" style="margin:2px 0 4px;">${escaparHtml(i.descripcion)}</div>
           </div>
           <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
             <span class="badge ${i.tipo==='accidente'?'bad':i.tipo==='queja'?'warn':'brand'}" style="font-size:10.5px;">${i.tipo==='accidente'?'Accidente':i.tipo==='queja'?'Queja':'Otro'}</span>
-            <span class="badge ${gravedadClase(i.gravedad)}" style="font-size:10.5px;">${i.gravedad}</span>
-            <button class="smallbtn danger" onclick="eliminarIncidente('${i.id}')">Eliminar</button>
+            <span class="badge ${gravedadClase(i.gravedad)}" style="font-size:10.5px;">${escaparHtml(i.gravedad)}</span>
+            <button class="smallbtn danger" onclick="eliminarIncidente(${argJs(i.id)})">Eliminar</button>
           </div>
         </div>`;
       }).join('')}
@@ -834,13 +834,13 @@ async function renderIncidentesEnFicha(containerId, tipo, id, nombre){
       return `
       <div class="agendarow" style="border-bottom:1px solid var(--line);align-items:flex-start;flex-wrap:wrap;">
         <div style="flex:1;min-width:180px;">
-          <div style="font-weight:700;">${fechaFmt}${otro?' — '+otro:''}</div>
-          <div class="helper" style="margin:2px 0 4px;">${i.descripcion}</div>
+          <div style="font-weight:700;">${fechaFmt}${otro?escaparHtml(' — '+otro):''}</div>
+          <div class="helper" style="margin:2px 0 4px;">${escaparHtml(i.descripcion)}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
           <span class="badge ${i.tipo==='accidente'?'bad':i.tipo==='queja'?'warn':'brand'}" style="font-size:10px;">${i.tipo==='accidente'?'Accidente':i.tipo==='queja'?'Queja':'Otro'}</span>
-          <span class="badge ${i.gravedad==='grave'?'bad':i.gravedad==='moderado'?'warn':'good'}" style="font-size:10px;">${i.gravedad}</span>
-          <button class="smallbtn danger" onclick='eliminarIncidenteFicha("${i.id}","${containerId}","${tipo}","${id||''}",${JSON.stringify(nombre||'').replace(/'/g,"&#39;")})'>Eliminar</button>
+          <span class="badge ${i.gravedad==='grave'?'bad':i.gravedad==='moderado'?'warn':'good'}" style="font-size:10px;">${escaparHtml(i.gravedad)}</span>
+          <button class="smallbtn danger" onclick="eliminarIncidenteFicha(${argJs(i.id)},${argJs(containerId)},${argJs(tipo)},${argJs(id||'')},${argJs(nombre||'')})">Eliminar</button>
         </div>
       </div>`;
     }).join('')}
@@ -1160,7 +1160,7 @@ function actualizarCobroPagoPorHorario(){
     if(!pagoH){
       if(sinTarifaBox && horaIni && horaFin){
         sinTarifaBox.innerHTML = `
-          <div class="helper" style="margin:8px 0 6px;color:var(--clay-text);">${sitFamiliaSel.nombre} ${cobroH ? 'no tiene cargado cuánto le paga a la niñera por hora' : 'no tiene tarifa por hora cargada'} — cargalo ahora y calculamos este sitting y los que vengan:</div>
+          <div class="helper" style="margin:8px 0 6px;color:var(--clay-text);">${escaparHtml(sitFamiliaSel.nombre)} ${cobroH ? 'no tiene cargado cuánto le paga a la niñera por hora' : 'no tiene tarifa por hora cargada'} — cargalo ahora y calculamos este sitting y los que vengan:</div>
           <div class="grid2">
             ${cobroH ? '' : `<div class="field"><label>Cobro por hora</label><input type="number" id="sit-tarifa-cobro-nueva" placeholder="ej. 400"></div>`}
             <div class="field"><label>Pago por hora</label><input type="number" id="sit-tarifa-pago-nueva" placeholder="ej. 280"></div>
@@ -1415,7 +1415,7 @@ function renderSitListaTabla(){
     <tbody>${itemsMostrados.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${r.familia_nombre}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${r.ninera_nombre}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm('${r.id}')">Editar</button><button class="smallbtn" onclick='abrirModalIncidente(${JSON.stringify({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha}).replace(/'/g,"&#39;")})'>Incidente</button><button class="smallbtn danger" onclick="eliminarSitting('${r.id}')">Eliminar</button></div></td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${escaparHtml(r.ninera_nombre)}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm(${argJs(r.id)})">Editar</button><button class="smallbtn" onclick="abrirModalIncidente(${argJs({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha})})">Incidente</button><button class="smallbtn danger" onclick="eliminarSitting(${argJs(r.id)})">Eliminar</button></div></td></tr>`;
     }).join('')}</tbody></table></div>
     ${hayMas ? `<button class="smallbtn" onclick="sitListaMostrar+=15;renderSitListaTabla();" style="margin-top:10px;">Mostrar más</button>` : ''}
   `;

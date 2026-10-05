@@ -63,17 +63,17 @@ function renderCarsittingPendientes(){
         const cuerpoPersonal = encodeURIComponent(`Hola ${primerNombre},\n\n\n\nUn abrazo,\nParents’ Break`);
         return `<div class="agendarow" style="border-bottom:1px solid var(--line);flex-wrap:wrap;">
           <div>
-            <div style="font-weight:600;">${p.nombre} <span class="badge" style="font-size:10px;">${p.origen==='ninera'?'niñera':'candidata'}</span></div>
+            <div style="font-weight:600;">${escaparHtml(p.nombre)} <span class="badge" style="font-size:10px;">${p.origen==='ninera'?'niñera':'candidata'}</span></div>
             <div class="helper" style="margin:2px 0 0;">${enviadoTxt}</div>
             ${p.mail?'':`<input type="email" id="${mailId}" placeholder="mail de contacto" style="margin-top:6px;max-width:220px;">`}
           </div>
           <div style="display:flex;gap:8px;">
             <a class="smallbtn" style="text-decoration:none;"
-               href="mailto:${p.mail||''}?subject=${asuntoPersonal}&body=${cuerpoPersonal}" target="_blank" rel="noopener"
-               ${p.mail?'':`onmousedown="this.href='mailto:'+(document.getElementById('${mailId}').value||'')+'?subject=${asuntoPersonal}&body=${cuerpoPersonal}'"`}>Mail personalizado</a>
-            <a class="smallbtn" style="text-decoration:none;" onclick="marcarCarsittingMailEnviado('${p.origen}','${p.id}')"
-               href="mailto:${p.mail||''}?subject=${asunto}&body=${cuerpo}" target="_blank" rel="noopener"
-               ${p.mail?'':`onmousedown="this.href='mailto:'+(document.getElementById('${mailId}').value||'')+'?subject=${asunto}&body=${cuerpo}'"`}>Enviar mail</a>
+               href="mailto:${escaparHtml(p.mail)}?subject=${asuntoPersonal}&body=${cuerpoPersonal}" target="_blank" rel="noopener"
+               ${p.mail?'':`onmousedown="this.href='mailto:'+(document.getElementById(${argJs(mailId)}).value||'')+${argJs('?subject='+asuntoPersonal+'&body='+cuerpoPersonal)}"`}>Mail personalizado</a>
+            <a class="smallbtn" style="text-decoration:none;" onclick="marcarCarsittingMailEnviado(${argJs(p.origen)},${argJs(p.id)})"
+               href="mailto:${escaparHtml(p.mail)}?subject=${asunto}&body=${cuerpo}" target="_blank" rel="noopener"
+               ${p.mail?'':`onmousedown="this.href='mailto:'+(document.getElementById(${argJs(mailId)}).value||'')+${argJs('?subject='+asunto+'&body='+cuerpo)}"`}>Enviar mail</a>
           </div>
         </div>`;
       }).join('')}
@@ -83,7 +83,7 @@ async function marcarCarsittingMailEnviado(origen, id){
   const tabla = origen==='ninera' ? 'ninieras' : 'candidatas';
   await sb.from(tabla).update({carsitting_mail_enviado_at: new Date().toISOString()}).eq('id', id);
 }
-function errBox(e){ return `<div class="warnbox">Error de conexión con la base: ${e.message||e}</div>`; }
+function errBox(e){ return `<div class="warnbox">Error de conexión con la base: ${escaparHtml(e?.message||e)}</div>`; }
 
 
 /* ---- Candidatas a entrevistar (intake) ---- */
@@ -111,7 +111,7 @@ function renderIntake(body){
 function renderIntakePills(){
   const box = document.getElementById('intake-pillfilters');
   if(!box) return;
-  box.innerHTML = ['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="pillbtn ${intakeFiltro===t?'selected':''}" onclick="setIntakeFiltro('${t}')">${t}</button>`).join('');
+  box.innerHTML = ['Todas','Niñera','Traslados','Ambas'].map(t=>`<button class="pillbtn ${intakeFiltro===t?'selected':''}" onclick="setIntakeFiltro(${argJs(t)})">${t}</button>`).join('');
 }
 function setIntakeFiltro(t){
   intakeFiltro = t;
@@ -163,28 +163,28 @@ async function loadIntake(){
   if(!intakeItems.length){ grid.innerHTML = '<div class="empty">No hay candidatas esperando entrevista.</div>'; return; }
   grid.innerHTML = '<div class="person-list">' + intakeItems.map((c,i)=>`
     <div class="person-row">
-      <div class="av" ${c.foto_url && c.autoriza_foto!==false?`style="cursor:zoom-in;" onclick="abrirLightboxFoto('${c.foto_url}', 'Foto de ${c.nombre}')"`:''}>${c.foto_url?`<img loading="lazy" decoding="async" src="${c.foto_url}" alt="Foto de ${c.nombre}" onerror="this.parentElement.textContent='${(c.nombre||'?').charAt(0).toUpperCase()}'">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
+      <div class="av" ${c.foto_url && c.autoriza_foto!==false?`style="cursor:zoom-in;" onclick="abrirLightboxFoto(${argJs(c.foto_url)}, ${argJs('Foto de '+c.nombre)})"`:''}>${c.foto_url?`<img loading="lazy" decoding="async" src="${urlSegura(c.foto_url)}" alt="Foto de ${escaparHtml(c.nombre)}" onerror="this.parentElement.textContent=${argJs((c.nombre||'?').charAt(0).toUpperCase())}">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
       <div class="info">
-        <div class="name">${c.nombre} ${c.apellido||''}</div>
-        <div class="meta">${textoZonasConBarrios(c.zona, c.zona_barrios)||'zona s/d'} · ${textoEdadCandidata(c)}${c.origen?' · '+c.origen:''}</div>
+        <div class="name">${escaparHtml(c.nombre)} ${escaparHtml(c.apellido)}</div>
+        <div class="meta">${escaparHtml(textoZonasConBarrios(c.zona, c.zona_barrios)||'zona s/d')} · ${escaparHtml(textoEdadCandidata(c))}${c.origen?escaparHtml(' · '+c.origen):''}</div>
       </div>
       <div class="badge-slot">
-        <span class="badge brand" style="font-size:10px;padding:2px 8px;">${c.tipo||'Niñera'}</span>
+        <span class="badge brand" style="font-size:10px;padding:2px 8px;">${escaparHtml(c.tipo||'Niñera')}</span>
         ${c.autoriza_foto===false?'<div class="badge bad" style="font-size:9px;padding:2px 6px;margin-top:4px;">No autoriza foto</div>':''}
       </div>
       <div class="rowbtns">
         <button class="smallbtn" onclick="verFichaIntake(${i})">Ver ficha</button>
         <button class="smallbtn" onclick="agendarDesdeIntake(${i})">Agendar</button>
-        <button class="smallbtn danger" onclick="descartarIntake('${c.id}')">Descartar</button>
+        <button class="smallbtn danger" onclick="descartarIntake(${argJs(c.id)})">Descartar</button>
       </div>
     </div>`).join('') + '</div>';
 }
 function verFichaIntake(i){
   const c = intakeItems[i];
-  const rows = FICHA_CAMPOS.filter(f=>c[f.key]).map(f=>`<div><b>${f.label}</b>${c[f.key]}</div>`).join('');
-  const fotoHtml = c.foto_url ? `<img src="${c.foto_url}" alt="Foto de ${c.nombre}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;${c.autoriza_foto!==false?'cursor:zoom-in;':''}" ${c.autoriza_foto!==false?`onclick="abrirLightboxFoto('${c.foto_url}', 'Foto de ${c.nombre}')"`:''} onerror="this.outerHTML='<div class=&quot;helper&quot; style=&quot;margin-bottom:12px;&quot;>No se pudo mostrar la foto — <a href=&quot;${c.foto_url}&quot; target=&quot;_blank&quot;>abrirla en Drive</a>.</div>'">` : '';
+  const rows = FICHA_CAMPOS.filter(f=>c[f.key]).map(f=>`<div><b>${f.label}</b>${escaparHtml(c[f.key])}</div>`).join('');
+  const fotoHtml = c.foto_url ? `<img src="${urlSegura(c.foto_url)}" alt="Foto de ${escaparHtml(c.nombre)}" style="width:96px;height:96px;border-radius:50%;object-fit:cover;margin-bottom:12px;${c.autoriza_foto!==false?'cursor:zoom-in;':''}" ${c.autoriza_foto!==false?`onclick="abrirLightboxFoto(${argJs(c.foto_url)}, ${argJs('Foto de '+c.nombre)})"`:''} onerror="fotoNoSePudoMostrar(this, ${argJs(c.foto_url)})">` : '';
   const avisoHtml = c.autoriza_foto === false ? `<div style="background:var(--clay-soft);color:var(--clay-text);font-weight:600;font-size:13px;padding:10px 14px;border-radius:10px;margin-bottom:14px;border:1px solid var(--clay);">⚠️ No autorizó el uso de su foto ni sus datos para el proceso de selección — no usar su imagen ni compartir su información fuera de la evaluación.</div>` : '';
-  abrirModal(`${avisoHtml}${fotoHtml}<h2 style="margin:0 0 10px;">${c.nombre} ${c.apellido||''}</h2><div class="fichadl">${rows||'<div>Sin más datos cargados.</div>'}</div>`);
+  abrirModal(`${avisoHtml}${fotoHtml}<h2 style="margin:0 0 10px;">${escaparHtml(c.nombre)} ${escaparHtml(c.apellido)}</h2><div class="fichadl">${rows||'<div>Sin más datos cargados.</div>'}</div>`);
 }
 async function descartarIntake(id){
   if(!(await confirmarAccion('¿Descartar esta candidata? No se puede deshacer.', 'Descartar'))) return;
@@ -232,7 +232,7 @@ function renderFichaOrigen(){
   const filasTexto = campos.map(f=>`
     <div class="fichadl-row">
       <label>${f.label}</label>
-      <textarea id="ent-nota-${f.key}" placeholder="Sin dato del form — se puede escribir acá">${notas[f.key]!==undefined ? notas[f.key] : (c[f.key]||'')}</textarea>
+      <textarea id="ent-nota-${f.key}" placeholder="Sin dato del form — se puede escribir acá">${escaparHtml(notas[f.key]!==undefined ? notas[f.key] : c[f.key])}</textarea>
     </div>`).join('');
   box.innerHTML = `<div class="card card-collapsible">${cardHeaderConColapso('Ficha del formulario')}<div class="card-body">
     <div class="helper">Se puede editar directo — arranca con lo que ella puso en el form.</div>
@@ -324,7 +324,7 @@ async function renderEntrevista(body){
 function renderCompetencias(){
   const cont = document.getElementById('competencias');
   cont.innerHTML = COMP_PRINCIPALES.map(c => { const preguntas = preguntasDe(c.key); return `
-    <div class="card card-collapsible">${cardHeaderConColapso(c.titulo)}<div class="card-body">${preguntas.length? preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
+    <div class="card card-collapsible">${cardHeaderConColapso(c.titulo)}<div class="card-body">${preguntas.length? preguntas.map(p=>`<div class="q">${escaparHtml(p)}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
       <textarea placeholder="Notas de la respuesta…" data-notes="${c.key}"></textarea>
       <div class="scorebar" data-scorebar="${c.key}">${[1,2,3,4,5].map(n=>`<div class="scorebtn" data-score="${c.key}:${n}">${n}</div>`).join('')}</div>
       <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div></div>
@@ -335,7 +335,7 @@ function renderCompetenciasFinales(){
   const cont = document.getElementById('competencias-finales');
   if(!cont) return;
   cont.innerHTML = COMP_FINALES.map(c => { const preguntas = preguntasDe(c.key); return `
-    <div class="card card-collapsible">${cardHeaderConColapso(c.titulo)}<div class="card-body">${preguntas.length? preguntas.map(p=>`<div class="q">${p}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
+    <div class="card card-collapsible">${cardHeaderConColapso(c.titulo)}<div class="card-body">${preguntas.length? preguntas.map(p=>`<div class="q">${escaparHtml(p)}</div>`).join('') : `<div class="helper">${c.helper||''}</div>`}
       <textarea placeholder="Notas de la respuesta…" data-notes="${c.key}"></textarea>
       <div class="scorebar" data-scorebar="${c.key}">${[1,2,3,4,5].map(n=>`<div class="scorebtn" data-score="${c.key}:${n}">${n}</div>`).join('')}</div>
       <div class="scorelabels"><span>Preocupa</span><span>Muy sólida</span></div></div></div>
@@ -367,9 +367,9 @@ function renderRefs(){
   const cont = document.getElementById('reflist');
   cont.innerHTML = entrevistaState.refs.map((r,i)=>`
     <div class="refrow">
-      <input type="text" placeholder="Nombre" value="${r.name}" oninput="entrevistaState.refs[${i}].name=this.value">
-      <input type="tel" placeholder="Teléfono" value="${r.phone}" oninput="entrevistaState.refs[${i}].phone=this.value">
-      <input type="text" placeholder="Relación" value="${r.relacion}" oninput="entrevistaState.refs[${i}].relacion=this.value">
+      <input type="text" placeholder="Nombre" value="${escaparHtml(r.name)}" oninput="entrevistaState.refs[${i}].name=this.value">
+      <input type="tel" placeholder="Teléfono" value="${escaparHtml(r.phone)}" oninput="entrevistaState.refs[${i}].phone=this.value">
+      <input type="text" placeholder="Relación" value="${escaparHtml(r.relacion)}" oninput="entrevistaState.refs[${i}].relacion=this.value">
       <label class="chk"><input type="checkbox" ${r.confirmado?'checked':''} onchange="entrevistaState.refs[${i}].confirmado=this.checked"> Confirmada</label>
       <button type="button" class="pcard-delete" style="position:static;box-shadow:none;" onclick="quitarRef(${i})" title="Quitar referencia" aria-label="Quitar referencia">${ICONS.trash}</button>
     </div>`).join('');
@@ -477,49 +477,49 @@ async function cargarGuardadas(){
   cont.innerHTML = candidatasItems.map((c,i)=>{
     const cd = c.candidatas;
     return `<button type="button" class="item" onclick="verDetalle(${i})">
-      <div><div class="name">${cd.nombre} ${cd.estado==='contratada'?'✓':''}</div><div class="meta">${c.fecha||'sin fecha'} · ${textoZonasConBarrios(cd.zona, cd.zona_barrios)||'zona s/d'} · ${c.rol||'rol s/d'}</div></div>
-      <div class="sc"><div class="n">${Number(c.total).toFixed(1)} / 5</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${cd.estado==='contratada'?'Contratada':c.recomendacion}</span></div>
+      <div><div class="name">${escaparHtml(cd.nombre)} ${cd.estado==='contratada'?'✓':''}</div><div class="meta">${escaparHtml(c.fecha||'sin fecha')} · ${escaparHtml(textoZonasConBarrios(cd.zona, cd.zona_barrios)||'zona s/d')} · ${escaparHtml(c.rol||'rol s/d')}</div></div>
+      <div class="sc"><div class="n">${Number(c.total).toFixed(1)} / 5</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${cd.estado==='contratada'?'Contratada':escaparHtml(c.recomendacion)}</span></div>
     </button>`;
   }).join('');
 }
 function verDetalle(i){
   const c = candidatasItems[i];
   const cd = c.candidatas;
-  const compRowHtml = comp => { const d=c.puntajes[comp.key]||{}; return `<div class="card"><h2>${comp.titulo} — <span style="color:var(--accent)">${d.score||'—'}/5</span></h2><div class="helper" style="margin-top:6px;">${d.notes||'(sin notas)'}</div></div>`; };
+  const compRowHtml = comp => { const d=c.puntajes[comp.key]||{}; return `<div class="card"><h2>${comp.titulo} — <span style="color:var(--accent)">${d.score||'—'}/5</span></h2><div class="helper" style="margin-top:6px;">${escaparHtml(d.notes||'(sin notas)')}</div></div>`; };
   const compHtml = COMP_PRINCIPALES.map(compRowHtml).join('');
   const compHtmlFinal = COMP_FINALES.map(compRowHtml).join('');
   const flags = REDFLAGS.filter(f=>c.redflags[f.key]);
   const refs = c.referencias||[];
-  const refsHtml = refs.length ? refs.map(r=>`<div class="q">${r.name||'(sin nombre)'} · ${r.phone||'sin tel'} · ${r.relacion||'—'} ${r.confirmado?'· ✓ confirmada':''}</div>`).join('') : '<div class="helper">Sin referencias.</div>';
-  const psicoHtml = c.psico ? PSICO_IMGS.map(img=>`<div class="q"><b>${img.id}:</b> ${c.psico[img.id]||'(sin respuesta anotada)'}</div>`).join('') : '';
+  const refsHtml = refs.length ? refs.map(r=>`<div class="q">${escaparHtml(r.name||'(sin nombre)')} · ${escaparHtml(r.phone||'sin tel')} · ${escaparHtml(r.relacion||'—')} ${r.confirmado?'· ✓ confirmada':''}</div>`).join('') : '<div class="helper">Sin referencias.</div>';
+  const psicoHtml = c.psico ? PSICO_IMGS.map(img=>`<div class="q"><b>${img.id}:</b> ${escaparHtml(c.psico[img.id]||'(sin respuesta anotada)')}</div>`).join('') : '';
   const notasCd = cd.notas_ficha || {};
-  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]||notasCd[f.key]).map(f=>`<div><b>${f.label}</b>${notasCd[f.key]!==undefined ? notasCd[f.key] : (f.key==='zona_sitting' ? textoZonasConBarrios(cd.zona_sitting, cd.zona_sitting_barrios) : (cd[f.key]||''))}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
+  const fichaHtml = `<div class="card"><h2>Ficha del formulario</h2><div class="fichadl">${FICHA_CAMPOS.filter(f=>cd[f.key]||notasCd[f.key]).map(f=>`<div><b>${f.label}</b>${escaparHtml(notasCd[f.key]!==undefined ? notasCd[f.key] : (f.key==='zona_sitting' ? textoZonasConBarrios(cd.zona_sitting, cd.zona_sitting_barrios) : cd[f.key]))}</div>`).join('')||'<div>Sin datos.</div>'}</div></div>`;
   abrirModal(`
     <div class="card resultcard">
       <div class="gauge" style="background:conic-gradient(${c.recomendacion==='Recomendada'?'var(--good)':c.recomendacion==='No recomendada'?'var(--bad)':'var(--warn)'} ${c.total/5*100}%, var(--line) 0);"><div class="inner"><div class="num">${Number(c.total).toFixed(1)}</div><div class="max">/ 5</div></div></div>
-      <div><h2 style="font-size:20px;">${cd.nombre}</h2><div class="helper" style="margin:4px 0;">${c.fecha||''} · ${textoZonasConBarrios(cd.zona, cd.zona_barrios)} · ${c.rol||''} · tel ${cd.telefono||'—'}</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${c.recomendacion}</span></div>
+      <div><h2 style="font-size:20px;">${escaparHtml(cd.nombre)}</h2><div class="helper" style="margin:4px 0;">${escaparHtml(c.fecha)} · ${escaparHtml(textoZonasConBarrios(cd.zona, cd.zona_barrios))} · ${escaparHtml(c.rol)} · tel ${escaparHtml(cd.telefono||'—')}</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${escaparHtml(c.recomendacion)}</span></div>
     </div>
     ${fichaHtml}
     <div id="cg-carsitting"></div>
     ${compHtml}
-    <div class="card"><h2>Explicación de juegos y capacitación</h2><div class="q">¿Explicó bien los juegos? <b>${c.explicacion_juegos||'—'}</b></div><div class="helper">${cd.capacitacion_extra||'(sin capacitación extra registrada)'}</div></div>
+    <div class="card"><h2>Explicación de juegos y capacitación</h2><div class="q">¿Explicó bien los juegos? <b>${escaparHtml(c.explicacion_juegos||'—')}</b></div><div class="helper">${escaparHtml(cd.capacitacion_extra||'(sin capacitación extra registrada)')}</div></div>
     <div class="card"><h2>Psicotécnico (guía de observación)</h2>${psicoHtml}</div>
     ${compHtmlFinal}
     <div class="card"><h2>Señales de alerta</h2>${flags.length?flags.map(f=>`<div class="q">${f.texto}${f.critico?' · crítico':''}</div>`).join(''):'<div class="helper">Ninguna marcada.</div>'}</div>
     <div class="card"><h2>Referencias</h2>${refsHtml}</div>
-    <div class="card"><h2>Notas finales</h2><div class="helper">${c.notas||'(sin notas)'}</div></div>
+    <div class="card"><h2>Notas finales</h2><div class="helper">${escaparHtml(c.notas||'(sin notas)')}</div></div>
     ${cd.estado==='contratada' ? '<div class="okbox">Ya está contratada — figura en la sección Niñeras.</div>' : `
     <div class="card"><h2>Contratar</h2>
       <div class="grid3">
-        <div class="field"><label>Foto (URL, opcional)</label><input type="text" id="hire-foto" value="${cd.foto_url||''}" placeholder="link de Drive/Canva"></div>
+        <div class="field"><label>Foto (URL, opcional)</label><input type="text" id="hire-foto" value="${escaparHtml(cd.foto_url)}" placeholder="link de Drive/Canva"></div>
       </div>
       ${checklistZonas('hire', [cd.zona, cd.zona_sitting].filter(Boolean).join('/'), 'Zonas donde trabaja (confirmar: viene marcado dónde vive y dónde dijo que puede)')}
       ${htmlBarriosMarcados([cd.zona, cd.zona_sitting].filter(Boolean).join('/'), unirBarrios(cd.zona_barrios, cd.zona_sitting_barrios), 'En el formulario marcó')}
       <div id="hire-temp-wrap"></div>
       <div class="helper">El precio por hora se define por familia en la sección "Familias".</div>
-      <button class="btn primary" onclick="contratar('${cd.id}')">Pasar a Niñeras</button>
+      <button class="btn primary" onclick="contratar(${argJs(cd.id)})">Pasar a Niñeras</button>
     </div>`}
-    <div class="actions"><button class="btn danger" onclick="eliminarCandidata('${cd.id}')">Eliminar candidata</button></div>
+    <div class="actions"><button class="btn danger" onclick="eliminarCandidata(${argJs(cd.id)})">Eliminar candidata</button></div>
   `);
   cargarCarsittingSeccion(cd.nombre, 'cg-carsitting', cd.tipo, cd.mail);
   if(cd.estado!=='contratada') pintarContratarTemporada(cd);
@@ -543,12 +543,12 @@ async function pintarContratarTemporada(cd){
   const qs = Array.isArray(cd.temporada_quincenas) ? cd.temporada_quincenas : null;
   const texto = (cd.fechas_punta||'').trim();
   let ayuda;
-  if(texto && qs!==null) ayuda = `En el formulario puso "${escaparHtmlTemp(texto)}". Ya está marcado abajo, revisalo.`;
-  else if(texto) ayuda = `En el formulario puso "${escaparHtmlTemp(texto)}", que no alcanza para saber las fechas. Marcalas si las sabés, o dejalo vacío y pedíselas después por WhatsApp desde Niñeras.`;
+  if(texto && qs!==null) ayuda = `En el formulario puso "${escaparHtml(texto)}". Ya está marcado abajo, revisalo.`;
+  else if(texto) ayuda = `En el formulario puso "${escaparHtml(texto)}", que no alcanza para saber las fechas. Marcalas si las sabés, o dejalo vacío y pedíselas después por WhatsApp desde Niñeras.`;
   else ayuda = 'No respondió esta pregunta en el formulario. Marcalas si las sabés.';
   wrap.innerHTML = `
     <div class="field" style="margin-top:4px;">
-      <label>Temporada en ${grupo.nombre}</label>
+      <label>Temporada en ${escaparHtml(grupo.nombre)}</label>
       <div class="helper" style="margin:0 0 4px;">${ayuda}</div>
       ${htmlEditorTemporada('hire-temp', [grupo], {[grupo.id]: qs||[]})}
       <span data-temp-guardar="hire-temp" data-venia="${qs!==null?'1':''}" style="display:none;"></span>

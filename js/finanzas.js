@@ -129,7 +129,7 @@ function renderMargen(criterio){
       <thead><tr><th>${criterio==='tipo'?'Tipo':criterio==='zona'?'Zona':'Familia'}</th><th>Cant.</th><th>Cobrado</th><th>Pagado</th><th>Margen</th><th>%</th></tr></thead>
       <tbody>${filas.map(f=>`
         <tr>
-          <td>${f.nombre}</td>
+          <td>${escaparHtml(f.nombre)}</td>
           <td>${f.cant}</td>
           <td>$${f.cobro.toLocaleString('es-UY')}</td>
           <td>$${f.pago.toLocaleString('es-UY')}</td>
@@ -180,13 +180,13 @@ function editarGastoGeneral(id){
   abrirModal(`
     <h2 style="margin:0 0 18px;">Editar gasto</h2>
     <div class="grid3">
-      <div class="field"><label>Fecha</label><input type="date" id="ed-gasto-fecha" value="${g.fecha||''}"></div>
-      <div class="field"><label>Concepto</label><input type="text" id="ed-gasto-concepto" value="${g.concepto||''}"></div>
+      <div class="field"><label>Fecha</label><input type="date" id="ed-gasto-fecha" value="${escaparHtml(g.fecha)}"></div>
+      <div class="field"><label>Concepto</label><input type="text" id="ed-gasto-concepto" value="${escaparHtml(g.concepto)}"></div>
       <div class="field"><label>Monto</label><input type="number" id="ed-gasto-monto" value="${g.monto||0}"></div>
     </div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionGasto('${id}')">Guardar</button>
+      <button class="btn primary" onclick="guardarEdicionGasto(${argJs(id)})">Guardar</button>
     </div>`);
 }
 async function guardarEdicionGasto(id){
@@ -242,14 +242,14 @@ function editarGastoFijo(id){
   abrirModal(`
     <h2 style="margin:0 0 18px;">Editar gasto fijo</h2>
     <div class="grid3">
-      <div class="field"><label>Concepto</label><input type="text" id="ef-concepto" value="${g.concepto||''}"></div>
+      <div class="field"><label>Concepto</label><input type="text" id="ef-concepto" value="${escaparHtml(g.concepto)}"></div>
       <div class="field"><label>Monto mensual</label><input type="number" id="ef-monto" value="${g.monto||0}"></div>
-      <div class="field"><label>Desde</label><input type="date" id="ef-desde" value="${g.desde||''}"></div>
+      <div class="field"><label>Desde</label><input type="date" id="ef-desde" value="${escaparHtml(g.desde)}"></div>
     </div>
-    <div class="field"><label>Notas</label><textarea id="ef-notas">${g.notas||''}</textarea></div>
+    <div class="field"><label>Notas</label><textarea id="ef-notas">${escaparHtml(g.notas)}</textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarEdicionGastoFijo('${id}')">Guardar</button>
+      <button class="btn primary" onclick="guardarEdicionGastoFijo(${argJs(id)})">Guardar</button>
     </div>`);
 }
 async function guardarEdicionGastoFijo(id){
@@ -382,14 +382,14 @@ async function cargarFinanzas(){
         return `<div class="agendarow" style="border-bottom:1px solid var(--line);${g.activo?'':'opacity:.5;'}">
           <div>
             <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
-              <input type="checkbox" ${g.activo?'checked':''} onchange="toggleGastoFijo('${g.id}', this.checked)">
-              ${g.concepto} <span style="color:var(--ink-soft);font-size:12px;">· desde ${g.desde ? new Date(g.desde+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—'}${aplicaEsteMes?'':' · no aplica este mes'}</span>
+              <input type="checkbox" ${g.activo?'checked':''} onchange="toggleGastoFijo(${argJs(g.id)}, this.checked)">
+              ${escaparHtml(g.concepto)} <span style="color:var(--ink-soft);font-size:12px;">· desde ${g.desde ? new Date(g.desde+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—'}${aplicaEsteMes?'':' · no aplica este mes'}</span>
             </label>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${Number(g.monto||0).toLocaleString('es-UY')}/mes</span>
-            <button class="smallbtn" onclick="editarGastoFijo('${g.id}')">Editar</button>
-            <button class="smallbtn danger" onclick="eliminarGastoFijo('${g.id}')">Eliminar</button>
+            <button class="smallbtn" onclick="editarGastoFijo(${argJs(g.id)})">Editar</button>
+            <button class="smallbtn danger" onclick="eliminarGastoFijo(${argJs(g.id)})">Eliminar</button>
           </div>
         </div>`;
       }).join('') + (totalFijos>0 ? `<div class="helper" style="margin-top:8px;">Total fijos aplicados a ${monthLabel(finMes)}: <b>$${totalFijos.toLocaleString('es-UY')}</b></div>` : '');
@@ -456,11 +456,11 @@ async function cargarFinanzas(){
     const fechaFmt = new Date(mv.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
     const colorMonto = mv.pendiente ? 'var(--ink-soft)' : (mv.monto>0?'var(--good)':'var(--clay-text)');
     return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
-      <div>${fechaFmt} · ${mv.texto}${mv.pendiente ? ` <span class="badge warn" style="margin-left:6px;">${mv.pendTxt}</span>` : ''}</div>
+      <div>${fechaFmt} · ${escaparHtml(mv.texto)}${mv.pendiente ? ` <span class="badge warn" style="margin-left:6px;">${mv.pendTxt}</span>` : ''}</div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:${colorMonto};">${mv.monto>0?'+':''}$${mv.monto.toLocaleString('es-UY')}</span>
-        ${mv.gastoId ? `<button class="smallbtn" onclick="editarGastoGeneral('${mv.gastoId}')">Editar</button><button class="smallbtn danger" onclick="eliminarGastoGeneral('${mv.gastoId}')">Eliminar</button>` : ''}
-        ${mv.sitId ? `<button class="smallbtn" onclick="editarMovimientoSitting('${mv.sitId}')">Editar</button>` : ''}
+        ${mv.gastoId ? `<button class="smallbtn" onclick="editarGastoGeneral(${argJs(mv.gastoId)})">Editar</button><button class="smallbtn danger" onclick="eliminarGastoGeneral(${argJs(mv.gastoId)})">Eliminar</button>` : ''}
+        ${mv.sitId ? `<button class="smallbtn" onclick="editarMovimientoSitting(${argJs(mv.sitId)})">Editar</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -632,12 +632,12 @@ function renderPorCobrar(lista){
     ${lista.map(g=>`
       <div class="agendarow" style="border-bottom:1px solid var(--line);">
         <div>
-          <div style="font-weight:600;">${g.nombre}</div>
-          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec)} · ${g.frec}</div>
+          <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
+          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec)} · ${escaparHtml(g.frec)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${g.total.toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick='marcarGrupoResuelto(${JSON.stringify(g.ids)}, "cobrado")'>Marcar cobrado</button>
+          <button class="smallbtn" onclick="marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado')">Marcar cobrado</button>
         </div>
       </div>`).join('')}
   `;
@@ -655,13 +655,13 @@ function renderPorPagar(lista){
     ${lista.map(g=>`
       <div class="agendarow" style="border-bottom:1px solid var(--line);">
         <div>
-          <div style="font-weight:600;">${g.nombre}</div>
-          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec, g.finde)} · ${g.frec}</div>
-          ${g.cuenta ? `<div class="helper" style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;">${g.cuenta}</div>` : ''}
+          <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
+          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec, g.finde)} · ${escaparHtml(g.frec)}</div>
+          ${g.cuenta ? `<div class="helper" style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;">${escaparHtml(g.cuenta)}</div>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${g.total.toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick='marcarGrupoResuelto(${JSON.stringify(g.ids)}, "pagado")'>Marcar pagado</button>
+          <button class="smallbtn" onclick="marcarGrupoResuelto(${argJs(g.ids)}, 'pagado')">Marcar pagado</button>
         </div>
       </div>`).join('')}
   `;
@@ -692,8 +692,8 @@ function editarMovimientoSitting(id){
   if(!r) return;
   const fechaTxt = new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'});
   abrirModal(`
-    <h2 style="margin:0 0 4px;padding-right:32px;">${r.familia_nombre||'(familia)'}</h2>
-    <div class="helper" style="margin-bottom:16px;">${r.tipo==='traslado'?'Traslado':'Sitting'} del ${fechaTxt} con ${r.ninera_nombre||'(niñera)'}</div>
+    <h2 style="margin:0 0 4px;padding-right:32px;">${escaparHtml(r.familia_nombre||'(familia)')}</h2>
+    <div class="helper" style="margin-bottom:16px;">${r.tipo==='traslado'?'Traslado':'Sitting'} del ${fechaTxt} con ${escaparHtml(r.ninera_nombre||'(niñera)')}</div>
     <div class="grid2">
       <div class="field"><label>Cobro a la familia</label><input type="number" id="fin-mov-cobro" value="${Number(r.cobro_familia)||0}"></div>
       <div class="field"><label>Pago a la niñera</label><input type="number" id="fin-mov-pago" value="${Number(r.pago_ninera)||0}"></div>
@@ -702,10 +702,10 @@ function editarMovimientoSitting(id){
     </div>
     <div class="helper" style="margin-top:10px;">Marcar cobrado o pagado no cambia el resultado del mes: solo indica si la plata ya entró o ya salió.</div>
     <div id="fin-mov-warn"></div>
-    <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="editarRegistroDesdeAgenda('${r.id}')">Cambiar horario, familia o niñera</button>
+    <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="editarRegistroDesdeAgenda(${argJs(r.id)})">Cambiar horario, familia o niñera</button>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn primary" onclick="guardarMovimientoSitting('${r.id}')">Guardar</button>
+      <button class="btn primary" onclick="guardarMovimientoSitting(${argJs(r.id)})">Guardar</button>
     </div>`);
 }
 async function guardarMovimientoSitting(id){
@@ -784,7 +784,7 @@ async function procesarExtractoConciliacion(){
   box.innerHTML = '<div class="empty"><span class="spinner dark"></span> Leyendo el extracto…</div>';
   let filas;
   try{ await asegurarXLSX(); filas = await leerFilasExtracto(file); }
-  catch(e){ box.innerHTML = `<div class="empty">No se pudo leer el archivo: ${e.message}</div>`; return; }
+  catch(e){ box.innerHTML = `<div class="empty">No se pudo leer el archivo: ${escaparHtml(e.message)}</div>`; return; }
   const cols = detectarColumnasExtracto(filas);
   if(!cols){ box.innerHTML = '<div class="empty">No encontré columnas de Fecha y Crédito en el archivo. Revisá que sea el extracto tal cual lo exporta Itaú.</div>'; return; }
 
@@ -861,12 +861,12 @@ async function procesarExtractoConciliacion(){
   const filaMatch = m => `
     <div class="agendarow" style="border-bottom:1px solid var(--line);">
       <div>
-        <div style="font-weight:600;">${m.familia}</div>
+        <div style="font-weight:600;">${escaparHtml(m.familia)}</div>
         <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(m.bucket, m.frec)}${m.exacto?'':` · extracto $${m.totalExtracto.toLocaleString('es-UY')} vs pendiente $${m.totalPendiente.toLocaleString('es-UY')}`}</div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
         <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${m.totalPendiente.toLocaleString('es-UY')}</span>
-        <button class="smallbtn" onclick='marcarGrupoResuelto(${JSON.stringify(m.ids)}, "cobrado")'>Marcar cobrado</button>
+        <button class="smallbtn" onclick="marcarGrupoResuelto(${argJs(m.ids)}, 'cobrado')">Marcar cobrado</button>
       </div>
     </div>`;
 
@@ -875,7 +875,7 @@ async function procesarExtractoConciliacion(){
     ${exactos.length ? `
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <h3 style="margin:10px 0 4px;">Coinciden exacto</h3>
-        <button class="btn primary" onclick='marcarGrupoResuelto(${JSON.stringify(exactos.flatMap(m=>m.ids))}, "cobrado")'>Marcar todo como cobrado (${exactos.length})</button>
+        <button class="btn primary" onclick="marcarGrupoResuelto(${argJs(exactos.flatMap(m=>m.ids))}, 'cobrado')">Marcar todo como cobrado (${exactos.length})</button>
       </div>
       ${exactos.map(filaMatch).join('')}` : ''}
     ${conDiferencia.length ? `<h3 style="margin:14px 0 4px;">Con diferencia — revisar antes de marcar</h3>${conDiferencia.map(filaMatch).join('')}` : ''}
@@ -883,7 +883,7 @@ async function procesarExtractoConciliacion(){
       <h3 style="margin:14px 0 4px;">Sin cuenta identificable — revisar a mano</h3>
       <div class="helper" style="margin-bottom:6px;">Movimientos tipo "CAMBIOS"/"VARIOS" u otros sin número de cuenta reconocible en el concepto.</div>
       ${sinIdentificar.map(c=>`<div class="agendarow" style="border-bottom:1px solid var(--line);">
-        <div>${fmtFechaCortaFin(c.fecha)} · ${c.concepto||'(sin concepto)'}</div>
+        <div>${fmtFechaCortaFin(c.fecha)} · ${escaparHtml(c.concepto||'(sin concepto)')}</div>
         <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">$${c.monto.toLocaleString('es-UY')}</span>
       </div>`).join('')}` : ''}
     ${(!exactos.length && !conDiferencia.length && !sinIdentificar.length) ? '<div class="empty">No hay nada para conciliar en este extracto.</div>' : ''}
@@ -896,7 +896,7 @@ async function cargarJuguetesDeNinera(nombre){
   const { data } = await sb.from('juguetes').select('nombre').eq('ninera_nombre', nombre);
   if(!data || !data.length) return;
   box.innerHTML = `
-    <div style="margin-top:14px;background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--ink);cursor:pointer;" onclick="(async()=>{ await setModulo('juguetes'); const s=document.getElementById('jug-filt-ninera'); if(s){ s.value='${nombre}'; filtrarJuguetes(); } })();">
-      ${data.length} juguete${data.length===1?'':'s'} en su casa: ${data.map(j=>j.nombre).join(', ')}
+    <div style="margin-top:14px;background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--ink);cursor:pointer;" onclick="(async()=>{ await setModulo('juguetes'); const s=document.getElementById('jug-filt-ninera'); if(s){ s.value=${argJs(nombre)}; filtrarJuguetes(); } })();">
+      ${data.length} juguete${data.length===1?'':'s'} en su casa: ${escaparHtml(data.map(j=>j.nombre).join(', '))}
     </div>`;
 }
