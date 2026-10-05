@@ -129,6 +129,11 @@ insert into asignaciones (id, familia_id, ninera_nombre, dias, hora_inicio, hora
 select pg_temp.correr();
 select pg_temp.verificar('traslado: precio del último traslado de la familia', (select bool_and(cobro_familia = 520.5 and pago_ninera = 310 and tipo = 'traslado') from sittings_traslados where asignacion_id = 'a0000000-0000-4000-8000-000000000005'));
 select pg_temp.verificar('de 22 a 02: 4 h y termina al día siguiente', (select bool_and(termina_dia_siguiente and cobro_familia = 1600 and pago_ninera = 800) from sittings_traslados where asignacion_id = 'a0000000-0000-4000-8000-000000000006'));
+-- Con precio cargado en el fijo (06/10/2026) se usa ese, no el del último traslado.
+update asignaciones set cobro_traslado = 956, pago_traslado = 559 where id = 'a0000000-0000-4000-8000-000000000005';
+select pg_temp.correr();
+select pg_temp.verificar('traslado con precio en el fijo: lo recalcula con ese precio', pg_temp.ultimo('actualizados') = 14
+  and (select bool_and(cobro_familia = 956 and pago_ninera = 559) from sittings_traslados where asignacion_id = 'a0000000-0000-4000-8000-000000000005'));
 select pg_temp.verificar('solo los sábados', (select bool_and(extract(dow from fecha) = 6) from sittings_traslados where asignacion_id = 'a0000000-0000-4000-8000-000000000006'));
 
 -- Lo que carga la app a mano sigue entrando como confirmado.

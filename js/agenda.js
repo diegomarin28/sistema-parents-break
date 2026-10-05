@@ -815,7 +815,7 @@ function abrirModalAsignacionFija(s){
   const fmtCorta = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'});
   const cuerpo = `
     <h2>${escaparHtml(s.familia_nombre)}</h2>
-    <div class="helper">${esTraslado?'Traslado':'Sitting'} fijo · ${diasTxt || 'sin días'} · ${horario}</div>
+    <div class="helper">${esTraslado?'Traslado':'Sitting'} fijo · ${diasTxt || 'sin días'} · ${horario}${esTraslado && a.cobro_traslado!=null ? ` · $${Number(a.cobro_traslado).toLocaleString('es-UY')} / $${Number(a.pago_traslado||0).toLocaleString('es-UY')}` : ''}</div>
     <div class="helper" style="margin-top:2px;">Lo hace <b>${escaparHtml(a.ninera_nombre||'(sin niñera)')}</b> · vigente ${textoVigencia(a)}</div>
     ${terminado ? `<div class="helper" style="margin:14px 0 8px;">Este fijo terminó el ${new Date(a.vigente_hasta+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit',year:'2-digit'})}. Para cambiar quién lo hace de acá en adelante, abrí una tarjeta de una semana actual.</div>
     <button class="btn" style="width:100%;margin-bottom:8px;" onclick="abrirModalVigenciaAsignacion(${argJs(asigId)})">Editar vigencia y tipo</button>` : `
@@ -829,7 +829,7 @@ function abrirModalAsignacionFija(s){
     <div class="helper" style="margin:-4px 0 8px;">Lo anterior a esa fecha no cambia: sigue siendo de quien lo hizo.</div>
     <div id="agenda-fija-warn"></div>
     <button class="btn primary" id="agenda-fija-guardar-${asigId}" style="width:100%;margin-bottom:8px;" onclick="conGuardado(this, ()=>cambiarNineraAsignacionFija(${argJs(asigId)}))">Cambiar niñera desde esa fecha</button>
-    <button class="btn" style="width:100%;margin-bottom:8px;" onclick="abrirModalVigenciaAsignacion(${argJs(asigId)})">Editar vigencia y tipo</button>
+    <button class="btn" style="width:100%;margin-bottom:8px;" onclick="abrirModalVigenciaAsignacion(${argJs(asigId)})">${esTraslado && 'cobro_traslado' in a ? 'Editar vigencia, tipo y precio' : 'Editar vigencia y tipo'}</button>
 
     <div style="height:1px;background:var(--line);margin:14px 0;"></div>
     <button type="button" class="btn" id="agenda-fija-edit-toggle" style="width:100%;" onclick="document.getElementById('agenda-fija-edit-box').style.display='block';this.style.display='none';">Editar horarios futuros</button>
@@ -890,9 +890,23 @@ function abrirModalAsignacionFija(s){
     } else precargarPrecioTrasladoFijo(a);
   }
 }
-/* Un traslado fijo no se cobra por hora: se precarga con lo del último traslado de ese
-   fijo (o de esa familia), y queda editable. */
+/* Un traslado fijo no se cobra por hora: se precarga con el precio cargado en el fijo o, si
+   no tiene, con lo del último traslado de ese fijo (o de esa familia), y queda editable. */
+// Al partir un fijo (otra niñera u otro horario desde una fecha) el nuevo conserva el precio
+// del traslado. Solo si la base ya tiene esas columnas.
+function precioTrasladoDelFijo(a){
+  return 'cobro_traslado' in a ? {cobro_traslado: a.cobro_traslado ?? null, pago_traslado: a.pago_traslado ?? null} : {};
+}
 async function precargarPrecioTrasladoFijo(a){
+  const cobro0 = document.getElementById('agenda-fija-cobro');
+  const pago0 = document.getElementById('agenda-fija-pago');
+  const helper0 = document.getElementById('agenda-fija-precio-helper');
+  if(a.cobro_traslado!=null && a.pago_traslado!=null && cobro0 && pago0){
+    if(!cobro0.value) cobro0.value = Number(a.cobro_traslado)||0;
+    if(!pago0.value) pago0.value = Number(a.pago_traslado)||0;
+    if(helper0) helper0.textContent = 'Precio del fijo.';
+    return;
+  }
   let { data } = await sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').eq('asignacion_id', a.id).eq('cancelado', false).order('fecha', {ascending:false}).limit(1);
   if(!data || !data.length){
     ({ data } = await sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').eq('familia_id', a.familia_id).eq('tipo', 'traslado').eq('cancelado', false).order('fecha', {ascending:false}).limit(1));
@@ -944,6 +958,7 @@ async function guardarHorarioAsignacionFija(asigId){
       dias, hora_inicio: horaIni, hora_fin: horaFin,
       cobro_hora: a.cobro_hora ?? null, pago_hora: a.pago_hora ?? null,
       tipo: tipoAsignacion(a), vigente_desde: desde, vigente_hasta: a.vigente_hasta || null,
+      ...precioTrasladoDelFijo(a),
     };
     const { data: creada, error: e1 } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p).select().single(), nuevaAsig);
     if(e1){ if(warn) warn.innerHTML = errBox(e1); return; }
@@ -1234,6 +1249,7 @@ async function cambiarNineraAsignacionFija(asigId){
       dias: a.dias, hora_inicio: a.hora_inicio, hora_fin: a.hora_fin,
       cobro_hora: a.cobro_hora ?? null, pago_hora: a.pago_hora ?? null,
       tipo: tipoAsignacion(a), vigente_desde: desde, vigente_hasta: a.vigente_hasta || null,
+      ...precioTrasladoDelFijo(a),
     };
     const { data: creada, error: e1 } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p).select().single(), nuevaAsig);
     if(e1){ warn.innerHTML = errBox(e1); return; }
@@ -1260,21 +1276,32 @@ async function abrirModalVigenciaAsignacion(asigId){
   const { data: a, error } = await sb.from('asignaciones').select('*, familias(nombre)').eq('id', asigId).single();
   if(error || !a){ toast('No se pudo abrir la asignación: '+(error?.message||'no existe'), 'bad'); return; }
   const diasTxt = (a.dias||[]).map(d=>DIAS_CORTO[d]||d).join(' ');
+  // Precio fijo por traslado (06/10/2026): solo si la base ya tiene las columnas.
+  const conPrecio = 'cobro_traslado' in a;
   abrirModal(`
     <h2 style="margin:0 0 4px;">Vigencia y tipo del fijo</h2>
     <div class="helper" style="margin-bottom:14px;">${escaparHtml(a.familias?.nombre||'(familia)')} · ${escaparHtml(a.ninera_nombre)} · ${diasTxt||'sin días'}</div>
     <div class="grid3">
       <div class="field"><label>Vigente desde</label><input type="date" id="vig-desde" value="${escaparHtml(a.vigente_desde)}"></div>
       <div class="field"><label>Vigente hasta</label><input type="date" id="vig-hasta" value="${escaparHtml(a.vigente_hasta)}"></div>
-      <div class="field"><label>Tipo</label><select id="vig-tipo"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
+      <div class="field"><label>Tipo</label><select id="vig-tipo" onchange="const b=document.getElementById('vig-precio-box'); if(b) b.style.display=this.value==='traslado'?'':'none';"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
     </div>
     <div class="helper">"Hasta" vacío = sigue vigente. La Agenda solo muestra el fijo entre esas fechas; lo que ya está registrado no se toca.</div>
+    ${conPrecio ? `<div id="vig-precio-box" style="margin-top:12px;">
+      <div class="grid2">
+        <div class="field"><label>Cobro por traslado</label><div class="moneyfield"><input type="number" id="vig-cobro-traslado" value="${escaparHtml(a.cobro_traslado??'')}"></div></div>
+        <div class="field"><label>Pago a la niñera por traslado</label><div class="moneyfield"><input type="number" id="vig-pago-traslado" value="${escaparHtml(a.pago_traslado??'')}"></div></div>
+      </div>
+      <div class="helper">Lo que se cobra y se paga cada traslado de este fijo. Vacío = se toma el del último traslado.</div>
+    </div>` : ''}
     <div id="vig-warn"></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="conGuardado(this, ()=>guardarVigenciaAsignacion(${argJs(a.id)}))">Guardar</button>
     </div>`);
   document.getElementById('vig-tipo').value = tipoAsignacion(a);
+  const precioBox = document.getElementById('vig-precio-box');
+  if(precioBox) precioBox.style.display = tipoAsignacion(a)==='traslado' ? '' : 'none';
 }
 async function guardarVigenciaAsignacion(asigId){
   const desde = document.getElementById('vig-desde').value || null;
@@ -1284,7 +1311,16 @@ async function guardarVigenciaAsignacion(asigId){
   if(!desde){ warn.innerHTML = '<div class="warnbox">Cargá desde cuándo corre el fijo.</div>'; return; }
   if(hasta && hasta < desde){ warn.innerHTML = '<div class="warnbox">"Hasta" no puede ser antes que "desde".</div>'; return; }
   if(asignacionesSinVigencia){ warn.innerHTML = '<div class="warnbox">La base todavía no tiene vigencia de los fijos (falta la migración). Avisale a Diego.</div>'; return; }
-  const { error } = await escribirAsignacion(p=>sb.from('asignaciones').update(p).eq('id', asigId), {vigente_desde: desde, vigente_hasta: hasta, tipo});
+  const cambios = {vigente_desde: desde, vigente_hasta: hasta, tipo};
+  const cobroEl = document.getElementById('vig-cobro-traslado'), pagoEl = document.getElementById('vig-pago-traslado');
+  if(cobroEl && pagoEl && tipo==='traslado'){
+    const cobroTxt = cobroEl.value.trim(), pagoTxt = pagoEl.value.trim();
+    if((cobroTxt==='') !== (pagoTxt==='')){ warn.innerHTML = '<div class="warnbox">Cargá el cobro y el pago del traslado, o dejá los dos vacíos.</div>'; return; }
+    if((cobroTxt!=='' && !(Number(cobroTxt)>=0)) || (pagoTxt!=='' && !(Number(pagoTxt)>=0))){ warn.innerHTML = '<div class="warnbox">El cobro y el pago tienen que ser números.</div>'; return; }
+    cambios.cobro_traslado = cobroTxt==='' ? null : Number(cobroTxt);
+    cambios.pago_traslado = pagoTxt==='' ? null : Number(pagoTxt);
+  }
+  const { error } = await escribirAsignacion(p=>sb.from('asignaciones').update(p).eq('id', asigId), cambios);
   if(error){ warn.innerHTML = errBox(error); return; }
   if(asignacionesSinVigencia){ warn.innerHTML = '<div class="warnbox">La base todavía no tiene vigencia de los fijos (falta la migración). Avisale a Diego.</div>'; return; }
   cerrarModal();

@@ -7,7 +7,7 @@
 -- previstos solo en la Agenda, confirmación automática con una lista corta para revisar
 -- en Hoy, y "previsto del mes" aparte en Finanzas.
 --
--- Compatible con la app publicada: solo agrega columnas con default, una tabla y una
+-- Compatible con la app publicada: solo agrega columnas (con default o vacías), una tabla y una
 -- función que nadie llama. Hasta correr 20261006_fijos_automaticos_ACTIVAR.sql (después de
 -- mergear y publicar el PR) no se genera ningún previsto y la app sigue igual que hoy.
 --
@@ -33,6 +33,13 @@ alter table public.sittings_traslados
 create unique index sittings_fijo_dia_automatico on public.sittings_traslados (asignacion_id, fecha) where generado_automatico;
 create index idx_sittings_previstos on public.sittings_traslados (estado, fecha) where estado = 'previsto';
 
+-- 2b) Precio fijo de un traslado fijo (05/10/2026): los traslados de un fijo cobran siempre lo
+--     mismo (no dependen de los km), y puede ser distinto según el día (lunes a un lugar,
+--     martes y jueves a otro). Vacío = como antes, el del último traslado.
+alter table public.asignaciones
+  add column cobro_traslado numeric,
+  add column pago_traslado numeric;
+
 -- 3) Pausas de un fijo (vacaciones): en ese rango no se generan previstos y la Agenda no
 --    dibuja el fijo, sin terminarlo.
 create table public.asignaciones_pausas (
@@ -57,7 +64,8 @@ alter publication supabase_realtime add table public.asignaciones_pausas;
 --    a) lo previsto de hoy o antes pasa a 'confirmado' (llegó el día);
 --    b) borra los previstos automáticos que ya no corresponden (fijo terminado, otro
 --       horario o niñera desde una fecha, día sacado, pausa);
---    c) recalcula los previstos automáticos que nadie tocó (niñera, horario o tarifa nuevos);
+--    c) recalcula los previstos automáticos que nadie tocó (niñera, horario o tarifa nuevos,
+--       o el precio del traslado cargado en el fijo);
 --    d) crea los que faltan, de mañana a hoy + p_dias, salvo que ese día ya tenga una fila
 --       de ese fijo (cargada a mano, "no fue", reemplazo) o de esa familia con esa niñera.
 --    Un previsto que alguien edita desde la app deja de ser automático
@@ -111,17 +119,18 @@ begin
   select c.id as asignacion_id, c.dia as fecha, c.familia_id, c.fam_nombre as familia_nombre,
          c.ninera_id, c.ninera_nombre, c.tipo_fijo as tipo, c.hora_inicio, c.hora_fin,
          c.cruza as termina_dia_siguiente,
-         case when c.tipo_fijo = 'traslado' then coalesce(t.cobro_familia, 0)
+         case when c.tipo_fijo = 'traslado' then coalesce(c.cobro_traslado, t.cobro_familia, 0)
               else round(coalesce(c.horas, 0) * coalesce(c.fam_cobro_hora, 0)) end as cobro_familia,
-         case when c.tipo_fijo = 'traslado' then coalesce(t.pago_ninera, 0)
+         case when c.tipo_fijo = 'traslado' then coalesce(c.pago_traslado, t.pago_ninera, 0)
               else round(coalesce(c.horas, 0) * coalesce(c.fam_pago_hora, 0)) end as pago_ninera
     from con_horas c
-    -- Un traslado no se cobra por hora: el precio del último traslado de ese fijo o, si no
-    -- hay, de esa familia (lo mismo que precarga la app al registrar uno a mano).
+    -- Un traslado no se cobra por hora: el precio cargado en el fijo o, si no tiene, el del
+    -- último traslado de ese fijo o de esa familia (lo mismo que precarga la app).
     left join lateral (
       select s.cobro_familia, s.pago_ninera
         from sittings_traslados s
-       where c.tipo_fijo = 'traslado' and s.tipo = 'traslado' and not s.cancelado and s.estado = 'confirmado'
+       where c.tipo_fijo = 'traslado' and (c.cobro_traslado is null or c.pago_traslado is null)
+         and s.tipo = 'traslado' and not s.cancelado and s.estado = 'confirmado'
          and (s.asignacion_id = c.id or s.familia_id = c.familia_id)
        order by (s.asignacion_id = c.id) desc, s.fecha desc
        limit 1

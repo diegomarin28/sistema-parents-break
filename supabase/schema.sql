@@ -59,6 +59,9 @@ create table public.asignaciones (
   vigente_desde date default ((now() at time zone 'America/Montevideo')::date),
   vigente_hasta date,
   tipo text default 'sitting'::text,
+  -- Precio fijo de un traslado fijo (06/10/2026). Vacío = el del último traslado.
+  cobro_traslado numeric,
+  pago_traslado numeric,
   constraint asignaciones_pkey PRIMARY KEY (id),
   constraint asignaciones_tipo_check CHECK (((tipo IS NULL) OR (tipo = ANY (ARRAY['sitting'::text, 'traslado'::text])))),
   constraint asignaciones_vigencia_check CHECK (((vigente_hasta IS NULL) OR (vigente_desde IS NULL) OR (vigente_hasta >= vigente_desde)))
@@ -937,7 +940,8 @@ create trigger sittings_historial_trg
 --    a) lo previsto de hoy o antes pasa a 'confirmado' (llegó el día);
 --    b) borra los previstos automáticos que ya no corresponden (fijo terminado, otro
 --       horario o niñera desde una fecha, día sacado, pausa);
---    c) recalcula los previstos automáticos que nadie tocó (niñera, horario o tarifa nuevos);
+--    c) recalcula los previstos automáticos que nadie tocó (niñera, horario o tarifa nuevos,
+--       o el precio del traslado cargado en el fijo);
 --    d) crea los que faltan, de mañana a hoy + p_dias, salvo que ese día ya tenga una fila
 --       de ese fijo (cargada a mano, "no fue", reemplazo) o de esa familia con esa niñera.
 --    Un previsto que alguien edita desde la app deja de ser automático
@@ -991,17 +995,18 @@ begin
   select c.id as asignacion_id, c.dia as fecha, c.familia_id, c.fam_nombre as familia_nombre,
          c.ninera_id, c.ninera_nombre, c.tipo_fijo as tipo, c.hora_inicio, c.hora_fin,
          c.cruza as termina_dia_siguiente,
-         case when c.tipo_fijo = 'traslado' then coalesce(t.cobro_familia, 0)
+         case when c.tipo_fijo = 'traslado' then coalesce(c.cobro_traslado, t.cobro_familia, 0)
               else round(coalesce(c.horas, 0) * coalesce(c.fam_cobro_hora, 0)) end as cobro_familia,
-         case when c.tipo_fijo = 'traslado' then coalesce(t.pago_ninera, 0)
+         case when c.tipo_fijo = 'traslado' then coalesce(c.pago_traslado, t.pago_ninera, 0)
               else round(coalesce(c.horas, 0) * coalesce(c.fam_pago_hora, 0)) end as pago_ninera
     from con_horas c
-    -- Un traslado no se cobra por hora: el precio del último traslado de ese fijo o, si no
-    -- hay, de esa familia (lo mismo que precarga la app al registrar uno a mano).
+    -- Un traslado no se cobra por hora: el precio cargado en el fijo o, si no tiene, el del
+    -- último traslado de ese fijo o de esa familia (lo mismo que precarga la app).
     left join lateral (
       select s.cobro_familia, s.pago_ninera
         from sittings_traslados s
-       where c.tipo_fijo = 'traslado' and s.tipo = 'traslado' and not s.cancelado and s.estado = 'confirmado'
+       where c.tipo_fijo = 'traslado' and (c.cobro_traslado is null or c.pago_traslado is null)
+         and s.tipo = 'traslado' and not s.cancelado and s.estado = 'confirmado'
          and (s.asignacion_id = c.id or s.familia_id = c.familia_id)
        order by (s.asignacion_id = c.id) desc, s.fecha desc
        limit 1

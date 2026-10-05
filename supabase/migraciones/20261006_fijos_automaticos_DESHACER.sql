@@ -26,6 +26,10 @@ alter table public.sittings_traslados
   drop column if exists generado_automatico,
   drop column if exists estado;
 
+alter table public.asignaciones
+  drop column if exists pago_traslado,
+  drop column if exists cobro_traslado;
+
 delete from public.app_config where id = 'fijos_automaticos';
 
 -- El respaldo public.respaldo_sittings_traslados_20261006 se deja: se borra a mano cuando

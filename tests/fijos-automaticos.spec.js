@@ -384,3 +384,62 @@ test.describe('pausas desde la ficha de la familia', () => {
     verificarLimpio(e);
   });
 });
+
+// Precio fijo del traslado (06/10/2026): los traslados de un fijo cobran siempre lo mismo y
+// puede ser distinto según el fijo (lunes a un lugar, martes y jueves a otro).
+test.describe('precio fijo de un traslado fijo', () => {
+  const aTras = 'b2000000-0000-4000-8000-000000000001';
+  function datosConTraslado() {
+    const d = datosActivos();
+    d.asignaciones = d.asignaciones.map(a => ({ ...a, cobro_traslado: null, pago_traslado: null }));
+    d.asignaciones.push({ id: aTras, familia_id: ID.fDos, ninera_id: ID.nBruno, ninera_nombre: 'Bruno Inventado', cobro_hora: null, pago_hora: null, created_at: '2026-09-01T00:00:00Z', dias: ['M'], hora_inicio: '08:00:00', hora_fin: null, vigente_desde: '2026-09-01', vigente_hasta: null, tipo: 'traslado', cobro_traslado: 956, pago_traslado: 559 });
+    return d;
+  }
+  test('se edita en "Vigencia" solo para traslados, se guarda y recalcula los previstos', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConTraslado() });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalVigenciaAsignacion(id), ID.aFijo);
+    await expect(page.locator('#vig-precio-box')).toBeHidden();
+    await page.locator('#editmodal .btn.ghost').click();
+
+    await page.evaluate(id => abrirModalVigenciaAsignacion(id), aTras);
+    await expect(page.locator('#vig-precio-box')).toBeVisible();
+    await expect(page.locator('#vig-cobro-traslado')).toHaveValue('956');
+    await expect(page.locator('#vig-pago-traslado')).toHaveValue('559');
+    await page.fill('#vig-pago-traslado', '');
+    await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
+    await expect(page.locator('#vig-warn')).toContainText('o dejá los dos vacíos');
+    await page.fill('#vig-cobro-traslado', '960');
+    await page.fill('#vig-pago-traslado', '560');
+    await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    const upd = escrituras(e, 'asignaciones', 'PATCH').at(-1);
+    expect(upd.cuerpo).toMatchObject({ tipo: 'traslado', cobro_traslado: 960, pago_traslado: 560 });
+    expect(llamadasProceso(e)).toHaveLength(1);
+    verificarLimpio(e);
+  });
+  test('registrar un día del fijo precarga el precio del fijo, no el del último traslado', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConTraslado() });
+    await irAModulo(page, 'agenda');
+    await verAgendaDesde(page, '2026-09-28');
+    await page.evaluate(id => abrirModalSolicitud(`asig:${id}@2026-09-29`), aTras);
+    await expect(page.locator('#editmodal')).toContainText('$956 / $559');
+    await expect(page.locator('#agenda-fija-cobro')).toHaveValue('956');
+    await expect(page.locator('#agenda-fija-pago')).toHaveValue('559');
+    await expect(page.locator('#agenda-fija-precio-helper')).toHaveText('Precio del fijo.');
+    verificarLimpio(e);
+  });
+  test('cambiar la niñera desde una fecha conserva el precio en el fijo nuevo', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConTraslado() });
+    await irAModulo(page, 'agenda');
+    await verAgendaDesde(page, '2026-10-05');
+    await page.evaluate(id => abrirModalSolicitud(`asig:${id}@2026-10-06`), aTras);
+    await page.locator(`#agenda-fija-ninera-${aTras}`).fill('Carla Ejemplo');
+    await page.locator('#editmodal .autocomplete-item', { hasText: 'Carla Ejemplo' }).click();
+    await page.locator(`#agenda-fija-guardar-${aTras}`).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    const alta = escrituras(e, 'asignaciones', 'POST').at(-1);
+    expect(alta.cuerpo).toMatchObject({ ninera_nombre: 'Carla Ejemplo', tipo: 'traslado', cobro_traslado: 956, pago_traslado: 559 });
+    verificarLimpio(e);
+  });
+});
