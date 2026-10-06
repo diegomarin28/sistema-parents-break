@@ -425,7 +425,7 @@ function renderNineraHistorial(id){
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Familia</th><th>Cobro</th><th>Pago</th></tr></thead>
     <tbody>${items.map(r=>{
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td>${escaparHtml(r.familia_nombre)}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td>${escaparHtml(r.familia_nombre)}</td><td>${plataFin(r.cobro_familia)}</td><td>${plataFin(r.pago_ninera)}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 /* Alta directa de una niñera (05/10/2026, E5). Antes la única forma era pasar por toda la

@@ -506,7 +506,7 @@ function abrirModalNuevaSolicitud(){
       <div class="grid3">
         <div class="field"><label>Hora inicio</label>${selectHora('agenda-hora-inicio')}</div>
         <div class="field" id="agenda-hora-fin-wrap"><label>Hora fin</label>${selectHora('agenda-hora-fin')}</div>
-        <div class="field" id="agenda-campo-sitting"><label>Tarifa por hora</label><div class="moneyfield"><input type="number" id="agenda-cobro" oninput="actualizarAgendaTotal()"></div></div>
+        <div class="field" id="agenda-campo-sitting"><label>Tarifa por hora</label><div class="moneyfield por-hora"><input type="number" id="agenda-cobro" oninput="actualizarAgendaTotal()"></div></div>
         <div class="field" id="agenda-campo-traslado" style="display:none;">
           <label>Km recorridos</label><input type="number" step="0.1" id="agenda-km" oninput="actualizarAgendaPrecioTraslado()">
         </div>
