@@ -1343,6 +1343,10 @@ async function abrirModalTerminarFijo(asigId){
   const minimo = a.vigente_desde ? sumarDiasISO(a.vigente_desde, 1) : null;
   const sugerida = minimo && minimo > hoy ? minimo : hoy;
   const diasTxt = (a.dias||[]).map(d=>DIAS_CORTO[d]||d).join(' ');
+  // Fijo creado por error (05/10/2026): si todavía no pasó ningún día y no tiene nada
+  // registrado, se puede borrar del todo. Si ya pasó algún día, solo se termina.
+  const { data: vinculados } = await sb.from('sittings_traslados').select('*').eq('asignacion_id', asigId);
+  const borrable = fijoSePuedeBorrar(a, vinculados, hoy);
   abrirModal(`
     <h2 style="margin:0 0 4px;">Terminar el fijo</h2>
     <div class="helper" style="margin-bottom:14px;">${escaparHtml(a.familias?.nombre||'(familia)')} · ${escaparHtml(a.ninera_nombre)} · ${diasTxt||'sin días'} · vigente ${textoVigencia(a)}</div>
@@ -1352,7 +1356,60 @@ async function abrirModalTerminarFijo(asigId){
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn danger" onclick="conGuardado(this, ()=>terminarFijoDesde(${argJs(a.id)}))">Terminar el fijo</button>
-    </div>`);
+    </div>
+    ${borrable ? `<div style="height:1px;background:var(--line);margin:14px 0;"></div>
+    <div class="helper" style="margin-bottom:8px;">¿Se creó por error? Todavía no pasó ningún día de este fijo, así que se puede borrar del todo${(vinculados||[]).length ? `, con sus ${(vinculados||[]).length} día${(vinculados||[]).length===1?'':'s'} previsto${(vinculados||[]).length===1?'':'s'}` : ''}.</div>
+    <button class="btn danger" id="borrar-fijo-btn" style="width:100%;" onclick="conGuardado(this, ()=>borrarFijoCreadoPorError(${argJs(a.id)}))">Borrar el fijo (se creó por error)</button>` : ''}`);
+}
+/* Primer día en que corre el fijo (desde vigente_desde, el primer día de la semana que
+   tiene). null si no tiene días o no se sabe desde cuándo corre. */
+function primerDiaDelFijo(a){
+  if(!a || !a.vigente_desde || !Array.isArray(a.dias) || !a.dias.length) return null;
+  for(let i=0; i<7; i++){
+    const f = sumarDiasISO(a.vigente_desde, i);
+    if(a.dias.includes(diaSemanaDeISO(f))) return f;
+  }
+  return null;
+}
+// Se puede borrar del todo solo si ningún día del fijo es anterior a hoy y lo único
+// vinculado son días previstos (nada registrado, ni un "no fue").
+function fijoSePuedeBorrar(a, vinculados, hoyISO){
+  if(!a || !('vigente_desde' in a) || !a.vigente_desde) return false;
+  const primero = primerDiaDelFijo(a);
+  if(primero && primero < hoyISO) return false;
+  return (vinculados||[]).every(r => r.estado==='previsto' && r.fecha >= hoyISO);
+}
+async function borrarFijoCreadoPorError(asigId){
+  const warn = document.getElementById('terminar-warn');
+  const hoy = todayISO();
+  // Se vuelve a mirar en la base: entre que se abrió el modal y ahora pudo cargarse algo.
+  const [{ data: a, error: e0 }, { data: vinculados, error: e1 }] = await Promise.all([
+    sb.from('asignaciones').select('*, familias(nombre)').eq('id', asigId).single(),
+    sb.from('sittings_traslados').select('*').eq('asignacion_id', asigId),
+  ]);
+  if(e0 || e1 || !a){ warn.innerHTML = errBox(e0 || e1 || 'El fijo ya no existe.'); return; }
+  if(!fijoSePuedeBorrar(a, vinculados, hoy)){
+    warn.innerHTML = '<div class="warnbox">Este fijo ya tiene días que pasaron o algo registrado: no se puede borrar. Usá "Terminar el fijo".</div>';
+    return;
+  }
+  const previstos = (vinculados||[]).map(r=>r.id);
+  const ok = await confirmarAccion(`¿Borrar del todo el fijo de ${a.familias?.nombre||'la familia'} con ${a.ninera_nombre}${previstos.length ? ` y sus ${previstos.length} día${previstos.length===1?'':'s'} previsto${previstos.length===1?'':'s'}` : ''}? No se puede deshacer.`, 'Borrar el fijo');
+  if(!ok) return;
+  if(previstos.length){
+    const { error: e2 } = await sb.from('sittings_traslados').delete().in('id', previstos);
+    if(e2){ warn.innerHTML = errBox(e2); return; }
+  }
+  const { error: e3 } = await sb.from('asignaciones').delete().eq('id', asigId);
+  if(e3){
+    // Los previstos se vuelven a cargar solos con el fijo, que sigue estando.
+    await sincronizarPrevistosFijos();
+    warn.innerHTML = errBox(e3);
+    return;
+  }
+  cerrarModal();
+  toast('Fijo borrado.');
+  if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
+  if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
 }
 async function terminarFijoDesde(asigId){
   const warn = document.getElementById('terminar-warn');
