@@ -907,6 +907,8 @@ create policy comprobantes_autenticados_subir on storage.objects as permissive f
 create policy comprobantes_autenticados_borrar on storage.objects as permissive for delete to public
   using (((bucket_id = 'comprobantes'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 
+-- Fotos de niñeras y juguetes (12/10/2026, S2): listar el bucket pide una cuenta autorizada.
+-- Las fotos se ven igual por su URL pública (los buckets son públicos).
 -- candidatas-fotos no tiene políticas desde el 05/10/2026: solo sube la Edge Function
 -- candidatas-webhook (clave de servicio) y las fotos se ven por URL pública. Antes había
 -- dos políticas que dejaban subir y listar sin login.
@@ -916,16 +918,16 @@ create policy juguetes_fotos_authenticated_update on storage.objects as permissi
   using (((bucket_id = 'juguetes-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy juguetes_fotos_authenticated_write on storage.objects as permissive for insert to public
   with check (((bucket_id = 'juguetes-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
-create policy juguetes_fotos_public_read on storage.objects as permissive for select to public
-  using ((bucket_id = 'juguetes-fotos'::text));
+create policy juguetes_fotos_autorizadas_leer on storage.objects as permissive for select to public
+  using (((bucket_id = 'juguetes-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy ninieras_fotos_authenticated_delete on storage.objects as permissive for delete to public
   using (((bucket_id = 'ninieras-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy ninieras_fotos_authenticated_update on storage.objects as permissive for update to public
   using (((bucket_id = 'ninieras-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy ninieras_fotos_authenticated_write on storage.objects as permissive for insert to public
   with check (((bucket_id = 'ninieras-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
-create policy ninieras_fotos_public_read on storage.objects as permissive for select to public
-  using ((bucket_id = 'ninieras-fotos'::text));
+create policy ninieras_fotos_autorizadas_leer on storage.objects as permissive for select to public
+  using (((bucket_id = 'ninieras-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 
 -- ----------------------------------------------------------------------------
 -- Funciones y tareas programadas (pg_cron)
