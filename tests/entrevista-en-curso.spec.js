@@ -121,3 +121,67 @@ test('sin la migración avisa y no pierde lo escrito', async ({ page }) => {
   await expect(page.locator('#f-notas')).toHaveValue('Lo que se escribió');
   verificarLimpio(e, { ignorar: [/status of 400/] });
 });
+
+// Dos personas con la misma entrevista abierta (06/10/2026): la que guardaba última pisaba a
+// la otra, y una entrevista ya completa volvía a "en curso" sin total ni recomendación.
+test.describe('la misma entrevista abierta en dos celulares', () => {
+  async function abrirEnCurso(page) {
+    const e = await abrirApp(page);
+    const clave = await page.evaluate(() => COMPETENCIAS[0].key);
+    e.db.entrevistas.push(entrevistaEnCurso({ clave }));
+    await irAModulo(page, 'rrhh');
+    await page.evaluate(id => seguirEntrevista(id), ENT);
+    await esperarQuieta(page);
+    await expect(page.locator('#f-notas')).toHaveValue('Seguir el lunes');
+    return e;
+  }
+  const completarDesdeOtroLado = e => {
+    Object.assign(e.db.entrevistas[0], { estado: 'completa', total: 4.5, recomendacion: 'Recomendada', notas: 'La completó la otra', actualizado_at: '2026-10-04T14:00:00+00:00' });
+    e.db.candidatas[0].estado = 'entrevistada';
+  };
+
+  test('ya la completó la otra: "Guardar y seguir después" no la vuelve a "en curso"', async ({ page }) => {
+    const e = await abrirEnCurso(page);
+    completarDesdeOtroLado(e);
+    await page.fill('#f-notas', 'Lo que escribí yo');
+    await page.locator('#btnGuardarEnCurso').click();
+    await expect(page.locator('#warnArea')).toContainText('ya la completó alguien más');
+    expect(e.db.entrevistas[0]).toMatchObject({ estado: 'completa', total: 4.5, recomendacion: 'Recomendada', notas: 'La completó la otra' });
+    expect(escrituras(e, 'entrevistas', 'PATCH')).toEqual([]);
+    expect(escrituras(e, 'candidatas', 'PATCH')).toEqual([]);
+    await expect(page.locator('#f-notas')).toHaveValue('Lo que escribí yo');
+    verificarLimpio(e);
+  });
+
+  test('ya la completó la otra: completarla de nuevo tampoco la pisa', async ({ page }) => {
+    const e = await abrirEnCurso(page);
+    completarDesdeOtroLado(e);
+    await page.evaluate(() => COMPETENCIAS.forEach(c => document.querySelector(`[data-score="${c.key}:3"]`).click()));
+    await page.locator('#btnGuardar').click();
+    await expect(page.locator('#warnArea')).toContainText('ya la completó alguien más');
+    expect(e.db.entrevistas[0]).toMatchObject({ estado: 'completa', total: 4.5, notas: 'La completó la otra' });
+    expect(escrituras(e, 'entrevistas', 'PATCH')).toEqual([]);
+    expect(escrituras(e, 'candidatas', 'PATCH')).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('la otra guardó a medias después de que la abrí: pregunta antes de reemplazar', async ({ page }) => {
+    const e = await abrirEnCurso(page);
+    Object.assign(e.db.entrevistas[0], { notas: 'Lo de la otra', actualizado_at: '2026-10-04T14:05:00+00:00' });
+    await page.fill('#f-notas', 'Lo mío');
+    await page.locator('#btnGuardarEnCurso').click();
+    await expect(page.locator('.confirmoverlay.show')).toContainText('Alguien guardó esta entrevista a las 11:05');
+    await page.locator('.confirmoverlay.show button', { hasText: 'Cancelar' }).click();
+    expect(escrituras(e, 'entrevistas', 'PATCH')).toEqual([]);
+    expect(e.db.entrevistas[0].notas).toBe('Lo de la otra');
+    await page.locator('#btnGuardarEnCurso').click();
+    await page.locator('#confirm-si').click();
+    await expect(toasts(page).filter({ hasText: 'Entrevista guardada a medias' })).toBeVisible();
+    expect(e.db.entrevistas[0]).toMatchObject({ notas: 'Lo mío', estado: 'en_curso' });
+    // Lo que guardé yo ya es lo último: la próxima vez no vuelve a preguntar.
+    await page.locator('#btnGuardarEnCurso').click();
+    await expect(toasts(page).filter({ hasText: 'Entrevista guardada a medias' })).toHaveCount(2);
+    expect(escrituras(e, 'entrevistas', 'PATCH')).toHaveLength(2);
+    verificarLimpio(e);
+  });
+});

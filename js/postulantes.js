@@ -432,6 +432,7 @@ async function guardarCandidata(){
   if(!nombre){ warnArea.innerHTML='<div class="warnbox">Falta el nombre.</div>'; return; }
   const {total, completo, recomendacion} = calcular();
   if(!completo){ warnArea.innerHTML='<div class="warnbox">Faltan puntajes en algún bloque.</div>'; return; }
+  if(!(await entrevistaSePuedeGuardar(warnArea))) return;
   const psico = {};
   PSICO_IMGS.forEach(img=>{ const el = document.querySelector(`[data-psico="${img.id}"]`); psico[img.id]= el?el.value:''; });
 
@@ -482,9 +483,9 @@ async function guardarCandidata(){
   };
   // Si venía de una entrevista guardada a medias, se completa esa misma fila (09/10/2026).
   const { error: e2 } = entrevistaState.entrevistaId
-    ? await sb.from('entrevistas').update({ ...filaEntrevista, estado:'completa', borrador:{}, actualizado_at: new Date().toISOString() }).eq('id', entrevistaState.entrevistaId)
+    ? await sb.from('entrevistas').update({ ...filaEntrevista, estado:'completa', borrador:{}, actualizado_at: new Date().toISOString() }).eq('id', entrevistaState.entrevistaId).eq('estado', 'en_curso').select('id').single()
     : await sb.from('entrevistas').insert(filaEntrevista);
-  if(e2){ warnArea.innerHTML = errBox(e2); return; }
+  if(e2){ warnArea.innerHTML = e2.code==='PGRST116' ? AVISO_ENTREVISTA_YA_COMPLETA : errBox(e2); return; }
   toast('Candidata guardada — está en "Candidatas guardadas".');
   limpiarForm();
 }
@@ -492,11 +493,32 @@ async function guardarCandidata(){
    "Guardar y seguir después" guarda lo que haya (sin pedir todos los puntajes) con estado
    'en_curso'. La candidata sigue "a entrevistar" hasta completarla. Se retoma desde
    "Candidatas guardadas" o desde la candidata, y al guardarla completa se usa la misma fila. */
+/* Dos personas con la misma entrevista abierta (06/10/2026, testing de la noche): la que
+   guardaba última pisaba lo de la otra sin aviso, y "Guardar y seguir después" sobre una
+   entrevista que la otra ya había completado la volvía a "en curso" y borraba el total y la
+   recomendación. Antes de escribir se mira cómo está en la base: completa no se toca más, y
+   si alguien guardó después de abrirla se pregunta. Devuelve true si se puede guardar. */
+const AVISO_ENTREVISTA_YA_COMPLETA = '<div class="warnbox">Esta entrevista ya la completó alguien más (o vos desde otro aparato): está en "Candidatas guardadas". No se guardó para no pisarla; lo escrito sigue en pantalla.</div>';
+async function entrevistaSePuedeGuardar(warnArea){
+  if(!entrevistaState.entrevistaId) return true;
+  const { data, error } = await sb.from('entrevistas').select('estado,actualizado_at').eq('id', entrevistaState.entrevistaId).maybeSingle();
+  if(error){ warnArea.innerHTML = errBox(error); return false; }
+  if(!data){ warnArea.innerHTML = '<div class="warnbox">Esta entrevista ya no está en la base (la borraron desde otro lado). No se guardó; lo escrito sigue en pantalla.</div>'; return false; }
+  if(data.estado==='completa'){ warnArea.innerHTML = AVISO_ENTREVISTA_YA_COMPLETA; return false; }
+  const antes = entrevistaState.actualizadoAt ? new Date(entrevistaState.actualizadoAt).getTime() : null;
+  const ahora = data.actualizado_at ? new Date(data.actualizado_at).getTime() : null;
+  if(antes && ahora && ahora !== antes){
+    const hora = new Date(data.actualizado_at).toLocaleTimeString('es-UY', {hour:'2-digit', minute:'2-digit', timeZone:ZONA_NEGOCIO});
+    return confirmarAccion(`Alguien guardó esta entrevista a las ${hora}, después de que la abriste. Si guardás, lo tuyo reemplaza lo que guardó.`, 'Guardar igual');
+  }
+  return true;
+}
 async function guardarEntrevistaEnCurso(){
   const nombre = document.getElementById('f-nombre').value.trim();
   const warnArea = document.getElementById('warnArea');
   warnArea.innerHTML = '';
   if(!nombre){ warnArea.innerHTML = '<div class="warnbox">Falta el nombre.</div>'; return; }
+  if(!(await entrevistaSePuedeGuardar(warnArea))) return;
   const psico = {};
   PSICO_IMGS.forEach(img=>{ const el = document.querySelector(`[data-psico="${img.id}"]`); psico[img.id] = el ? el.value : ''; });
   const nuevaZonaSitting = leerZonasChecklist('ent-zonasitting');
@@ -541,8 +563,9 @@ async function guardarEntrevistaEnCurso(){
     actualizado_at: new Date().toISOString(),
   };
   const res = entrevistaState.entrevistaId
-    ? await sb.from('entrevistas').update(fila).eq('id', entrevistaState.entrevistaId).select('id').single()
-    : await sb.from('entrevistas').insert(fila).select('id').single();
+    ? await sb.from('entrevistas').update(fila).eq('id', entrevistaState.entrevistaId).eq('estado', 'en_curso').select('id,actualizado_at').single()
+    : await sb.from('entrevistas').insert(fila).select('id,actualizado_at').single();
+  if(res.error && res.error.code==='PGRST116' && entrevistaState.entrevistaId){ warnArea.innerHTML = AVISO_ENTREVISTA_YA_COMPLETA; return; }
   if(res.error){
     const faltaMigracion = res.error.code==='PGRST204' || /estado|borrador|actualizado_at/.test(res.error.message||'');
     warnArea.innerHTML = faltaMigracion
@@ -551,6 +574,7 @@ async function guardarEntrevistaEnCurso(){
     return;
   }
   entrevistaState.entrevistaId = res.data.id;
+  entrevistaState.actualizadoAt = res.data.actualizado_at || fila.actualizado_at;
   toast('Entrevista guardada a medias. La seguís desde "Candidatas guardadas".');
 }
 async function seguirEntrevista(entrevistaId){
@@ -559,7 +583,8 @@ async function seguirEntrevista(entrevistaId){
   if(document.getElementById('editmodal')) cerrarModal();
   const cd = e.candidatas || {};
   entrevistaState = { competencias: e.puntajes||{}, redflags: e.redflags||{}, refs: e.referencias||[], candidataId: e.candidata_id,
-    fichaOrigen: cd, tipo: cd.tipo || 'Niñera', explicacionJuegos: e.explicacion_juegos || null, entrevistaId: e.id };
+    fichaOrigen: cd, tipo: cd.tipo || 'Niñera', explicacionJuegos: e.explicacion_juegos || null, entrevistaId: e.id,
+    actualizadoAt: e.actualizado_at || null };
   rrhhTab = 'entrevista';
   await renderModulo(); // arma el formulario (con la ficha de esta candidata)
   const poner = (id, v) => { const el = document.getElementById(id); if(el) el.value = v ?? ''; };
