@@ -599,9 +599,18 @@ function wireSitAutocompletes(){
     attachAddressAutocomplete('sit-destino', 'sit-destino-dropdown', (pos)=>{ sitDestinoCoord = pos; if(sitOrigenCoord) autoCalcularKmDesdeCoords(); });
   }
 }
-function abrirModalSitForm(id=null){
+async function abrirModalSitForm(id=null){
+  let r = id ? sitItems.find(x=>x.id===id) : null;
+  // 06/10/2026: sitItems tiene solo el mes de la lista. El historial, "Ver ese sitting" y la
+  // Agenda abren registros de otros meses: el formulario se abría vacío (con la fecha de
+  // hoy) pero apuntando a ese registro, y al guardarlo se pisaba el registro viejo con lo
+  // que se escribiera. Ahora, si no está en la lista, se trae de la base.
+  if(id && !r){
+    const { data, error } = await sb.from('sittings_traslados').select('*').eq('id', id).maybeSingle();
+    if(error || !data){ toast('No se pudo abrir ese registro'+(error ? ': '+error.message : ': ya no existe.'), 'bad'); return; }
+    r = data;
+  }
   sitEditId = id;
-  const r = id ? sitItems.find(x=>x.id===id) : null;
   sitEsRegistroConocido = !!r || !!sitPrefill; // nuevo en blanco -> no corresponde "no hubo servicio"
   sitPagoModoHora = false;
   sitTipo = r ? r.tipo : 'sitting';
