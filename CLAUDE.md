@@ -95,7 +95,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/fijos-automaticos.spec.js`: previstos solo en la Agenda, cambios de un día sobre el
   previsto, cambios del fijo que recalculan, pausas, revisión en Hoy, Finanzas sin previstos, y
   todo apagado sin la marca. La función de la base se prueba aparte en Postgres local:
-  `supabase/pruebas/fijos_automaticos.sql` (nunca en producción).
+  `supabase/pruebas/fijos_automaticos.sql` y, con el "hoy" fijado a mano (fin de mes y de
+  año, pausas entre semanas, cambios desde una fecha), `fijos_automaticos_bordes.sql`
+  (nunca en producción).
 - `tests/saldo.spec.js`: saldo a favor (ajustes) en Por pagar / Por cobrar, al marcar pagado o
   cobrado, en la ficha, en el PDF y con la base sin la tabla.
 - `tests/gastos-extra.spec.js`: gastos extra con ticket en el formulario, en Por cobrar / Por
