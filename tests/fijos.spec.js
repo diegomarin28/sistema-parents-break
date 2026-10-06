@@ -272,7 +272,8 @@ test.describe('app nueva con la base todavía sin migrar', () => {
     expect(altas.at(-1).cuerpo).toEqual(expect.objectContaining({ ninera_nombre: 'Carla Ejemplo', familia_id: ID.fDos }));
     expect(altas.at(-1).cuerpo).not.toHaveProperty('vigente_desde');
     expect(e.rechazadas).toBe(1);
-    verificarLimpio(e, { ignorar: [/status of 400/] });
+    // 404: tablas nuevas (saldo a favor) que la base sin migrar todavía no tiene.
+    verificarLimpio(e, { ignorar: [/status of 400/, /status of 404/] });
   });
 
   test('cambiar la niñera vuelve al cambio en el mismo lugar (como antes)', async ({ page }) => {

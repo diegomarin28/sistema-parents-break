@@ -216,6 +216,7 @@ async function renderSitHistorialCustom(){
    afuera. El "Detalle" (columna nueva) es el mismo campo "Notas" que ya existía en el
    formulario de sitting -- se edita ahí (o tocando la fila en el historial), no acá. */
 let exphistItemsPreview = [];
+let exphistAjustes = []; // saldo a favor de la familia elegida (07/10/2026)
 function abrirModalExportarHistorialPDF(){
   asegurarJsPDF().catch(()=>{}); // se va descargando mientras eligen el rango, así "Descargar PDF" es inmediato
   const famSel = document.getElementById('sithist-familia');
@@ -259,7 +260,22 @@ async function generarVistaPreviaHistorialPDF(){
   if(tipoF) items = items.filter(s=>s.tipo===tipoF);
   if(!items.length){ preview.innerHTML = '<div class="empty">No hay registros en ese rango con estos filtros.</div>'; return; }
   exphistItemsPreview = items;
+  // Saldo a favor (07/10/2026): con una familia elegida, sus ajustes del período y los que
+  // siguen pendientes van en el PDF, con su motivo.
+  exphistAjustes = [];
+  if(famF){
+    const fam = (sitFamilias||[]).find(f=>normaliza(f.nombre)===famF);
+    if(fam && typeof cargarAjustesSaldo==='function'){
+      const ajustes = await cargarAjustesSaldo({familia_id: fam.id});
+      exphistAjustes = ajustes.filter(a=>pendienteAjuste(a) || (a.fecha>=desde && a.fecha<=hasta));
+    }
+  }
   const totalCobro = items.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
+  const saldoPend = Math.round(exphistAjustes.reduce((t,a)=>t+pendienteAjuste(a),0)*100)/100;
+  const ajustesHtml = exphistAjustes.length ? `
+    <div class="helper" style="margin:12px 0 4px;">Saldo${saldoPend ? ` pendiente: <b>${textoMontoAjuste(saldoPend)}</b>` : ''}</div>
+    <div class="tablewrap"><table class="asigtable" id="exphist-ajustes"><thead><tr><th>Fecha</th><th>Motivo</th><th>Monto</th><th>Estado</th></tr></thead>
+    <tbody>${exphistAjustes.map(a=>`<tr><td>${new Date(a.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'})}</td><td>${escaparHtml(a.motivo)}</td><td>${textoMontoAjuste(a.monto)}</td><td>${pendienteAjuste(a) ? 'Pendiente' : 'Ya aplicado'}</td></tr>`).join('')}</tbody></table></div>` : '';
   preview.innerHTML = `
     <div class="helper" style="margin-bottom:8px;">${items.length} registro(s) · cobrado $${totalCobro.toLocaleString('es-UY')}</div>
     <div class="tablewrap" style="max-height:320px;overflow-y:auto;"><table class="asigtable">
@@ -274,6 +290,7 @@ async function generarVistaPreviaHistorialPDF(){
         <td class="hist-detalle" title="${escaparHtml(r.notas)}">${escaparHtml(r.notas||'—')}</td>
       </tr>`).join('')}</tbody>
     </table></div>
+    ${ajustesHtml}
     <button class="btn primary" style="width:100%;margin-top:12px;" onclick="descargarHistorialPDF(${argJs(desde)},${argJs(hasta)})">Descargar PDF</button>
   `;
 }
@@ -308,6 +325,19 @@ async function descargarHistorialPDF(desde, hasta){
     headStyles:{fillColor:[117,124,187]},
     columnStyles:{6:{cellWidth:75}},
   });
+  if(exphistAjustes.length){
+    const saldoPend = Math.round(exphistAjustes.reduce((t,a)=>t+pendienteAjuste(a),0)*100)/100;
+    const y = (doc.lastAutoTable?.finalY || 35) + 10;
+    doc.setFontSize(11);
+    doc.text(saldoPend ? `Saldo pendiente: ${textoMontoAjuste(saldoPend)}` : 'Saldo', 14, y);
+    doc.autoTable({
+      startY: y + 4,
+      head: [['Fecha','Motivo','Monto','Estado']],
+      body: exphistAjustes.map(a=>[fmtFecha(a.fecha), a.motivo||'', textoMontoAjuste(a.monto), pendienteAjuste(a) ? 'Pendiente' : 'Ya aplicado']),
+      styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
+      headStyles:{fillColor:[117,124,187]},
+    });
+  }
   doc.save(`historial-parents-break-${desde}-a-${hasta}.pdf`);
   toast('PDF descargado.');
 }

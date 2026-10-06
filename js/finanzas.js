@@ -577,6 +577,177 @@ function bucketLabelFecha(bucketKey, frecuencia, trabajaFinde=true){
   if(frecuencia==='semanal') return `Semana del ${fmtFechaCortaFin(bucketKey)} al ${fmtFechaCortaFin(finDeSemanaDesde(bucketKey, trabajaFinde))}`;
   return fmtFechaCortaFin(bucketKey);
 }
+/* ============================================================
+   Saldo a favor (07/10/2026). Un ajuste (tabla ajustes_saldo) se suma (monto positivo) o
+   se descuenta (negativo) en el próximo cobro de una familia o pago de una niñera: una
+   niñera a la que se le pagó un sitting que hizo otra, una familia que pagó de más. Se ve
+   como una línea en Por cobrar / Por pagar, en la ficha y en el PDF para las madres. Un
+   saldo más grande que el próximo pago se va usando de a partes ("aplicado").
+   Con la base sin migrar (sin la tabla) todo sigue como antes.
+   ============================================================ */
+let ajustesSaldoDisponible = true;
+async function cargarAjustesSaldo(filtro){
+  if(!ajustesSaldoDisponible) return [];
+  let q = sb.from('ajustes_saldo').select('*').order('fecha', {ascending:true});
+  if(filtro?.familia_id) q = q.eq('familia_id', filtro.familia_id);
+  if(filtro?.ninera_id) q = q.eq('ninera_id', filtro.ninera_id);
+  const { data, error } = await q;
+  if(error){
+    if(error.code==='PGRST205' || error.code==='42P01'){ ajustesSaldoDisponible = false; return []; }
+    toast('No se pudieron leer los saldos a favor: '+error.message, 'bad');
+    return [];
+  }
+  return data||[];
+}
+// Lo que falta usar de un ajuste, con su signo.
+function pendienteAjuste(a){
+  const resto = Math.abs(Number(a.monto)||0) - (Number(a.aplicado)||0);
+  return resto > 0 ? Math.sign(Number(a.monto)) * resto : 0;
+}
+function textoMontoAjuste(n){
+  const abs = Math.abs(Number(n)||0).toLocaleString('es-UY', {maximumFractionDigits:2});
+  return (n<0 ? '−$' : '+$') + abs;
+}
+// Reparte los ajustes pendientes de cada persona sobre sus grupos, del más viejo al más
+// nuevo: un descuento nunca deja un grupo en negativo (lo que sobra pasa al siguiente o
+// queda para el próximo pago). Devuelve los ajustes que no entraron en ningún grupo.
+function aplicarAjustesAGrupos(grupos, ajustes, sujeto){
+  const clavePersona = sujeto==='familia'
+    ? (x => x.familia_id || ('n:'+normaliza(x.nombre||x.familia_nombre||'')))
+    : (x => x.ninera_id || ('n:'+normaliza(x.nombre||x.ninera_nombre||'')));
+  const restos = new Map();
+  ajustes.filter(a=>a.sujeto===sujeto).forEach(a=>{ const p = pendienteAjuste(a); if(p) restos.set(a.id, p); });
+  grupos.forEach(g=>{ g.ajustes = []; g.totalNeto = g.total; });
+  [...grupos].sort((a,b)=> a.bucket.localeCompare(b.bucket)).forEach(g=>{
+    ajustes.filter(a=>a.sujeto===sujeto && restos.get(a.id)).forEach(a=>{
+      const mismaPersona = clavePersona(a)===clavePersona(g) || (!!a[sujeto==='familia'?'familia_id':'ninera_id'] && a[sujeto==='familia'?'familia_id':'ninera_id']===g[sujeto==='familia'?'familia_id':'ninera_id']);
+      if(!mismaPersona) return;
+      const resto = restos.get(a.id);
+      const usar = resto > 0 ? resto : -Math.min(-resto, g.totalNeto);
+      if(!usar) return;
+      g.ajustes.push({ id:a.id, monto:Math.round(usar*100)/100, motivo:a.motivo, fecha:a.fecha });
+      g.totalNeto = Math.round((g.totalNeto + usar)*100)/100;
+      const queda = Math.round((resto - usar)*100)/100;
+      if(queda) restos.set(a.id, queda); else restos.delete(a.id);
+    });
+  });
+  return ajustes.filter(a=>restos.get(a.id)).map(a=>({...a, restante: restos.get(a.id)}));
+}
+function lineasAjustesHtml(aj){
+  return (aj||[]).map(a=>`<div class="helper fin-ajuste-linea" style="margin:2px 0 0;">Saldo: <b>${textoMontoAjuste(a.monto)}</b> · ${escaparHtml(a.motivo)}</div>`).join('');
+}
+// Después de marcar pagado/cobrado un grupo: deja anotado cuánto se usó de cada ajuste. Si
+// falla, el pago ya quedó marcado: se avisa qué faltó.
+async function registrarAplicacionAjustes(aplicados, ids, campo){
+  if(!aplicados || !aplicados.length) return true;
+  const { data: actuales, error } = await sb.from('ajustes_saldo').select('*').in('id', aplicados.map(a=>a.id));
+  let fallo = error;
+  if(!fallo){
+    for(const ap of aplicados){
+      const a = (actuales||[]).find(x=>x.id===ap.id);
+      if(!a){ fallo = {message:'no se encontró el ajuste'}; break; }
+      const nuevoAplicado = Math.min(Math.abs(Number(a.monto)), Math.round(((Number(a.aplicado)||0) + Math.abs(ap.monto))*100)/100);
+      const aplicaciones = [...(a.aplicaciones||[]), {fecha: todayISO(), monto: ap.monto, en: campo, sittings: ids}];
+      const { error: e2 } = await sb.from('ajustes_saldo').update({ aplicado: nuevoAplicado, aplicaciones }).eq('id', a.id);
+      if(e2){ fallo = e2; break; }
+    }
+  }
+  if(fallo){
+    toast(`Se marcó ${campo}, pero no se pudo descontar el saldo a favor (${fallo.message}). Revisalo en la ficha antes del próximo ${campo==='pagado'?'pago':'cobro'}.`, 'bad');
+    return false;
+  }
+  return true;
+}
+
+/* Saldo en la ficha de una familia o niñera: lo pendiente arriba, lo ya usado abajo, y
+   "Cargar ajuste" para cargarlo a mano (monto, motivo y a favor de quién). */
+async function pintarSaldoEnFicha(contId, sujeto, id, nombre){
+  const cont = document.getElementById(contId);
+  if(!cont) return;
+  const ajustes = await cargarAjustesSaldo(sujeto==='familia' ? {familia_id:id} : {ninera_id:id});
+  if(!ajustesSaldoDisponible){ cont.innerHTML = ''; return; }
+  if(!document.getElementById(contId)) return; // se cerró la ficha mientras tanto
+  const pendientes = ajustes.filter(a=>pendienteAjuste(a));
+  const usados = ajustes.filter(a=>!pendienteAjuste(a));
+  const totalPend = Math.round(pendientes.reduce((t,a)=>t+pendienteAjuste(a),0)*100)/100;
+  const cuando = sujeto==='familia' ? 'cobro' : 'pago';
+  const fmtF = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit',year:'2-digit'});
+  const fila = a => `<div class="agendarow fin-ajuste-ficha" style="border-bottom:1px solid var(--line);">
+      <div><div>${escaparHtml(a.motivo)}</div><div class="helper" style="margin:2px 0 0;">${fmtF(a.fecha)}${Number(a.aplicado) ? ` · usado ${textoMontoAjuste(Math.sign(a.monto)*Number(a.aplicado))}` : ''}</div></div>
+      <div style="display:flex;align-items:center;gap:8px;"><b style="font-family:'IBM Plex Mono',monospace;">${textoMontoAjuste(a.monto)}</b>
+      ${!Number(a.aplicado) ? `<button class="smallbtn danger" onclick="conGuardado(this, ()=>borrarAjusteSaldo(${argJs(a.id)}, ${argJs(contId)}, ${argJs(sujeto)}, ${argJs(id)}, ${argJs(nombre)}))">Borrar</button>` : ''}</div>
+    </div>`;
+  cont.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
+      <div class="card-section-title" style="margin:0;">Saldo</div>
+      <button class="smallbtn" onclick="abrirModalAjusteSaldo(${argJs(contId)}, ${argJs(sujeto)}, ${argJs(id)}, ${argJs(nombre)})">+ Cargar ajuste</button>
+    </div>
+    ${pendientes.length
+      ? `<div class="helper" id="${contId}-total" style="margin:4px 0;">Pendiente: <b>${textoMontoAjuste(totalPend)}</b> en el próximo ${cuando}.</div>${pendientes.map(fila).join('')}`
+      : `<div class="helper" id="${contId}-total" style="margin:4px 0;">Sin saldo pendiente.</div>`}
+    ${usados.length ? `<div class="helper" style="margin:10px 0 2px;">Ya usados</div>${usados.map(fila).join('')}` : ''}`;
+}
+// El formulario va en una capa encima de la ficha, para no perderla.
+function abrirModalAjusteSaldo(contId, sujeto, id, nombre){
+  const esFamilia = sujeto==='familia';
+  const overlay = document.createElement('div');
+  overlay.className = 'confirmoverlay';
+  overlay.id = 'ajuste-overlay';
+  overlay.innerHTML = `
+    <div class="confirmbox wide" role="dialog" aria-label="Cargar ajuste de saldo">
+      <h2 style="margin:0 0 4px;">Ajuste de saldo</h2>
+      <div class="helper" style="margin:0 0 12px;">${escaparHtml(nombre)} · se aplica en su próximo ${esFamilia?'cobro':'pago'}.</div>
+      <div class="grid2">
+        <div class="field"><label>Monto</label><div class="moneyfield"><input type="number" id="ajuste-monto" min="0" step="0.01"></div></div>
+        <div class="field"><label>A favor de</label><select id="ajuste-favor">
+          ${esFamilia
+            ? `<option value="-1">La familia (se descuenta del cobro)</option><option value="1">Parents Break (se suma al cobro)</option>`
+            : `<option value="-1">Parents Break (se descuenta del pago)</option><option value="1">La niñera (se suma al pago)</option>`}
+        </select></div>
+      </div>
+      <div class="field"><label>Motivo</label><input type="text" id="ajuste-motivo" placeholder="${esFamilia?'Pagó de más la semana del 28/09':'Se le pagó un sitting que hizo otra niñera'}"></div>
+      <div id="ajuste-warn"></div>
+      <div class="confirmbtns">
+        <button class="btn ghost" id="ajuste-cancelar">Cancelar</button>
+        <button class="btn primary" id="ajuste-guardar" onclick="conGuardado(this, ()=>guardarAjusteSaldo(${argJs(contId)}, ${argJs(sujeto)}, ${argJs(id)}, ${argJs(nombre)}))">Guardar ajuste</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=>overlay.classList.add('show'));
+  overlay.querySelector('#ajuste-cancelar').addEventListener('click', cerrarModalAjusteSaldo);
+}
+function cerrarModalAjusteSaldo(){
+  const o = document.getElementById('ajuste-overlay');
+  if(!o) return;
+  o.classList.remove('show');
+  o.id = '';
+  setTimeout(()=>o.remove(), 180);
+}
+async function guardarAjusteSaldo(contId, sujeto, id, nombre){
+  const warn = document.getElementById('ajuste-warn');
+  const monto = Number(document.getElementById('ajuste-monto').value);
+  const signo = Number(document.getElementById('ajuste-favor').value);
+  const motivo = document.getElementById('ajuste-motivo').value.trim();
+  if(!(monto > 0)){ warn.innerHTML = '<div class="warnbox">Poné un monto mayor a cero.</div>'; return; }
+  if(!motivo){ warn.innerHTML = '<div class="warnbox">Escribí el motivo: se ve en el pago y en el PDF.</div>'; return; }
+  const fila = { sujeto, nombre, monto: signo*monto, motivo, creado_por: registradoPorUsuario() || null,
+    familia_id: sujeto==='familia' ? id : null, ninera_id: sujeto==='ninera' ? id : null };
+  const { error } = await sb.from('ajustes_saldo').insert(fila);
+  if(error){ warn.innerHTML = errBox(error); return; }
+  cerrarModalAjusteSaldo();
+  toast('Ajuste guardado.');
+  await pintarSaldoEnFicha(contId, sujeto, id, nombre);
+}
+async function borrarAjusteSaldo(ajusteId, contId, sujeto, id, nombre){
+  if(!(await confirmarAccion('¿Borrar este ajuste? Todavía no se usó en ningún pago ni cobro.', 'Borrar'))) return;
+  // Solo si sigue sin usar: si entre tanto se aplicó, no se borra.
+  const { data, error } = await sb.from('ajustes_saldo').delete().eq('id', ajusteId).eq('aplicado', 0).select();
+  if(error){ toast('No se pudo borrar: '+error.message, 'bad'); return; }
+  if(!data || !data.length){ toast('No se borró: ese ajuste ya se usó en un pago o cobro.', 'bad'); }
+  else toast('Ajuste borrado.');
+  await pintarSaldoEnFicha(contId, sujeto, id, nombre);
+}
+
 // Pendientes de cobro y de pago agrupados como en Por cobrar / Por pagar (familia o niñera +
 // período según su frecuencia). Lo usan esas dos listas y la conciliación con el extracto.
 async function calcularPendientesAgrupados(){
@@ -635,14 +806,25 @@ async function cargarPorCobrarPorPagar(){
     .filter(g => g.frec!=='semanal' || finDeSemanaDesde(g.bucket, g.finde) < todayISO())
     .sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
 
-  renderPorCobrar(listaCobrar);
-  renderPorPagar(listaPagar);
+  const ajustes = await cargarAjustesSaldo();
+  const sueltosCobrar = aplicarAjustesAGrupos(listaCobrar, ajustes, 'familia');
+  const sueltosPagar = aplicarAjustesAGrupos(listaPagar, ajustes, 'ninera');
+  renderPorCobrar(listaCobrar, sueltosCobrar);
+  renderPorPagar(listaPagar, sueltosPagar);
 }
-function renderPorCobrar(lista){
+// Saldos de alguien que hoy no tiene nada pendiente: se aplican en su próximo cobro/pago.
+function saldosSueltosHtml(sueltos, cuando){
+  if(!sueltos || !sueltos.length) return '';
+  return `<div class="fin-saldos-sueltos" style="margin-top:10px;">
+    <div class="helper" style="margin:0 0 4px;">Saldos que se aplican en el próximo ${cuando}:</div>
+    ${sueltos.map(a=>`<div class="helper" style="margin:2px 0 0;"><b>${escaparHtml(a.nombre)}</b>: ${textoMontoAjuste(a.restante)} · ${escaparHtml(a.motivo)}</div>`).join('')}
+  </div>`;
+}
+function renderPorCobrar(lista, sueltos=[]){
   const box = document.getElementById('fin-porcobrar-wrap');
   if(!box) return;
-  if(!lista.length){ box.innerHTML = `<h2>Por cobrar</h2><div class="empty">No hay cobros pendientes.</div>`; return; }
-  const total = lista.reduce((s,g)=>s+g.total,0);
+  if(!lista.length){ box.innerHTML = `<h2>Por cobrar</h2><div class="empty">No hay cobros pendientes.</div>${saldosSueltosHtml(sueltos, 'cobro')}`; return; }
+  const total = lista.reduce((s,g)=>s+(g.totalNeto ?? g.total),0);
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;">Por cobrar</h2>
@@ -653,19 +835,21 @@ function renderPorCobrar(lista){
         <div>
           <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
           <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec)} · ${escaparHtml(g.frec)}</div>
+          ${g.ajustes?.length ? `<div class="helper" style="margin:2px 0 0;">Servicios: $${g.total.toLocaleString('es-UY')}</div>${lineasAjustesHtml(g.ajustes)}` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${g.total.toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado'))">Marcar cobrado</button>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${(g.totalNeto ?? g.total).toLocaleString('es-UY')}</span>
+          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado', ${argJs(g.ajustes||[])}))">Marcar cobrado</button>
         </div>
       </div>`).join('')}
+    ${saldosSueltosHtml(sueltos, 'cobro')}
   `;
 }
-function renderPorPagar(lista){
+function renderPorPagar(lista, sueltos=[]){
   const box = document.getElementById('fin-porpagar-wrap');
   if(!box) return;
-  if(!lista.length){ box.innerHTML = `<h2>Por pagar</h2><div class="empty">No hay pagos pendientes.</div>`; return; }
-  const total = lista.reduce((s,g)=>s+g.total,0);
+  if(!lista.length){ box.innerHTML = `<h2>Por pagar</h2><div class="empty">No hay pagos pendientes.</div>${saldosSueltosHtml(sueltos, 'pago')}`; return; }
+  const total = lista.reduce((s,g)=>s+(g.totalNeto ?? g.total),0);
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;">Por pagar</h2>
@@ -677,19 +861,22 @@ function renderPorPagar(lista){
           <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
           <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec, g.finde)} · ${escaparHtml(g.frec)}</div>
           ${g.cuenta ? `<div class="helper" style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;">${escaparHtml(g.cuenta)}</div>` : ''}
+          ${g.ajustes?.length ? `<div class="helper" style="margin:2px 0 0;">Servicios: $${g.total.toLocaleString('es-UY')}</div>${lineasAjustesHtml(g.ajustes)}` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${g.total.toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'pagado'))">Marcar pagado</button>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${(g.totalNeto ?? g.total).toLocaleString('es-UY')}</span>
+          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}))">Marcar pagado</button>
         </div>
       </div>`).join('')}
+    ${saldosSueltosHtml(sueltos, 'pago')}
   `;
 }
-async function marcarGrupoResuelto(ids, campo){
-  if(campo==='pagado' && !(await confirmarPagoSittings(ids))) return;
+async function marcarGrupoResuelto(ids, campo, ajustes=[]){
+  if(campo==='pagado' && !(await confirmarPagoSittings(ids, {}, ajustes))) return;
   const { error } = await sb.from('sittings_traslados').update({[campo]:true}).in('id', ids);
   if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
-  toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
+  const okSaldo = await registrarAplicacionAjustes(ajustes, ids, campo);
+  if(okSaldo) toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
   refrescarFinanzasCompleto();
 }
 /* Confirmación antes de marcar pagado (05/10/2026, E3). Un "Marcar pagado" apurado no se
@@ -697,7 +884,7 @@ async function marcarGrupoResuelto(ids, campo){
    monto) y el total, con Cancelar / Confirmar. Sirve para un sitting solo o para un grupo de
    Por pagar. montosNuevos pisa el monto guardado cuando se está editando ese movimiento.
    Devuelve true solo si se confirma. */
-async function confirmarPagoSittings(ids, montosNuevos={}){
+async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[]){
   const { data, error } = await sb.from('sittings_traslados')
     .select('id,tipo,familia_nombre,ninera_nombre,fecha,hora_inicio,hora_fin,termina_dia_siguiente,pago_ninera')
     .in('id', ids);
@@ -705,7 +892,8 @@ async function confirmarPagoSittings(ids, montosNuevos={}){
   const filas = (data||[]).map(r=>({...r, monto: r.id in montosNuevos ? Number(montosNuevos[r.id])||0 : Number(r.pago_ninera)||0}))
     .sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||'') || (a.hora_inicio||'').localeCompare(b.hora_inicio||''));
   if(!filas.length){ toast('Esos registros ya no existen. Actualizá la pantalla.', 'bad'); return false; }
-  const total = filas.reduce((s,r)=>s+r.monto, 0);
+  const subtotal = filas.reduce((s,r)=>s+r.monto, 0);
+  const total = Math.round((subtotal + (ajustes||[]).reduce((s,a)=>s+(Number(a.monto)||0), 0))*100)/100;
   const hoy = todayISO();
   const futuros = filas.filter(r=>r.fecha > hoy).length;
   const ninieras = [...new Set(filas.map(r=>r.ninera_nombre||'(sin niñera)'))];
@@ -728,8 +916,12 @@ async function confirmarPagoSittings(ids, montosNuevos={}){
             </div>
             <div class="pago-monto">${plata(r.monto)}</div>
           </div>`).join('')}
+          ${(ajustes||[]).map(a=>`<div class="pago-fila pago-ajuste">
+            <div style="min-width:0;"><div style="font-weight:600;">Saldo a favor</div><div class="helper" style="margin:2px 0 0;">${escaparHtml(a.motivo)}</div></div>
+            <div class="pago-monto">${textoMontoAjuste(a.monto)}</div>
+          </div>`).join('')}
           <div class="pago-fila pago-total-fila">
-            <div style="font-weight:700;">Total (${filas.length} ${filas.length===1?'registro':'registros'})</div>
+            <div style="font-weight:700;">Total (${filas.length} ${filas.length===1?'registro':'registros'}${(ajustes||[]).length?' y saldo':''})</div>
             <div class="pago-monto" id="pago-total" style="font-weight:700;">${plata(total)}</div>
           </div>
         </div>

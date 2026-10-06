@@ -94,6 +94,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   previsto, cambios del fijo que recalculan, pausas, revisión en Hoy, Finanzas sin previstos, y
   todo apagado sin la marca. La función de la base se prueba aparte en Postgres local:
   `supabase/pruebas/fijos_automaticos.sql` (nunca en producción).
+- `tests/saldo.spec.js`: saldo a favor (ajustes) en Por pagar / Por cobrar, al marcar pagado o
+  cobrado, en la ficha, en el PDF y con la base sin la tabla.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -148,6 +150,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - Extractos (05/10/2026): leer y conciliar están separados. Cada banco o billetera es un lector
   en `LECTORES_EXTRACTO` (finanzas.js) que devuelve movimientos `{fecha, concepto, cuenta,
   credito, debito}`; hoy está Itaú. Para Mercado Pago se agrega un lector, sin tocar el matching.
+- Saldo a favor (07/10/2026): `ajustes_saldo` (positivo suma, negativo descuenta) se aplica
+  al grupo más viejo de esa persona en Por pagar / Por cobrar (`aplicarAjustesAGrupos`,
+  finanzas.js) y al marcar pagado/cobrado queda anotado en `aplicado`. No toca facturado ni
+  resultado del mes.
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 

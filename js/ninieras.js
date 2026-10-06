@@ -320,6 +320,7 @@ async function verNinera(id){
     <div class="fichadl">${edadRow}${rows||(edadRow?'':'<div>Sin más datos.</div>')}<div><b>Zona</b>${escaparHtml(textoZonasConBarrios(n.zona, n.barrios)||'—')}</div><div><b>Teléfono</b><span id="vn-telefono">${escaparHtml(n.telefono||'—')}</span></div><div><b>Tipo</b>${escaparHtml(n.tipo||'Niñera')}</div>${n.cv_url?`<div><b>CV</b><a href="${urlSegura(n.cv_url)}" target="_blank" rel="noopener">Ver CV</a></div>`:''}<div><b>Cuenta bancaria</b>${escaparHtml(textoCuentasBancarias(n.cuenta_bancaria))}</div><div><b>Notas</b>${escaparHtml(n.notas||'—')}</div></div>
     <div id="vn-carsitting"></div>
     <div id="vn-juguetes"></div>
+    <div id="vn-saldo" style="margin-top:18px;"></div>
     <div id="vn-incidentes" style="margin-top:18px;"></div>
     <div id="vn-intermediaciones" style="margin-top:18px;"></div>
     <div style="margin-top:18px;">
@@ -335,6 +336,7 @@ async function verNinera(id){
   cargarCarsittingSeccion(n.nombre, 'vn-carsitting', n.tipo, cd.mail);
   cargarJuguetesDeNinera(n.nombre);
   renderIncidentesEnFicha('vn-incidentes', 'ninera', n.id, n.nombre);
+  pintarSaldoEnFicha('vn-saldo', 'ninera', n.id, n.nombre);
   renderIntermediacionesEnFicha('vn-intermediaciones', n.id);
   // cargar los sittings de esta niñera y sus reseñas (si no están cargadas ya globalmente) en paralelo
   const necesitaResenas = !Object.keys(sitHistResenas).length;
