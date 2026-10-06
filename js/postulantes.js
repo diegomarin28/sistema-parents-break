@@ -169,6 +169,10 @@ async function loadIntake(){
   if(error){ grid.innerHTML = errBox(error); return; }
   intakeItems = data;
   if(!intakeItems.length){ grid.innerHTML = '<div class="empty">No hay candidatas esperando entrevista.</div>'; return; }
+  // Entrevistas a medias de estas candidatas (09/10/2026). Sin la migración, la consulta falla
+  // y la lista sigue como antes.
+  const { data: enCurso } = await sb.from('entrevistas').select('id,candidata_id').eq('estado', 'en_curso');
+  const enCursoPorCandidata = new Map((enCurso||[]).map(e=>[e.candidata_id, e.id]));
   grid.innerHTML = '<div class="person-list">' + intakeItems.map((c,i)=>`
     <div class="person-row">
       <div class="av" ${c.foto_url && c.autoriza_foto!==false?`style="cursor:zoom-in;" onclick="abrirLightboxFoto(${argJs(c.foto_url)}, ${argJs('Foto de '+c.nombre)})"`:''}>${c.foto_url?`<img loading="lazy" decoding="async" src="${urlSegura(c.foto_url)}" alt="Foto de ${escaparHtml(c.nombre)}" onerror="this.parentElement.textContent=${argJs((c.nombre||'?').charAt(0).toUpperCase())}">`:(c.nombre||'?').charAt(0).toUpperCase()}</div>
@@ -179,10 +183,13 @@ async function loadIntake(){
       <div class="badge-slot">
         <span class="badge brand" style="font-size:10px;padding:2px 8px;">${escaparHtml(c.tipo||'Niñera')}</span>
         ${c.autoriza_foto===false?'<div class="badge bad" style="font-size:9px;padding:2px 6px;margin-top:4px;">No autoriza foto</div>':''}
+        ${enCursoPorCandidata.has(c.id)?'<div class="badge warn" style="font-size:9px;padding:2px 6px;margin-top:4px;">Entrevista en curso</div>':''}
       </div>
       <div class="rowbtns">
         <button class="smallbtn" onclick="verFichaIntake(${i})">Ver ficha</button>
-        <button class="smallbtn" onclick="agendarDesdeIntake(${i})">Agendar</button>
+        ${enCursoPorCandidata.has(c.id)
+          ? `<button class="smallbtn" onclick="seguirEntrevista(${argJs(enCursoPorCandidata.get(c.id))})">Seguir entrevista</button>`
+          : `<button class="smallbtn" onclick="agendarDesdeIntake(${i})">Agendar</button>`}
         <button class="smallbtn danger" onclick="conGuardado(this, ()=>descartarIntake(${argJs(c.id)}))">Descartar</button>
       </div>
     </div>`).join('') + '</div>';
@@ -262,7 +269,8 @@ function renderFichaOrigen(){
 }
 
 /* ---- Entrevista ---- */
-let entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null };
+// entrevistaId: la entrevista guardada a medias que se está siguiendo (09/10/2026).
+let entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null, entrevistaId:null };
 async function renderEntrevista(body){
   if(!entrevistaPreguntasCache) await cargarEntrevistaPreguntas();
   if(!zonaGruposCache) await cargarZonaGrupos(); // para los selectores de zona de la entrevista
@@ -324,6 +332,7 @@ async function renderEntrevista(body){
     <div class="card resultcard" id="resultado" style="display:none;"></div>
     <div class="actions">
       <button class="btn primary" id="btnGuardar" onclick="conGuardado(this, ()=>guardarCandidata())">Guardar candidata</button>
+      <button class="btn" id="btnGuardarEnCurso" onclick="conGuardado(this, ()=>guardarEntrevistaEnCurso())">Guardar y seguir después</button>
       <button class="btn ghost" onclick="window.print()">Imprimir</button>
       <button class="btn ghost" onclick="limpiarForm()">Vaciar formulario</button>
     </div>
@@ -457,7 +466,7 @@ async function guardarCandidata(){
     candidataId = data.id;
   }
 
-  const { error: e2 } = await sb.from('entrevistas').insert({
+  const filaEntrevista = {
     candidata_id: candidataId,
     fecha: document.getElementById('f-fecha').value || null,
     entrevisto: document.getElementById('f-entrevisto').value,
@@ -470,13 +479,114 @@ async function guardarCandidata(){
     notas: document.getElementById('f-notas').value,
     total: Number(total.toFixed(2)),
     recomendacion,
-  });
+  };
+  // Si venía de una entrevista guardada a medias, se completa esa misma fila (09/10/2026).
+  const { error: e2 } = entrevistaState.entrevistaId
+    ? await sb.from('entrevistas').update({ ...filaEntrevista, estado:'completa', borrador:{}, actualizado_at: new Date().toISOString() }).eq('id', entrevistaState.entrevistaId)
+    : await sb.from('entrevistas').insert(filaEntrevista);
   if(e2){ warnArea.innerHTML = errBox(e2); return; }
   toast('Candidata guardada — está en "Candidatas guardadas".');
   limpiarForm();
 }
+/* ---- Entrevista a medias (09/10/2026) ----
+   "Guardar y seguir después" guarda lo que haya (sin pedir todos los puntajes) con estado
+   'en_curso'. La candidata sigue "a entrevistar" hasta completarla. Se retoma desde
+   "Candidatas guardadas" o desde la candidata, y al guardarla completa se usa la misma fila. */
+async function guardarEntrevistaEnCurso(){
+  const nombre = document.getElementById('f-nombre').value.trim();
+  const warnArea = document.getElementById('warnArea');
+  warnArea.innerHTML = '';
+  if(!nombre){ warnArea.innerHTML = '<div class="warnbox">Falta el nombre.</div>'; return; }
+  const psico = {};
+  PSICO_IMGS.forEach(img=>{ const el = document.querySelector(`[data-psico="${img.id}"]`); psico[img.id] = el ? el.value : ''; });
+  const nuevaZonaSitting = leerZonasChecklist('ent-zonasitting');
+  const valoresFicha = {};
+  camposFichaEntrevista(entrevistaState.fichaOrigen||{}).forEach(f=>{
+    const val = document.getElementById(`ent-nota-${f.key}`)?.value.trim();
+    if(val) valoresFicha[f.key] = val;
+  });
+  let candidataId = entrevistaState.candidataId;
+  if(candidataId){
+    // Sin tocar el estado: sigue "a entrevistar" hasta que la entrevista esté completa.
+    const { error } = await sb.from('candidatas').update({ telefono:document.getElementById('f-telefono').value, zona:leerZonasChecklist('f'),
+      fecha_nacimiento: document.getElementById('f-fecha-nac').value || null, zona_sitting: nuevaZonaSitting || null, notas_ficha: valoresFicha }).eq('id', candidataId);
+    if(error){ warnArea.innerHTML = errBox(error); return; }
+  } else {
+    if(!(await confirmarNombreNuevo(nombre, [...intakeItems, ...candidatasItems], 'niñera'))) return;
+    const { data, error } = await sb.from('candidatas').insert({
+      nombre, telefono:document.getElementById('f-telefono').value, zona:leerZonasChecklist('f'),
+      origen:document.getElementById('f-origen').value, fecha_nacimiento: document.getElementById('f-fecha-nac').value || null,
+      tipo: entrevistaState.tipo || 'Niñera', estado:'intake', ...valoresFicha, zona_sitting: nuevaZonaSitting || null,
+      experiencia: document.getElementById('f-exp-previa').value || valoresFicha.experiencia || null,
+    }).select().single();
+    if(error){ warnArea.innerHTML = errBox(error); return; }
+    candidataId = data.id;
+    entrevistaState.candidataId = data.id;
+    entrevistaState.fichaOrigen = data;
+  }
+  const fila = {
+    candidata_id: candidataId,
+    fecha: document.getElementById('f-fecha').value || null,
+    entrevisto: document.getElementById('f-entrevisto').value,
+    rol: document.getElementById('f-rol').value,
+    puntajes: entrevistaState.competencias,
+    redflags: entrevistaState.redflags,
+    referencias: entrevistaState.refs,
+    psico,
+    explicacion_juegos: entrevistaState.explicacionJuegos,
+    notas: document.getElementById('f-notas').value,
+    total: null, recomendacion: null,
+    estado: 'en_curso',
+    borrador: { capacitacion: document.getElementById('f-capacitacion')?.value || '' },
+    actualizado_at: new Date().toISOString(),
+  };
+  const res = entrevistaState.entrevistaId
+    ? await sb.from('entrevistas').update(fila).eq('id', entrevistaState.entrevistaId).select('id').single()
+    : await sb.from('entrevistas').insert(fila).select('id').single();
+  if(res.error){
+    const faltaMigracion = res.error.code==='PGRST204' || /estado|borrador|actualizado_at/.test(res.error.message||'');
+    warnArea.innerHTML = faltaMigracion
+      ? '<div class="warnbox">Para guardar a medias falta un cambio en la base (migración). Avisale a Diego. Lo escrito sigue en pantalla.</div>'
+      : errBox(res.error);
+    return;
+  }
+  entrevistaState.entrevistaId = res.data.id;
+  toast('Entrevista guardada a medias. La seguís desde "Candidatas guardadas".');
+}
+async function seguirEntrevista(entrevistaId){
+  const { data: e, error } = await sb.from('entrevistas').select('*, candidatas(*)').eq('id', entrevistaId).single();
+  if(error || !e){ toast('No se pudo abrir la entrevista: '+(error?.message||'no existe'), 'bad'); return; }
+  if(document.getElementById('editmodal')) cerrarModal();
+  const cd = e.candidatas || {};
+  entrevistaState = { competencias: e.puntajes||{}, redflags: e.redflags||{}, refs: e.referencias||[], candidataId: e.candidata_id,
+    fichaOrigen: cd, tipo: cd.tipo || 'Niñera', explicacionJuegos: e.explicacion_juegos || null, entrevistaId: e.id };
+  rrhhTab = 'entrevista';
+  await renderModulo(); // arma el formulario (con la ficha de esta candidata)
+  const poner = (id, v) => { const el = document.getElementById(id); if(el) el.value = v ?? ''; };
+  poner('f-nombre', (cd.nombre||'') + (cd.apellido ? ' '+cd.apellido : ''));
+  poner('f-telefono', cd.telefono);
+  setZonasChecklist('f', cd.zona||'', 'Zona');
+  poner('f-origen', cd.origen);
+  poner('f-exp-previa', cd.experiencia);
+  poner('f-fecha-nac', cd.fecha_nacimiento);
+  actualizarEdadCandidata();
+  poner('f-fecha', e.fecha);
+  poner('f-entrevisto', e.entrevisto);
+  poner('f-rol', e.rol);
+  poner('f-notas', e.notas);
+  poner('f-capacitacion', e.borrador?.capacitacion);
+  PSICO_IMGS.forEach(img=>{ const el = document.querySelector(`[data-psico="${img.id}"]`); if(el) el.value = e.psico?.[img.id] || ''; });
+  Object.entries(entrevistaState.competencias).forEach(([key, d])=>{
+    if(d?.score) document.querySelector(`[data-score="${key}:${d.score}"]`)?.classList.add('selected');
+    const notas = document.querySelector(`[data-notes="${key}"]`);
+    if(notas && d?.notes) notas.value = d.notes;
+  });
+  document.querySelectorAll('[data-flag]').forEach(el=>{ el.checked = !!entrevistaState.redflags[el.dataset.flag]; });
+  if(entrevistaState.explicacionJuegos) document.querySelector(`[data-juegos="${entrevistaState.explicacionJuegos}"]`)?.classList.add('selected');
+  calcular();
+}
 function limpiarForm(){
-  entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null };
+  entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null, entrevistaId:null };
   renderEntrevista(document.getElementById('rrhh-body'));
 }
 
@@ -496,10 +606,15 @@ async function cargarGuardadas(){
   cont.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const { data, error } = await sb.from('entrevistas').select('*, candidatas(*)').order('created_at',{ascending:false});
   if(error){ cont.innerHTML = errBox(error); return; }
-  candidatasItems = data;
+  // Las entrevistas a medias van arriba (09/10/2026).
+  candidatasItems = [...data.filter(c=>c.estado==='en_curso'), ...data.filter(c=>c.estado!=='en_curso')];
   if(!candidatasItems.length){ cont.innerHTML='<div class="empty">Todavía no hay candidatas guardadas.</div>'; return; }
   cont.innerHTML = candidatasItems.map((c,i)=>{
     const cd = c.candidatas;
+    if(c.estado==='en_curso') return `<button type="button" class="item entrevista-en-curso" onclick="seguirEntrevista(${argJs(c.id)})">
+      <div><div class="name">${escaparHtml(cd?.nombre||'(sin nombre)')}</div><div class="meta">${escaparHtml(c.fecha||'sin fecha')} · entrevista a medias · tocá para seguirla</div></div>
+      <div class="sc"><span class="badge warn">En curso</span></div>
+    </button>`;
     return `<button type="button" class="item" onclick="verDetalle(${i})">
       <div><div class="name">${escaparHtml(cd.nombre)} ${cd.estado==='contratada'?'✓':''}</div><div class="meta">${escaparHtml(c.fecha||'sin fecha')} · ${escaparHtml(textoZonasConBarrios(cd.zona, cd.zona_barrios)||'zona s/d')} · ${escaparHtml(c.rol||'rol s/d')}</div></div>
       <div class="sc"><div class="n">${Number(c.total).toFixed(1)} / 5</div><span class="badge ${c.recomendacion==='Recomendada'?'good':c.recomendacion==='No recomendada'?'bad':'warn'}">${cd.estado==='contratada'?'Contratada':escaparHtml(c.recomendacion)}</span></div>

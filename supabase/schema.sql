@@ -172,7 +172,13 @@ create table public.entrevistas (
   total numeric,
   recomendacion text,
   created_at timestamp with time zone default now() not null,
-  constraint entrevistas_pkey PRIMARY KEY (id)
+  -- Entrevista a medias (09/10/2026): 'en_curso' hasta que se completa; borrador = lo de la
+  -- pantalla sin columna propia, para retomarla.
+  estado text default 'completa'::text not null,
+  borrador jsonb default '{}'::jsonb not null,
+  actualizado_at timestamp with time zone default now() not null,
+  constraint entrevistas_pkey PRIMARY KEY (id),
+  constraint entrevistas_estado_check CHECK ((estado = ANY (ARRAY['en_curso'::text, 'completa'::text])))
 );
 
 create table public.familias (
