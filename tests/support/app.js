@@ -241,7 +241,7 @@ async function abrirApp(page, opciones = {}) {
       const simular = estado.rpc[tabla.slice(4)];
       return route.fulfill({ json: simular ? simular(cuerpo, db) : [] });
     }
-    if (baseSinMigrar && ['sittings_historial', 'ajustes_saldo'].includes(tabla)) {
+    if (baseSinMigrar && ['sittings_historial', 'ajustes_saldo', 'gastos_extra'].includes(tabla)) {
       return route.fulfill({ status: 404, json: { code: 'PGRST205', message: `Could not find the table 'public.${tabla}' in the schema cache` } });
     }
     if (baseSinMigrar && tabla === 'asignaciones' && ['POST', 'PATCH'].includes(metodo) && req.postData()) {

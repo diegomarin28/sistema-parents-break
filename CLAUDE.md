@@ -98,6 +98,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   `supabase/pruebas/fijos_automaticos.sql` (nunca en producción).
 - `tests/saldo.spec.js`: saldo a favor (ajustes) en Por pagar / Por cobrar, al marcar pagado o
   cobrado, en la ficha, en el PDF y con la base sin la tabla.
+- `tests/gastos-extra.spec.js`: gastos extra con ticket en el formulario, en Por cobrar / Por
+  pagar (cobrar y reintegrar), saldo a favor si lo pagó la familia, PDF y base sin la tabla.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -161,6 +163,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   al grupo más viejo de esa persona en Por pagar / Por cobrar (`aplicarAjustesAGrupos`,
   finanzas.js) y al marcar pagado/cobrado queda anotado en `aplicado`. No toca facturado ni
   resultado del mes.
+- Gastos extra (08/10/2026): `gastos_extra`, ticket obligatorio en el bucket PRIVADO
+  `comprobantes` (se abre con `createSignedUrl`, nunca URL pública). Si lo pagó la niñera va
+  aparte en Por cobrar / Por pagar (`cobrado` / `reintegrado`); si lo pagó la familia genera
+  un ajuste de saldo a favor. Nunca suma al facturado ni al margen.
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 
