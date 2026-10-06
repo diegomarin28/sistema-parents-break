@@ -74,9 +74,10 @@ function mismoSecreto(recibido: string | null, esperado: string | undefined): bo
   return dif === 0;
 }
 
-// Foto de la candidata: solo imágenes, con la extensión que corresponde (antes la extensión
-// salía de lo que dijera el pedido).
-const FOTO_EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif" };
+// Foto de la candidata: solo imágenes (o un PDF, que algunas suben en vez de la foto), con la
+// extensión que corresponde. Antes la extensión y el tipo salían de lo que dijera el pedido, y
+// el bucket es público: un tipo cualquiera (por ejemplo HTML) quedaba servido tal cual.
+const FOTO_EXT: Record<string, string> = { "image/jpeg": "jpeg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif", "application/pdf": "pdf" };
 
 function esSi(raw: string): boolean {
   return normaliza(raw || "").startsWith("si");
