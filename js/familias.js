@@ -86,7 +86,7 @@ async function cargarFamilias(){
   const [{data:familias, error}, {data:asignaciones}, {data:sittings}, {data:resenas}, ninierasRes, pausas] = await Promise.all([
     sb.from('familias').select('*, hijos_familia(*)').order('nombre'),
     sb.from('asignaciones').select('*'),
-    sinPrevistos(sb.from('sittings_traslados').select('familia_nombre,ninera_nombre,fecha')),
+    leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('familia_nombre,ninera_nombre,fecha')).order('id')),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
     necesitaNinieras ? sb.from('ninieras').select('nombre') : Promise.resolve({data:null}),
     cargarPausasFijos(),

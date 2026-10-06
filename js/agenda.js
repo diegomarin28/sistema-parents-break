@@ -506,7 +506,7 @@ function abrirModalNuevaSolicitud(){
       <div class="grid3">
         <div class="field"><label>Hora inicio</label>${selectHora('agenda-hora-inicio')}</div>
         <div class="field" id="agenda-hora-fin-wrap"><label>Hora fin</label>${selectHora('agenda-hora-fin')}</div>
-        <div class="field" id="agenda-campo-sitting"><label>Tarifa por hora</label><div class="moneyfield"><input type="number" id="agenda-cobro" oninput="actualizarAgendaTotal()"></div></div>
+        <div class="field" id="agenda-campo-sitting"><label>Tarifa por hora</label><div class="moneyfield por-hora"><input type="number" id="agenda-cobro" oninput="actualizarAgendaTotal()"></div></div>
         <div class="field" id="agenda-campo-traslado" style="display:none;">
           <label>Km recorridos</label><input type="number" step="0.1" id="agenda-km" oninput="actualizarAgendaPrecioTraslado()">
         </div>
@@ -644,7 +644,7 @@ async function abrirModalAsignar(solicitudId){
   const [{data:histFam}, {data:histTotal}, {data:sitTotal}] = await Promise.all([
     sb.from('solicitud_ninieras').select('ninera_nombre, solicitudes!inner(familia_nombre)').eq('estado','confirmada').eq('solicitudes.familia_nombre', s.familia_nombre),
     sb.from('solicitud_ninieras').select('ninera_nombre').eq('estado','confirmada'),
-    sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre')),
+    leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre')).order('id')),
   ]);
   const conteoFamilia = {};
   (histFam||[]).forEach(r=>{ const k=normaliza(r.ninera_nombre); conteoFamilia[k]=(conteoFamilia[k]||0)+1; });
@@ -1633,12 +1633,17 @@ function abrirModalRegistroDesdeAgenda(s){
   abrirModal(cuerpo);
 }
 async function eliminarRegistroDesdeAgenda(regId){
-  const ok = await confirmarAccion('¿Eliminar este registro? No se puede deshacer.');
+  // Con gastos extra: mismo cuidado que en Sittings (gastosDelRegistroABorrar, sittings.js).
+  const gastos = await gastosDelRegistroABorrar(regId);
+  if(!gastos) return;
+  const ok = await confirmarAccion('¿Eliminar este registro? No se puede deshacer.'+textoGastosAlBorrar(gastos));
   if(!ok) return;
   const { error } = await sb.from('sittings_traslados').delete().eq('id', regId);
   if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
   cerrarModal();
-  toast('Registro eliminado.');
+  const faltas = await limpiarGastosDeRegistroBorrado(gastos);
+  if(faltas.length) toast('Registro eliminado, pero no se pudo borrar '+faltas.join(' ni ')+'.', 'bad');
+  else toast('Registro eliminado.');
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
 }

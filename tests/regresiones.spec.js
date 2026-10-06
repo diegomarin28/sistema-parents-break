@@ -47,6 +47,41 @@ test.describe('E1: conciliación con extracto Itaú', () => {
   });
 });
 
+// 06/10/2026 (testing de la noche): Supabase devuelve como mucho 1.000 filas por pedido y
+// corta sin avisar (el simulador hace lo mismo). Las consultas que leen todos los sittings
+// (o varios meses) dejaban afuera lo que quedara después de la fila 1.000.
+test.describe('más de 1.000 sittings', () => {
+  function datosGrandes() {
+    const d = datosBase();
+    const inicio = new Date('2025-01-01T12:00:00Z').getTime();
+    for (let i = 0; i < 1100; i++) {
+      const fecha = new Date(inicio + i * 9 * 3600 * 1000).toISOString().slice(0, 10); // ~1 año, todo cobrado y pagado
+      d.sittings_traslados.push(sitting(`7b000000-0000-4000-8000-${String(i).padStart(12, '0')}`, fecha, { cobrado: true, pagado: true }));
+    }
+    // Lo último que se cargó (queda después de la fila 1.000): una familia y una niñera que no
+    // aparecen en ningún otro registro, sin cobrar ni pagar.
+    d.sittings_traslados.push(sitting('7c000000-0000-4000-8000-000000000001', '2026-09-10', {
+      familia_id: null, familia_nombre: 'Familia Tardía Ficticia', ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', cobro_familia: 900, pago_ninera: 600 }));
+    return d;
+  }
+
+  test('el filtro de familias del historial las tiene todas', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosGrandes() });
+    await irAModulo(page, 'sittings');
+    const opciones = await page.locator('#sithist-familia option').allInnerTexts();
+    expect(opciones).toContain('Familia Tardía Ficticia');
+    verificarLimpio(e);
+  });
+
+  test('la actividad de las niñeras cuenta los sittings más nuevos', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosGrandes() });
+    await irAModulo(page, 'ninieras');
+    await expect.poll(() => page.evaluate(() => ninUtilUltimaActividad[normaliza('Carla Ejemplo')] || null)).toBe('2026-09-10');
+    expect(await page.evaluate(() => ninUtilPorNinera[normaliza('Carla Ejemplo')]?.cant)).toBe(1);
+    verificarLimpio(e);
+  });
+});
+
 test.describe('E2: cambio de niñera en un fijo', () => {
   // Las tarjetas de la Agenda no muestran el nombre de la niñera, así que se mira lo que la
   // Agenda calcula para pintarlas (agendaSolicitudes): días del fijo sin registrar todavía.
@@ -99,6 +134,36 @@ test.describe('fechas en Montevideo (UTC-3)', () => {
     const e = await abrirApp(page, { ahora: '2026-10-04T22:30:00-03:00' });
     // El título usa Intl con hora local: este ya está bien y tiene que seguir así.
     await expect(page.locator('#modcontent')).toContainText('4 de octubre');
+    verificarLimpio(e);
+  });
+});
+
+// 06/10/2026 (testing de la noche): el "/h" del campo de plata salía en cualquier monto
+// (cobro de un traslado, un saldo, un gasto) y en Sittings los montos salían sin separador
+// de miles ("$3420").
+test.describe('montos en pantalla', () => {
+  test('"/h" solo en la tarifa por hora', async ({ page }) => {
+    const e = await abrirApp(page);
+    const sufijo = sel => page.evaluate(s => getComputedStyle(document.querySelector(s).closest('.moneyfield'), '::after').content, sel);
+    await irAModulo(page, 'familias');
+    await page.evaluate(id => verFamilia(id), ID.fUno);
+    await page.locator('#fam-saldo button', { hasText: '+ Cargar ajuste' }).click();
+    expect(await sufijo('#ajuste-monto')).toBe('none');
+    await page.evaluate(() => { cerrarModalAjusteSaldo(); cerrarModal(); });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(() => abrirModalNuevaSolicitud());
+    expect(await sufijo('#agenda-cobro')).toBe('"/h"');
+    verificarLimpio(e);
+  });
+
+  test('Sittings: resumen, lista e historial con separador de miles', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'sittings');
+    await page.evaluate(async () => { sitMes = '2026-09'; await cargarSitLista(); });
+    await esperarQuieta(page);
+    expect(await page.locator('#sit-summary .statnum').allInnerTexts()).toEqual(['$3.870', '$2.500', '$1.370']);
+    await expect(page.locator('#sit-list-wrap')).toContainText('$1.140');
+    await expect(page.locator('tr[title="Tocar para editar"]').first()).toContainText('$1.140');
     verificarLimpio(e);
   });
 });

@@ -85,7 +85,7 @@ let ninUtilUltimaActividad = {};
    el equipo. No bloquea el resto de la pantalla si falla — es secundario. */
 async function cargarUtilizacionNinieras(){
   await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
-  const { data, error } = await sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre,fecha'));
+  const { data, error } = await leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre,fecha')).order('id'));
   if(error || !document.getElementById('nin-utilizacion-wrap')) return;
   const desde30 = sumarDiasISO(todayISO(), -NIN_UTIL_DIAS);
   const porNinera = {};
@@ -425,7 +425,7 @@ function renderNineraHistorial(id){
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Fecha</th><th>Familia</th><th>Cobro</th><th>Pago</th></tr></thead>
     <tbody>${items.map(r=>{
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td>${escaparHtml(r.familia_nombre)}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td>${escaparHtml(r.familia_nombre)}</td><td>${plataFin(r.cobro_familia)}</td><td>${plataFin(r.pago_ninera)}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 /* Alta directa de una niñera (05/10/2026, E5). Antes la única forma era pasar por toda la

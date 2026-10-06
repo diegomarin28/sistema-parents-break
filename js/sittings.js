@@ -79,7 +79,7 @@ async function cargarSitHistorial(){
   const [{data:pagina, count}, {data:resenas}, {data:soloFamilias}] = await Promise.all([
     sinPrevistos(sb.from('sittings_traslados').select('*', {count:'exact'})).order('fecha', {ascending:false}).range(0, SIT_HIST_PAGE-1),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
-    sinPrevistos(sb.from('sittings_traslados').select('familia_nombre')), // solo esta columna: liviano aunque la tabla crezca, así el filtro de familia siempre tiene todas las opciones
+    leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('familia_nombre')).order('id')), // solo esta columna: liviano aunque la tabla crezca, así el filtro de familia siempre tiene todas las opciones
   ]);
   sitHistItems = pagina || [];
   sitHistOffset = sitHistItems.length;
@@ -157,8 +157,8 @@ function filaHistorialTr(r){
     <td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td>
     <td>${horarioEfectuadoTexto(r)}</td>
     <td>${horasEfectuadasTexto(r)}</td>
-    <td>$${r.cobro_familia||0}</td>
-    <td>$${r.pago_ninera||0}</td>
+    <td>${plataFin(r.cobro_familia)}</td>
+    <td>${plataFin(r.pago_ninera)}</td>
     <td class="hist-detalle" title="${escaparHtml(r.notas)}">${escaparHtml(r.notas||'—')}</td>
     <td>${resenaBadge(r.ninera_nombre)}</td>
   </tr>`;
@@ -305,7 +305,7 @@ async function generarVistaPreviaHistorialPDF(){
         <td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td>
         <td>${horarioEfectuadoTexto(r)}</td>
         <td>${horasEfectuadasTexto(r)}</td>
-        <td>$${r.cobro_familia||0}</td>
+        <td>${plataFin(r.cobro_familia)}</td>
         <td class="hist-detalle" title="${escaparHtml(r.notas)}">${escaparHtml(r.notas||'—')}</td>
       </tr>`).join('')}</tbody>
     </table></div>
@@ -1458,9 +1458,12 @@ async function guardarSitting(){
     sitGuardadoId = creado?.id || null;
   }
   if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  // Si falla un gasto, el registro ya está guardado: se dice qué faltó y no se muestra
+  // además el "Registro guardado" en verde (06/10/2026).
+  let falloGastos = null;
   if(gastosNuevos.lista.length){
-    const fallo = await guardarGastosExtra(sitGuardadoId, gastosNuevos.lista, registro);
-    if(fallo){ toast('El registro se guardó, pero '+fallo, 'bad'); }
+    falloGastos = await guardarGastosExtra(sitGuardadoId, gastosNuevos.lista, registro);
+    if(falloGastos){ toast('El registro se guardó, pero '+falloGastos, 'bad'); }
   }
   const esFijo = document.getElementById('sit-esfijo')?.checked;
   if(esFijo){
@@ -1479,10 +1482,10 @@ async function guardarSitting(){
         tipo: registro.tipo || 'sitting', vigente_desde: registro.fecha || todayISO(),
       });
       if(errAsig) toast('El registro se guardó, pero la asignación fija falló: '+errAsig.message, 'bad');
-      else { await sincronizarPrevistosFijos(); toast('Registro guardado y asignación fija creada.'); }
+      else { await sincronizarPrevistosFijos(); toast(falloGastos ? 'La asignación fija se creó.' : 'Registro guardado y asignación fija creada.'); }
       }
     }
-  } else {
+  } else if(!falloGastos){
     toast(sitEditId ? 'Registro actualizado.' : 'Registro guardado.');
   }
   sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
@@ -1565,11 +1568,15 @@ function leerGastosExtraNuevos(){
 // null si salió todo bien, o el texto de lo que faltó.
 async function guardarGastosExtra(sitId, lista, registro){
   if(!sitId) return 'no se pudieron guardar los gastos extra (no se supo el registro). Cargalos editándolo.';
-  for(const g of lista){
+  const fallo = (i, txt) => {
+    const resto = lista.slice(i+1).map(x=>`"${x.concepto}"`);
+    return txt + (resto.length ? ` Tampoco se cargó ${resto.join(', ')}.` : '') + ' Cargalo de nuevo editando el registro.';
+  };
+  for(const [i, g] of lista.entries()){
     const ext = (g.archivo.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'') || 'jpg';
     const ruta = `${sitId}/${crypto.randomUUID()}.${ext}`;
     const { error: eUp } = await sb.storage.from('comprobantes').upload(ruta, g.archivo, { upsert:false });
-    if(eUp) return `no se pudo subir el ticket de "${g.concepto}" (${eUp.message}).`;
+    if(eUp) return fallo(i, `no se pudo subir el ticket de "${g.concepto}" (${eUp.message}).`);
     let ajusteId = null;
     if(g.pagado_por==='familia'){
       const fechaTxt = new Date(registro.fecha+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'});
@@ -1577,7 +1584,7 @@ async function guardarGastosExtra(sitId, lista, registro){
         sujeto:'familia', familia_id: registro.familia_id, ninera_id:null, nombre: registro.familia_nombre,
         monto: -g.monto, motivo: `Gasto extra que pagó la familia: ${g.concepto} (${fechaTxt})`, creado_por: registradoPorUsuario() || null,
       }).select('id').single();
-      if(eAj){ await sb.storage.from('comprobantes').remove([ruta]); return `no se pudo cargar el saldo a favor de "${g.concepto}" (${eAj.message}).`; }
+      if(eAj){ await sb.storage.from('comprobantes').remove([ruta]); return fallo(i, `no se pudo cargar el saldo a favor de "${g.concepto}" (${eAj.message}).`); }
       ajusteId = aj.id;
     }
     const { error: eG } = await sb.from('gastos_extra').insert({
@@ -1587,7 +1594,7 @@ async function guardarGastosExtra(sitId, lista, registro){
     if(eG){
       if(ajusteId) await sb.from('ajustes_saldo').delete().eq('id', ajusteId);
       await sb.storage.from('comprobantes').remove([ruta]);
-      return `no se pudo guardar el gasto "${g.concepto}" (${eG.message}).`;
+      return fallo(i, `no se pudo guardar el gasto "${g.concepto}" (${eG.message}).`);
     }
   }
   return null;
@@ -1615,11 +1622,58 @@ async function quitarGastoExtra(gastoId, sitId){
   pintarGastosExtraForm(sitId);
 }
 
+/* Borrar un registro con gastos extra (06/10/2026, testing de la noche): la base borra sus
+   gastos en cascada, pero el saldo a favor de un gasto que pagó la familia quedaba vivo (se
+   le seguía descontando en el próximo cobro) y los tickets quedaban en el bucket. Lo que ya
+   se cobró o reintegró no se borra, igual que "Quitar" un gasto.
+   Devuelve null si no se puede borrar, o los gastos y saldos a limpiar después de borrarlo. */
+async function gastosDelRegistroABorrar(sitId){
+  const nada = { gastos:[], ajustes:[] };
+  if(typeof gastosExtraDisponible!=='undefined' && !gastosExtraDisponible) return nada;
+  const { data: gastos, error } = await sb.from('gastos_extra').select('*').eq('sitting_id', sitId);
+  if(error){
+    if(esFaltaTabla(error)){ gastosExtraDisponible = false; return nada; }
+    toast('No se pudieron revisar los gastos extra del registro: '+error.message, 'bad'); return null;
+  }
+  if(!gastos || !gastos.length) return nada;
+  if(gastos.some(g=>g.cobrado || g.reintegrado)){ toast('Este registro tiene gastos extra que ya se cobraron o se reintegraron: no se puede eliminar.', 'bad'); return null; }
+  const ajustes = gastos.map(g=>g.ajuste_id).filter(Boolean);
+  if(ajustes.length){
+    const { data: ajs, error: eA } = await sb.from('ajustes_saldo').select('id,aplicado').in('id', ajustes);
+    if(eA){ toast('No se pudo revisar el saldo a favor de sus gastos: '+eA.message, 'bad'); return null; }
+    if((ajs||[]).some(a=>Number(a.aplicado))){ toast('El saldo a favor de un gasto de este registro ya se usó en un cobro: no se puede eliminar.', 'bad'); return null; }
+  }
+  return { gastos, ajustes };
+}
+function textoGastosAlBorrar(info){
+  const n = info.gastos.length;
+  if(!n) return '';
+  return ` También se ${n===1?'borra su gasto extra':'borran sus '+n+' gastos extra'}${info.ajustes.length?' y el saldo a favor que generó la familia':''}.`;
+}
+// Después de borrar el registro (sus gastos se fueron en cascada): saldos y tickets.
+// Devuelve lo que no se pudo borrar, para decirlo en el aviso.
+async function limpiarGastosDeRegistroBorrado(info){
+  const faltas = [];
+  if(info.ajustes.length){
+    const { error } = await sb.from('ajustes_saldo').delete().in('id', info.ajustes);
+    if(error) faltas.push('el saldo a favor de sus gastos (borralo desde la ficha de la familia)');
+  }
+  const rutas = info.gastos.map(g=>g.comprobante).filter(Boolean);
+  if(rutas.length){
+    const { error } = await sb.storage.from('comprobantes').remove(rutas);
+    if(error) faltas.push('las fotos de los tickets');
+  }
+  return faltas;
+}
 async function eliminarSitting(id){
-  if(!(await confirmarAccion('¿Eliminar este registro? No se puede deshacer.'))) return;
+  const gastos = await gastosDelRegistroABorrar(id);
+  if(!gastos) return;
+  if(!(await confirmarAccion('¿Eliminar este registro? No se puede deshacer.'+textoGastosAlBorrar(gastos)))) return;
   const { error } = await sb.from('sittings_traslados').delete().eq('id', id);
   if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
-  toast('Registro eliminado.');
+  const faltas = await limpiarGastosDeRegistroBorrado(gastos);
+  if(faltas.length) toast('Registro eliminado, pero no se pudo borrar '+faltas.join(' ni ')+'.', 'bad');
+  else toast('Registro eliminado.');
   cargarSitLista();
 }
 
@@ -1644,9 +1698,9 @@ async function cargarSitLista(){
   const cobrado = sitItems.reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
   const pagado = sitItems.reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
   summary.innerHTML = `
-    <div class="summarycard"><div class="statlabel">Cobrado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${cobrado}</div></div>
-    <div class="summarycard"><div class="statlabel">Pagado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">$${pagado}</div></div>
-    <div class="summarycard" style="border-left:3px solid var(--good);"><div class="statlabel">Margen</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">$${cobrado-pagado}</div></div>
+    <div class="summarycard"><div class="statlabel">Cobrado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">${plataFin(cobrado)}</div></div>
+    <div class="summarycard"><div class="statlabel">Pagado en ${monthLabel(sitMes)}</div><div class="statnum" style="font-size:19px;margin-top:3px;">${plataFin(pagado)}</div></div>
+    <div class="summarycard" style="border-left:3px solid var(--good);"><div class="statlabel">Margen</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">${plataFin(cobrado-pagado)}</div></div>
   `;
   renderSitListaTabla();
 }
@@ -1664,7 +1718,7 @@ function renderSitListaTabla(){
     <tbody>${itemsMostrados.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${escaparHtml(r.ninera_nombre)}</td><td>$${r.cobro_familia||0}</td><td>$${r.pago_ninera||0}</td><td class="${margen>=0?'margenpos':'margenneg'}">$${margen}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm(${argJs(r.id)})">Editar</button><button class="smallbtn" onclick="abrirModalIncidente(${argJs({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha})})">Incidente</button><button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarSitting(${argJs(r.id)}))">Eliminar</button></div></td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${escaparHtml(r.ninera_nombre)}</td><td>${plataFin(r.cobro_familia)}</td><td>${plataFin(r.pago_ninera)}</td><td class="${margen>=0?'margenpos':'margenneg'}">${plataFin(margen)}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm(${argJs(r.id)})">Editar</button><button class="smallbtn" onclick="abrirModalIncidente(${argJs({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha})})">Incidente</button><button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarSitting(${argJs(r.id)}))">Eliminar</button></div></td></tr>`;
     }).join('')}</tbody></table></div>
     ${hayMas ? `<button class="smallbtn" onclick="sitListaMostrar+=15;renderSitListaTabla();" style="margin-top:10px;">Mostrar más</button>` : ''}
   `;

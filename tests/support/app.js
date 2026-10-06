@@ -157,7 +157,9 @@ async function abrirApp(page, opciones = {}) {
   // simular una base lenta (doble toque) o que falle un guardado. fallar recibe
   // {tabla, metodo, cuerpo} y devuelve undefined (anda), 'red' (se corta la conexión) o
   // {status, message} (Supabase responde con error).
-  const estado = { escrituras: [], errores: [], noSimulados: [], db, demoraEscrituras: 0, demoraLecturas: 0, fallar: null, rpc: {} };
+  // maxFilas: como Supabase (max rows del proyecto), ninguna lectura devuelve más de 1.000
+  // filas aunque haya más; quien necesita todo tiene que pedir de a tandas (leerTodasLasFilas).
+  const estado = { escrituras: [], errores: [], noSimulados: [], db, demoraEscrituras: 0, demoraLecturas: 0, fallar: null, rpc: {}, maxFilas: 1000 };
 
   page.on('console', m => { if (m.type() === 'error') estado.errores.push('consola: ' + m.text()); });
   page.on('pageerror', e => estado.errores.push('excepción: ' + e.message));
@@ -272,6 +274,7 @@ async function abrirApp(page, opciones = {}) {
       const offset = Number(url.searchParams.get('offset') || 0);
       const limit = url.searchParams.get('limit');
       filas = filas.slice(offset, limit ? offset + Number(limit) : undefined);
+      if (estado.maxFilas) filas = filas.slice(0, estado.maxFilas);
       const headers = { 'content-range': `${offset}-${offset + Math.max(filas.length - 1, 0)}/${total}` };
       if (metodo === 'HEAD') return route.fulfill({ status: 200, headers, body: '' });
       return responder(filas, { headers });
