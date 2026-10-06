@@ -148,3 +148,37 @@ test('con la base sin migrar (sin la tabla) Finanzas y las fichas andan como ant
   // El navegador anota el 404 de la tabla que todavía no existe; la app no muestra error.
   verificarLimpio(e, { ignorar: [/status of 404/] });
 });
+
+// Las dos marcando lo mismo a la vez (06/10/2026, testing de la noche): el saldo a favor se
+// descontaba dos veces (lo que sobraba se perdía) y la segunda veía "Marcado como pagado".
+test.describe('el mismo pago marcado desde dos celulares', () => {
+  test('pagado: la segunda no vuelve a descontar el saldo y se entera', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosCon(ajuste({ monto: -1000 })) });
+    await irAModulo(page, 'finanzas');
+    await filaDe(porPagar(page), 'Ana Ficticia').locator('button', { hasText: 'Marcar pagado' }).click();
+    await expect(page.locator('#pago-total')).toHaveText('$0');
+    // Mientras tanto la otra ya lo marcó pagado y se usaron $750 del saldo.
+    e.db.sittings_traslados.filter(s => s.fecha === '2026-09-28').forEach(s => { s.pagado = true; });
+    Object.assign(e.db.ajustes_saldo[0], { aplicado: 750, aplicaciones: [{ fecha: '2026-10-04', monto: -750, en: 'pagado' }] });
+    await page.locator('#pago-confirmar').click();
+    await expect(page.locator('.toaststack .toast', { hasText: 'Ya estaba marcado como pagado' })).toBeVisible();
+    await expect(page.locator('.toaststack .toast', { hasText: 'Marcado como pagado.' })).toHaveCount(0);
+    expect(e.db.ajustes_saldo[0].aplicado).toBe(750);
+    expect(e.db.ajustes_saldo[0].aplicaciones).toHaveLength(1);
+    await expect(porPagar(page)).toContainText('Ana Ficticia: −$250');
+    verificarLimpio(e);
+  });
+
+  test('cobrado: lo mismo con el saldo de la familia', async ({ page }) => {
+    const aj = ajuste({ sujeto: 'familia', ninera_id: null, familia_id: ID.fUno, nombre: 'Familia Prueba Uno', monto: -917, motivo: 'Pagó de más' });
+    const e = await abrirApp(page, { datos: datosCon(aj) });
+    await irAModulo(page, 'finanzas');
+    e.db.sittings_traslados.filter(s => s.familia_id === ID.fUno).forEach(s => { s.cobrado = true; });
+    Object.assign(e.db.ajustes_saldo[0], { aplicado: 917 });
+    await filaDe(porCobrar(page), 'Familia Prueba Uno').locator('button', { hasText: 'Marcar cobrado' }).click();
+    await expect(page.locator('.toaststack .toast', { hasText: 'Ya estaba marcado como cobrado' })).toBeVisible();
+    expect(e.db.ajustes_saldo[0].aplicado).toBe(917);
+    expect(e.escrituras.filter(w => w.tabla === 'ajustes_saldo')).toEqual([]);
+    verificarLimpio(e);
+  });
+});

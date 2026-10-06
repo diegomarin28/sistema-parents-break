@@ -928,14 +928,26 @@ function renderPorPagar(lista, sueltos=[]){
 async function marcarGrupoResuelto(ids, campo, ajustes=[], gastos=[]){
   const gastosIds = (gastos||[]).map(g=>typeof g==='string' ? g : g.id);
   if(campo==='pagado' && !(await confirmarPagoSittings(ids, {}, ajustes, gastos.filter(g=>typeof g!=='string')))) return;
+  // Las dos marcando lo mismo a la vez (06/10/2026, testing de la noche): se marca solo lo
+  // que seguía sin marcar. Si la otra ya lo había marcado, no se descuenta el saldo a favor
+  // por segunda vez (se perdía lo que sobraba) y se avisa en vez de decir "Marcado".
+  let nuevos = 0;
   if(ids.length){
-    const { error } = await sb.from('sittings_traslados').update({[campo]:true}).in('id', ids);
+    const { data, error } = await sb.from('sittings_traslados').update({[campo]:true}).in('id', ids).eq(campo, false).select('id');
     if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+    nuevos += (data||[]).length;
   }
   let okGastos = true;
   if(gastosIds.length){
-    const { error: eg } = await sb.from('gastos_extra').update({[campo==='cobrado'?'cobrado':'reintegrado']:true}).in('id', gastosIds);
+    const col = campo==='cobrado' ? 'cobrado' : 'reintegrado';
+    const { data: dg, error: eg } = await sb.from('gastos_extra').update({[col]:true}).in('id', gastosIds).eq(col, false).select('id');
     if(eg){ okGastos = false; toast(`Se marcó ${campo}, pero no se pudieron marcar los gastos extra (${eg.message}). Van a seguir apareciendo: avisale a Diego.`, 'bad'); }
+    else nuevos += (dg||[]).length;
+  }
+  if(!nuevos && okGastos){
+    toast(`Ya estaba marcado como ${campo}: lo marcó alguien más hace un momento. No se cambió nada.`, 'bad');
+    refrescarFinanzasCompleto();
+    return;
   }
   const okSaldo = await registrarAplicacionAjustes(ajustes, ids, campo);
   if(okSaldo && okGastos) toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
