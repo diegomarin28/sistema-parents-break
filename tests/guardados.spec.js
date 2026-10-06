@@ -298,6 +298,7 @@ test.describe('terminar un fijo desde una fecha (antes "Quitar" lo borraba)', ()
     await page.locator('#editmodal button', { hasText: 'Terminar el fijo' }).click();
     await expect(page.locator('#terminar-warn')).toContainText('falta la migración');
     expect(e.escrituras).toEqual([]);
-    verificarLimpio(e);
+    // 404: tablas nuevas (saldo a favor) que la base sin migrar todavía no tiene.
+    verificarLimpio(e, { ignorar: [/status of 404/] });
   });
 });
