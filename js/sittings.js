@@ -217,6 +217,7 @@ async function renderSitHistorialCustom(){
    formulario de sitting -- se edita ahí (o tocando la fila en el historial), no acá. */
 let exphistItemsPreview = [];
 let exphistAjustes = []; // saldo a favor de la familia elegida (07/10/2026)
+let exphistGastos = [];  // gastos extra de esos registros (08/10/2026)
 function abrirModalExportarHistorialPDF(){
   asegurarJsPDF().catch(()=>{}); // se va descargando mientras eligen el rango, así "Descargar PDF" es inmediato
   const famSel = document.getElementById('sithist-familia');
@@ -270,6 +271,24 @@ async function generarVistaPreviaHistorialPDF(){
       exphistAjustes = ajustes.filter(a=>pendienteAjuste(a) || (a.fecha>=desde && a.fecha<=hasta));
     }
   }
+  // Gastos extra de esos registros, con quién los pagó (el ticket va en el PDF).
+  exphistGastos = [];
+  if(typeof gastosExtraDisponible==='undefined' || gastosExtraDisponible){
+    const ids = items.map(r=>r.id);
+    for(let i=0; i<ids.length; i+=100){
+      const { data: gs, error: eg } = await sb.from('gastos_extra').select('*').in('sitting_id', ids.slice(i, i+100));
+      if(eg){ if(esFaltaTabla(eg)) gastosExtraDisponible = false; break; }
+      exphistGastos.push(...(gs||[]));
+    }
+  }
+  const fechaDeSit = id => items.find(r=>r.id===id)?.fecha || '';
+  exphistGastos.forEach(g=>{ g._fecha = fechaDeSit(g.sitting_id); });
+  exphistGastos.sort((a,b)=>a._fecha.localeCompare(b._fecha));
+  const totalGastosFamilia = exphistGastos.filter(g=>g.pagado_por==='ninera').reduce((t,g)=>t+(Number(g.monto)||0),0);
+  const gastosHtml = exphistGastos.length ? `
+    <div class="helper" style="margin:12px 0 4px;">Gastos extra${totalGastosFamilia ? ` a cargo de la familia: <b>$${totalGastosFamilia.toLocaleString('es-UY')}</b>` : ''} (el ticket va en el PDF)</div>
+    <div class="tablewrap"><table class="asigtable" id="exphist-gastos"><thead><tr><th>Fecha</th><th>Concepto</th><th>Monto</th><th>Lo pagó</th></tr></thead>
+    <tbody>${exphistGastos.map(g=>`<tr><td>${g._fecha ? new Date(g._fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</td><td>${escaparHtml(g.concepto)}</td><td>$${Number(g.monto).toLocaleString('es-UY')}</td><td>${g.pagado_por==='familia'?'La familia (a su favor)':'La niñera (se cobra)'}</td></tr>`).join('')}</tbody></table></div>` : '';
   const totalCobro = items.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
   const saldoPend = Math.round(exphistAjustes.reduce((t,a)=>t+pendienteAjuste(a),0)*100)/100;
   const ajustesHtml = exphistAjustes.length ? `
@@ -290,6 +309,7 @@ async function generarVistaPreviaHistorialPDF(){
         <td class="hist-detalle" title="${escaparHtml(r.notas)}">${escaparHtml(r.notas||'—')}</td>
       </tr>`).join('')}</tbody>
     </table></div>
+    ${gastosHtml}
     ${ajustesHtml}
     <button class="btn primary" style="width:100%;margin-top:12px;" onclick="descargarHistorialPDF(${argJs(desde)},${argJs(hasta)})">Descargar PDF</button>
   `;
@@ -325,6 +345,19 @@ async function descargarHistorialPDF(desde, hasta){
     headStyles:{fillColor:[117,124,187]},
     columnStyles:{6:{cellWidth:75}},
   });
+  if(exphistGastos.length){
+    const y = (doc.lastAutoTable?.finalY || 35) + 10;
+    const totalGastosFamilia = exphistGastos.filter(g=>g.pagado_por==='ninera').reduce((t,g)=>t+(Number(g.monto)||0),0);
+    doc.setFontSize(11);
+    doc.text(`Gastos extra${totalGastosFamilia ? ` a cargo de la familia: $${totalGastosFamilia.toLocaleString('es-UY')}` : ''}`, 14, y);
+    doc.autoTable({
+      startY: y + 4,
+      head: [['Fecha','Concepto','Monto','Lo pagó']],
+      body: exphistGastos.map(g=>[fmtFecha(g._fecha), g.concepto||'', `$${Number(g.monto).toLocaleString('es-UY')}`, g.pagado_por==='familia'?'La familia (a su favor)':'La niñera (se cobra)']),
+      styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
+      headStyles:{fillColor:[117,124,187]},
+    });
+  }
   if(exphistAjustes.length){
     const saldoPend = Math.round(exphistAjustes.reduce((t,a)=>t+pendienteAjuste(a),0)*100)/100;
     const y = (doc.lastAutoTable?.finalY || 35) + 10;
@@ -338,8 +371,40 @@ async function descargarHistorialPDF(desde, hasta){
       headStyles:{fillColor:[117,124,187]},
     });
   }
+  // Los tickets, uno por página (el bucket es privado: link firmado que vence enseguida).
+  for(const g of exphistGastos){
+    doc.addPage();
+    doc.setFontSize(11);
+    doc.text(`Ticket: ${g.concepto} · $${Number(g.monto).toLocaleString('es-UY')} · ${fmtFecha(g._fecha)}`, 14, 16);
+    const img = await imagenComprobanteParaPDF(g.comprobante);
+    if(img){
+      const maxW = 260, maxH = 170;
+      const k = Math.min(maxW/img.w, maxH/img.h, 1);
+      doc.addImage(img.dataUrl, 'JPEG', 14, 22, img.w*k, img.h*k);
+    } else {
+      doc.setFontSize(9);
+      doc.text('No se pudo traer la foto del ticket (está en la app, en el registro).', 14, 26);
+    }
+  }
   doc.save(`historial-parents-break-${desde}-a-${hasta}.pdf`);
   toast('PDF descargado.');
+}
+// Trae el ticket del bucket privado y lo pasa a JPEG con un canvas (sirve también para
+// formatos que jsPDF no lee, como las fotos HEIC del celular). Medidas en puntos para el PDF.
+async function imagenComprobanteParaPDF(ruta){
+  try{
+    const { data, error } = await sb.storage.from('comprobantes').createSignedUrl(ruta, 120);
+    if(error || !data?.signedUrl) return null;
+    const blob = await (await fetch(data.signedUrl)).blob();
+    const url = URL.createObjectURL(blob);
+    const im = await new Promise((res, rej)=>{ const i = new Image(); i.onload = ()=>res(i); i.onerror = rej; i.src = url; });
+    const escala = Math.min(1, 1600/Math.max(im.naturalWidth, im.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(im.naturalWidth*escala); c.height = Math.round(im.naturalHeight*escala);
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    return { dataUrl: c.toDataURL('image/jpeg', 0.85), w: c.width, h: c.height };
+  }catch(e){ return null; }
 }
 function renderSitHistorial(){
   const cont = document.getElementById('sithist-lista');
@@ -447,6 +512,7 @@ function sitFormHTML(){
       </div>
     </div>
     <div id="sit-sin-tarifa-box"></div>
+    <div id="sit-gastos-box" style="margin-top:12px;"></div>
     <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="sit-notas"></textarea></div>
     <div class="actions">
       <button class="btn primary" onclick="conGuardado(this, ()=>guardarSitting())">${sitEditId ? 'Guardar cambios' : 'Guardar registro'}</button>
@@ -544,6 +610,7 @@ function abrirModalSitForm(id=null){
   sitOrigenAuto = !r;
   sitOrigenCoord = null; sitDestinoCoord = null;
   abrirModal(sitFormHTML());
+  pintarGastosExtraForm(id);
   setTimeout(()=>{
     const campos = document.getElementById('sit-camposTipo');
     if(campos) campos.innerHTML = sitCamposTipoHTML();
@@ -1345,6 +1412,12 @@ async function guardarSitting(){
   }
   // Un monto negativo (un "-" de más al tipear) deformaba Finanzas sin avisar (05/10/2026).
   if(registro.cobro_familia < 0 || registro.pago_ninera < 0){ toast('Los montos no pueden ser negativos.', 'bad'); return; }
+  // Gastos extra nuevos: se revisan ANTES de guardar el registro (concepto, monto y foto).
+  const gastosNuevos = leerGastosExtraNuevos();
+  if(gastosNuevos.error){ toast(gastosNuevos.error, 'bad'); return; }
+  if(gastosNuevos.lista.some(g=>g.pagado_por==='familia') && !registro.familia_id){
+    toast('Para un gasto que pagó la familia, la familia tiene que estar cargada (elegila de la lista).', 'bad'); return;
+  }
   let yaAvisadoDuplicado = false;
   if(!sitEditId){
     const existentes = await chequearRegistroExistenteMismoDia(nineraNombre, registro.familia_id, fecha, sitEditId);
@@ -1367,13 +1440,19 @@ async function guardarSitting(){
     const choqueFamilia = await chequearFamiliaYaCubierta(registro.familia_id, fecha, registro.hora_inicio, registro.hora_fin, nineraNombre, sitEditId);
     if(!(await avisarSiFamiliaYaCubierta(choqueFamilia, familiaNombre, 'Sí, van dos'))) return;
   }
-  let error;
+  let error, sitGuardadoId = sitEditId;
   if(sitEditId){
     ({ error } = await sb.from('sittings_traslados').update(registro).eq('id', sitEditId));
   } else {
-    ({ error } = await sb.from('sittings_traslados').insert(registro));
+    let creado;
+    ({ data: creado, error } = await sb.from('sittings_traslados').insert(registro).select('id').single());
+    sitGuardadoId = creado?.id || null;
   }
   if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  if(gastosNuevos.lista.length){
+    const fallo = await guardarGastosExtra(sitGuardadoId, gastosNuevos.lista, registro);
+    if(fallo){ toast('El registro se guardó, pero '+fallo, 'bad'); }
+  }
   const esFijo = document.getElementById('sit-esfijo')?.checked;
   if(esFijo){
     const dias = [...document.querySelectorAll('#sit-fijo-dias .daybtn.selected')].map(b=>b.dataset.dia);
@@ -1401,6 +1480,132 @@ async function guardarSitting(){
   cerrarModal();
   cargarSitLista();
 }
+/* ---- Gastos extra con comprobante (08/10/2026) ----
+   Uno o más por registro: concepto, monto, foto del ticket (obligatoria) y quién lo pagó.
+   - La niñera: se le cobra a la familia tal cual y se le reintegra en su pago (aparecen
+     en Por cobrar / Por pagar, no en el facturado ni en el margen).
+   - La familia: queda como saldo a favor de la familia (ajustes_saldo).
+   Los tickets van al bucket privado "comprobantes": se ven con un link que vence. */
+async function pintarGastosExtraForm(sitId){
+  const box = document.getElementById('sit-gastos-box');
+  if(!box) return;
+  let existentes = [];
+  if(typeof gastosExtraDisponible!=='undefined' && !gastosExtraDisponible){ box.innerHTML = ''; return; }
+  const consulta = sitId
+    ? sb.from('gastos_extra').select('*').eq('sitting_id', sitId).order('created_at')
+    : sb.from('gastos_extra').select('id').limit(1);
+  const { data, error } = await consulta;
+  if(error){
+    if(esFaltaTabla(error)){ gastosExtraDisponible = false; box.innerHTML = ''; return; }
+    box.innerHTML = errBox(error); return;
+  }
+  if(sitId) existentes = data||[];
+  if(!document.getElementById('sit-gastos-box')) return;
+  const quien = g => g.pagado_por==='familia' ? 'lo pagó la familia (saldo a su favor)' : 'lo pagó la niñera';
+  const estado = g => g.pagado_por==='familia' ? '' : ` · ${g.cobrado?'cobrado':'sin cobrar'} · ${g.reintegrado?'reintegrado':'sin reintegrar'}`;
+  box.innerHTML = `
+    <div class="card-section-title" style="margin:0 0 4px;">Gastos extra</div>
+    <div class="helper" style="margin:0 0 6px;">Lo que se compró para el niño (comida, Uber...). No es ganancia: se cobra o se descuenta tal cual.</div>
+    <div id="sit-gastos-existentes">${existentes.map(g=>`<div class="agendarow gasto-existente" style="border-bottom:1px solid var(--line);">
+      <div><div>${escaparHtml(g.concepto)} · <b>$${Number(g.monto).toLocaleString('es-UY')}</b></div><div class="helper" style="margin:2px 0 0;">${quien(g)}${estado(g)}</div></div>
+      <div style="display:flex;gap:6px;">
+        <button type="button" class="smallbtn" onclick="verComprobanteGasto(${argJs(g.comprobante)})">Ver ticket</button>
+        ${!g.cobrado && !g.reintegrado ? `<button type="button" class="smallbtn danger" onclick="conGuardado(this, ()=>quitarGastoExtra(${argJs(g.id)}, ${argJs(sitId)}))">Quitar</button>` : ''}
+      </div></div>`).join('')}</div>
+    <div id="sit-gastos-nuevos"></div>
+    <button type="button" class="smallbtn" id="sit-gasto-agregar" onclick="agregarFilaGastoExtra()">+ Agregar gasto extra</button>`;
+}
+// Las filas nuevas se agregan al DOM (no se vuelve a dibujar): así no se pierde la foto elegida.
+function agregarFilaGastoExtra(){
+  const cont = document.getElementById('sit-gastos-nuevos');
+  if(!cont) return;
+  const fila = document.createElement('div');
+  fila.className = 'gasto-nuevo';
+  fila.style.cssText = 'border:1px solid var(--line);border-radius:10px;padding:8px;margin:6px 0;';
+  fila.innerHTML = `
+    <div class="grid2">
+      <div class="field"><label>Concepto</label><input type="text" class="gasto-concepto" placeholder="Almuerzo para la niña"></div>
+      <div class="field"><label>Monto</label><div class="moneyfield"><input type="number" class="gasto-monto" min="0" step="0.01"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Lo pagó</label><select class="gasto-pagado-por">
+        <option value="ninera">La niñera (se le cobra a la familia y se le devuelve)</option>
+        <option value="familia">La familia (queda a su favor)</option>
+      </select></div>
+      <div class="field"><label>Foto del ticket</label><input type="file" class="gasto-foto" accept="image/*"></div>
+    </div>
+    <button type="button" class="smallbtn" onclick="this.closest('.gasto-nuevo').remove()">Sacar</button>`;
+  cont.appendChild(fila);
+}
+function leerGastosExtraNuevos(){
+  const lista = [];
+  for(const fila of document.querySelectorAll('#sit-gastos-nuevos .gasto-nuevo')){
+    const concepto = fila.querySelector('.gasto-concepto').value.trim();
+    const monto = Number(fila.querySelector('.gasto-monto').value);
+    const pagado_por = fila.querySelector('.gasto-pagado-por').value;
+    const archivo = fila.querySelector('.gasto-foto').files?.[0] || null;
+    if(!concepto && !fila.querySelector('.gasto-monto').value && !archivo) continue; // fila vacía
+    if(!concepto) return { error: 'Falta el concepto de un gasto extra.' };
+    if(!(monto > 0)) return { error: `El gasto "${concepto}" necesita un monto mayor a cero.` };
+    if(!archivo) return { error: `Falta la foto del ticket de "${concepto}".` };
+    lista.push({ concepto, monto, pagado_por, archivo });
+  }
+  return { lista };
+}
+// Sube el ticket, crea el saldo a favor si lo pagó la familia y guarda el gasto. Devuelve
+// null si salió todo bien, o el texto de lo que faltó.
+async function guardarGastosExtra(sitId, lista, registro){
+  if(!sitId) return 'no se pudieron guardar los gastos extra (no se supo el registro). Cargalos editándolo.';
+  for(const g of lista){
+    const ext = (g.archivo.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'') || 'jpg';
+    const ruta = `${sitId}/${crypto.randomUUID()}.${ext}`;
+    const { error: eUp } = await sb.storage.from('comprobantes').upload(ruta, g.archivo, { upsert:false });
+    if(eUp) return `no se pudo subir el ticket de "${g.concepto}" (${eUp.message}).`;
+    let ajusteId = null;
+    if(g.pagado_por==='familia'){
+      const fechaTxt = new Date(registro.fecha+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'});
+      const { data: aj, error: eAj } = await sb.from('ajustes_saldo').insert({
+        sujeto:'familia', familia_id: registro.familia_id, ninera_id:null, nombre: registro.familia_nombre,
+        monto: -g.monto, motivo: `Gasto extra que pagó la familia: ${g.concepto} (${fechaTxt})`, creado_por: registradoPorUsuario() || null,
+      }).select('id').single();
+      if(eAj){ await sb.storage.from('comprobantes').remove([ruta]); return `no se pudo cargar el saldo a favor de "${g.concepto}" (${eAj.message}).`; }
+      ajusteId = aj.id;
+    }
+    const { error: eG } = await sb.from('gastos_extra').insert({
+      sitting_id: sitId, concepto: g.concepto, monto: g.monto, pagado_por: g.pagado_por, comprobante: ruta,
+      ajuste_id: ajusteId, creado_por: registradoPorUsuario() || null,
+    });
+    if(eG){
+      if(ajusteId) await sb.from('ajustes_saldo').delete().eq('id', ajusteId);
+      await sb.storage.from('comprobantes').remove([ruta]);
+      return `no se pudo guardar el gasto "${g.concepto}" (${eG.message}).`;
+    }
+  }
+  return null;
+}
+async function verComprobanteGasto(ruta){
+  const { data, error } = await sb.storage.from('comprobantes').createSignedUrl(ruta, 600);
+  if(error || !data?.signedUrl){ toast('No se pudo abrir el ticket'+(error?': '+error.message:'.'), 'bad'); return; }
+  window.open(data.signedUrl, '_blank', 'noopener');
+}
+async function quitarGastoExtra(gastoId, sitId){
+  if(!(await confirmarAccion('¿Quitar este gasto extra? Se borra también su ticket.', 'Quitar'))) return;
+  const { data: g, error: e0 } = await sb.from('gastos_extra').select('*').eq('id', gastoId).single();
+  if(e0 || !g){ toast('No se encontró el gasto.', 'bad'); return; }
+  if(g.cobrado || g.reintegrado){ toast('Ese gasto ya se cobró o se reintegró: no se puede quitar.', 'bad'); return; }
+  if(g.ajuste_id){
+    const { data: aj } = await sb.from('ajustes_saldo').select('aplicado').eq('id', g.ajuste_id).single();
+    if(aj && Number(aj.aplicado)){ toast('El saldo a favor de ese gasto ya se usó en un cobro: no se puede quitar.', 'bad'); return; }
+  }
+  const { error } = await sb.from('gastos_extra').delete().eq('id', gastoId);
+  if(error){ toast('No se pudo quitar: '+error.message, 'bad'); return; }
+  const avisos = [];
+  if(g.ajuste_id){ const { error: e2 } = await sb.from('ajustes_saldo').delete().eq('id', g.ajuste_id); if(e2) avisos.push('el saldo a favor'); }
+  const { error: e3 } = await sb.storage.from('comprobantes').remove([g.comprobante]); if(e3) avisos.push('el ticket');
+  toast(avisos.length ? `Gasto quitado, pero no se pudo borrar ${avisos.join(' ni ')}.` : 'Gasto quitado.', avisos.length ? 'bad' : undefined);
+  pintarGastosExtraForm(sitId);
+}
+
 async function eliminarSitting(id){
   if(!(await confirmarAccion('¿Eliminar este registro? No se puede deshacer.'))) return;
   const { error } = await sb.from('sittings_traslados').delete().eq('id', id);
