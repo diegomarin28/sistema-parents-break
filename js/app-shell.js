@@ -166,6 +166,7 @@ async function renderDashboard(cont){
       </div>
       <div style="position:relative;height:170px;" id="finmesChartWrap"><canvas id="finmesChart" role="img" aria-label="Facturado y costos por mes, calculados a partir de los sittings, traslados y gastos generales reales"></canvas></div>
     </div>
+    <div id="dash-corrida"></div>
     <button class="pendbanner" onclick="setModulo('pend-hoy')">
       <div class="pendbanner-left">
         <div class="pendbanner-num" id="dash-pend-num">—</div>
@@ -174,6 +175,7 @@ async function renderDashboard(cont){
       <div class="pendbanner-link">Ver</div>
     </button>
     <div id="dash-autoconf"></div>
+    <div id="dash-faltan"></div>
     <div class="card">
       <h2>Sin resolver · hoy y mañana</h2>
       <div id="agenda" class="agendabox"><div class="empty">Cargando…</div></div>
@@ -307,6 +309,8 @@ async function loadDashboardData(){
   // cada día de un fijo ya tiene su fila cargada sola, así que un día sin ninguna fila solo
   // pasa si el proceso falló (o el fijo se creó hoy): vuelven a entrar, como alarma.
   cargarConfirmadosAutomaticos();
+  revisarCorridaFijos();
+  cargarDatosQueFaltan();
   try{
     const registros = okData(hoyR);
     const solicitudesConfirmadas = okData(solR);
@@ -351,6 +355,115 @@ async function loadDashboardData(){
     const el = document.getElementById('dash-pend-num');
     if(el) el.textContent = dashPendientesHoy.length;
   }catch(e){}
+}
+
+/* Aviso si la carga automática de las 03:00 no anduvo (mejora 7, 06/10/2026). Antes solo se
+   notaba porque los días aparecían en "Sin registrar". Dos señales: un previsto de hoy o de
+   antes que sigue sin confirmar (la corrida confirma los de hoy), o un día de un fijo de la
+   próxima semana sin su fila (ni la automática ni una cargada a mano). Se mira desde las 04:00
+   de Montevideo, con los fijos automáticos prendidos. "Cargarlos ahora" corre la misma carga. */
+function horaActualMontevideo(){
+  return Number(new Intl.DateTimeFormat('en-GB', {hour:'2-digit', hourCycle:'h23', timeZone:ZONA_NEGOCIO}).format(new Date()));
+}
+async function revisarCorridaFijos(){
+  const box = document.getElementById('dash-corrida');
+  await esperarConfigFijos();
+  if(!box) return;
+  if(!fijosAutomaticosActivos || horaActualMontevideo() < 4){ box.innerHTML = ''; return; }
+  const hoy = todayISO(), hasta = sumarDiasISO(hoy, 6);
+  const [{data:sinConfirmar, error:e1}, {data:asigs, error:e2}, {data:filas, error:e3}, pausas] = await Promise.all([
+    sb.from('sittings_traslados').select('id').eq('estado', 'previsto').lte('fecha', hoy).limit(1),
+    sb.from('asignaciones').select('*'),
+    sb.from('sittings_traslados').select('asignacion_id,fecha,familia_id,ninera_nombre').gte('fecha', hoy).lte('fecha', hasta),
+    cargarPausasFijos(),
+  ]);
+  if(!document.getElementById('dash-corrida')) return;
+  if(e1 || e2 || e3){ box.innerHTML = ''; return; } // sin datos no se acusa a nadie
+  const porAsig = new Set((filas||[]).filter(r=>r.asignacion_id).map(r=>r.asignacion_id+'|'+r.fecha));
+  const aMano = new Set((filas||[]).filter(r=>!r.asignacion_id).map(r=>r.fecha+'|'+r.familia_id+'|'+normaliza(r.ninera_nombre||'')));
+  let faltan = 0;
+  rangoFechas(hoy, hasta).forEach(fecha=>{
+    const dia = diaSemanaDeISO(fecha);
+    (asigs||[]).forEach(a=>{
+      if(!Array.isArray(a.dias) || !a.dias.includes(dia) || !asignacionVigenteEn(a, fecha) || fijoPausadoEn(pausas, a.id, fecha)) return;
+      if(porAsig.has(a.id+'|'+fecha) || aMano.has(fecha+'|'+a.familia_id+'|'+normaliza(a.ninera_nombre||''))) return;
+      faltan++;
+    });
+  });
+  const viejos = (sinConfirmar||[]).length > 0;
+  if(!faltan && !viejos){ box.innerHTML = ''; return; }
+  const que = [faltan ? `${faltan} ${faltan===1?'día':'días'} de fijos de esta semana sin cargar` : '', viejos ? 'días de hoy o anteriores sin confirmar' : ''].filter(Boolean).join(' y ');
+  box.innerHTML = `<div class="warnbox corrida-aviso" style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <div style="flex:1;min-width:200px;"><b>La carga automática de los fijos de esta noche no anduvo.</b> Hay ${que}. Avisale a Diego.</div>
+    <button class="smallbtn" onclick="conGuardado(this, ()=>cargarFijosAhora())">Cargarlos ahora</button>
+  </div>`;
+}
+async function cargarFijosAhora(){
+  const ok = await sincronizarPrevistosFijos();
+  if(ok === false) return; // sincronizarPrevistosFijos ya avisó qué falló
+  toast('Listo: los fijos quedaron cargados.');
+  await revisarCorridaFijos();
+  if(document.getElementById('dash-pend-num')) loadDashboardData();
+}
+
+/* Datos que faltan (mejora 6, 06/10/2026): lo que hace que pagos, cobros y previstos no salgan
+   solos. Solo de quien trabaja ahora (con un fijo vigente o algo en los últimos 60 días), para
+   que la lista sea corta: niñeras sin teléfono o sin cuenta para pagarles, y familias con
+   sittings sin la tarifa por hora (los previstos y el cálculo salen en $0). */
+let dashDatosFaltan = [];
+async function cargarDatosQueFaltan(){
+  const box = document.getElementById('dash-faltan');
+  if(!box) return;
+  const hoy = todayISO();
+  const [{data:nins, error:e1}, {data:fams, error:e2}, {data:asigs, error:e3}, {data:sits, error:e4}] = await Promise.all([
+    sb.from('ninieras').select('id,nombre,telefono,cuenta_bancaria,activa').eq('activa', true),
+    sb.from('familias').select('id,nombre,cobro_hora,pago_hora'),
+    sb.from('asignaciones').select('*'),
+    sinPrevistos(sb.from('sittings_traslados').select('familia_id,ninera_id,ninera_nombre,tipo')).gte('fecha', sumarDiasISO(hoy, -60)).lte('fecha', hoy),
+  ]);
+  if(!document.getElementById('dash-faltan')) return;
+  if(e1 || e2 || e3 || e4){ box.innerHTML = ''; return; }
+  const vigentes = (asigs||[]).filter(a=>!asignacionTerminada(a, hoy));
+  const ninTrabaja = new Set(), ninTrabajaNombre = new Set(), famSitting = new Set();
+  vigentes.forEach(a=>{
+    if(a.ninera_id) ninTrabaja.add(a.ninera_id); else ninTrabajaNombre.add(normaliza(a.ninera_nombre||''));
+    if(tipoAsignacion(a)==='sitting' && a.familia_id) famSitting.add(a.familia_id);
+  });
+  (sits||[]).forEach(r=>{
+    if(r.ninera_id) ninTrabaja.add(r.ninera_id); else ninTrabajaNombre.add(normaliza(r.ninera_nombre||''));
+    if(r.tipo==='sitting' && r.familia_id) famSitting.add(r.familia_id);
+  });
+  const sinCuenta = c => !(Array.isArray(c) ? c.some(x=>String(x||'').trim()) : String(c||'').trim());
+  const items = [];
+  (nins||[]).filter(n=>ninTrabaja.has(n.id) || ninTrabajaNombre.has(normaliza(n.nombre||''))).forEach(n=>{
+    const falta = [!String(n.telefono||'').trim() ? 'el teléfono' : '', sinCuenta(n.cuenta_bancaria) ? 'la cuenta para pagarle' : ''].filter(Boolean);
+    if(falta.length) items.push({tipo:'ninera', id:n.id, nombre:n.nombre, falta:falta.join(' y ')});
+  });
+  (fams||[]).filter(f=>famSitting.has(f.id)).forEach(f=>{
+    const falta = [!Number(f.cobro_hora) ? 'cuánto se le cobra por hora' : '', !Number(f.pago_hora) ? 'cuánto se le paga a la niñera por hora' : ''].filter(Boolean);
+    if(falta.length) items.push({tipo:'familia', id:f.id, nombre:f.nombre, falta:falta.join(' y ')});
+  });
+  dashDatosFaltan = items.sort((a,b)=>a.tipo.localeCompare(b.tipo) || String(a.nombre||'').localeCompare(String(b.nombre||''), 'es'));
+  if(!dashDatosFaltan.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="card datos-faltan-card">
+    <h2 style="margin:0 0 4px;">Datos que faltan (${dashDatosFaltan.length})</h2>
+    <div class="helper" style="margin:0 0 8px;">De niñeras y familias con las que se trabaja ahora. Sin estos datos, los pagos, los cobros y los fijos no salen solos.</div>
+    ${dashDatosFaltan.map(it=>`<div class="agendarow" style="border-bottom:1px solid var(--line);gap:8px;flex-wrap:wrap;">
+      <div><b>${escaparHtml(it.nombre||'(sin nombre)')}</b> <span class="helper" style="margin:0;">· ${it.tipo==='ninera'?'niñera':'familia'} · falta ${escaparHtml(it.falta)}</span></div>
+      <button class="smallbtn" onclick="abrirFichaDesdeHoy(${argJs(it.tipo)}, ${argJs(it.id)})">Completar</button>
+    </div>`).join('')}
+  </div>`;
+}
+async function abrirFichaDesdeHoy(tipo, id){
+  // El módulo carga su lista después de dibujarse: se espera a que esté (hasta 5 s).
+  const esFamilia = tipo==='familia';
+  await setModulo(esFamilia ? 'familias' : 'ninieras');
+  for(let i=0; i<50; i++){
+    const lista = esFamilia ? familiasItems : ninierasItems;
+    if((lista||[]).some(x=>x.id===id)) break;
+    await new Promise(r=>setTimeout(r, 100));
+  }
+  if(esFamilia) verFamilia(id); else if((ninierasItems||[]).some(x=>x.id===id)) await verNinera(id);
 }
 
 /* Confirmados automáticamente (fijos automáticos, 06/10/2026): los días de los fijos se

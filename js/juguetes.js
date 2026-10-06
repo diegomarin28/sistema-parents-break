@@ -149,12 +149,13 @@ function quitarFotoJuguete(){
   if(input) input.value = '';
 }
 async function subirFotoJuguete(input){
-  const file = input.files[0];
-  if(!file) return;
+  const original = input.files[0];
+  if(!original) return;
   const status = document.getElementById('jug-foto-status');
   status.textContent = 'Subiendo...';
+  const file = await achicarFoto(original);
   const path = `juguete-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g,'_')}`;
-  const { error } = await sb.storage.from('juguetes-fotos').upload(path, file, { upsert:true });
+  const { error } = await sb.storage.from('juguetes-fotos').upload(path, file, { upsert:true, contentType: file.type || undefined });
   if(error){ status.textContent = 'Error al subir: '+error.message; return; }
   const { data:pub } = sb.storage.from('juguetes-fotos').getPublicUrl(path);
   jugFotoUrlPendiente = pub.publicUrl;
