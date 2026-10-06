@@ -204,6 +204,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   extracto de Itaú ya no llega. Cuando haya un extracto de Mercado Pago, se arma su lector en
   `LECTORES_EXTRACTO` (finanzas.js). Los avisos de "Falta subir el extracto de Itaú" (campanita
   y enviar-push-urgentes) hay que adaptarlos entonces.
+- WhatsApp (06/10/2026): whatsapp-webhook ya publicado exige la firma de Meta y hoy rechaza
+  todo. Cuando arranquemos con WhatsApp, cargar `WHATSAPP_APP_SECRET` (App Secret de la app de
+  Meta) en Supabase > Edge Functions > Secrets.
 - `temporada-ninera` (S3): no pide el link con token y acepta nombre + celular nuevo. Se
   endurece en noviembre, cuando termine la temporada (el formulario está en uso todo octubre).
   Tiene además un error de tipos (TS18046) que ya traía la versión publicada.
