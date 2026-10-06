@@ -756,107 +756,137 @@ alter table public.whatsapp_eventos_raw enable row level security;
 alter table public.zona_grupos enable row level security;
 alter table public.zonas_confirmadas enable row level security;
 
+-- Usuarias autorizadas (11/10/2026): las políticas no dejan entrar a cualquier cuenta con
+-- sesión, solo a las de esta tabla (activas). RLS sin políticas: se administra con SQL.
+-- Las cuentas se cargan aparte, por id (ver supabase/migraciones/20261011_usuarias_autorizadas.sql).
+create table public.usuarias_autorizadas (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  rol text not null check (rol in ('duena', 'desarrollo', 'socia')),
+  activa boolean not null default true,
+  alta_en timestamp with time zone not null default now()
+);
+alter table public.usuarias_autorizadas enable row level security;
+-- Copia de las políticas de antes del cambio (para _DESHACER). Sin políticas: no la ve la app.
+create table public.respaldo_politicas_20261011 (
+  schemaname name, tablename name, policyname name, permissive text, roles name[], cmd text, qual text, with_check text
+);
+alter table public.respaldo_politicas_20261011 enable row level security;
+
+create function public.es_usuaria_autorizada()
+returns boolean
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+  select exists (select 1 from public.usuarias_autorizadas where user_id = auth.uid() and activa)
+$$;
+revoke execute on function public.es_usuaria_autorizada() from public;
+grant execute on function public.es_usuaria_autorizada() to authenticated, anon;
+
+-- Todas las políticas (tablas y Storage, salvo la lectura pública de fotos) piden una
+-- cuenta autorizada: (select public.es_usuaria_autorizada()).
 create policy app_config_authenticated_all on public.app_config as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy solo_autenticados_todo on public.asignaciones as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy solo_autenticados_todo on public.candidatas as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy authenticated_all_carsitting_datos on public.carsitting_datos as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy contratos_authenticated_all on public.contratos as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy "authenticated all" on public.entrevista_preguntas as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy solo_autenticados_todo on public.entrevistas as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy solo_autenticados_todo on public.familias as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy fechas_marketing_authenticated_all on public.fechas_marketing as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy gastos_fijos_authenticated_all on public.gastos_fijos as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy gastos_generales_authenticated_all on public.gastos_generales as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy "authenticated all" on public.hijos_familia as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy authenticated_all on public.incidentes as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy authenticated_all on public.intermediaciones_enrique as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy authenticated_all on public.intermediaciones_enrique_pool as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy authenticated_all on public.intermediaciones_eventos as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy authenticated_all on public.intermediaciones_eventos_ninieras as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy solo_autenticados_todo on public.juguetes as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy solo_autenticados_todo on public.juguetes_movimientos as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy solo_autenticados_todo on public.ninieras as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy notif_push_enviadas_authenticated_all on public.notif_push_enviadas as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy notif_push_preferencias_authenticated_all on public.notif_push_preferencias as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy notificaciones_leidas_authenticated_all on public.notificaciones_leidas as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy push_subscriptions_authenticated_all on public.push_subscriptions as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy resenas_ninieras_authenticated_all on public.resenas_ninieras as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy sittings_historial_leer on public.sittings_historial as permissive for select to authenticated
-  using (true);
+  using ((select public.es_usuaria_autorizada()));
 create policy solo_autenticados_todo on public.asignaciones_pausas as permissive for all to public
-  using ((select auth.role()) = 'authenticated') with check ((select auth.role()) = 'authenticated');
+  using ((select public.es_usuaria_autorizada())) with check ((select public.es_usuaria_autorizada()));
 create policy solo_autenticados_todo on public.ajustes_saldo as permissive for all to public
-  using ((select auth.role()) = 'authenticated') with check ((select auth.role()) = 'authenticated');
+  using ((select public.es_usuaria_autorizada())) with check ((select public.es_usuaria_autorizada()));
 create policy solo_autenticados_todo on public.gastos_extra as permissive for all to public
-  using ((select auth.role()) = 'authenticated') with check ((select auth.role()) = 'authenticated');
+  using ((select public.es_usuaria_autorizada())) with check ((select public.es_usuaria_autorizada()));
 create policy sittings_traslados_authenticated_all on public.sittings_traslados as permissive for all to public
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy solicitud_ninieras_authenticated_all on public.solicitud_ninieras as permissive for all to authenticated
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy solicitudes_authenticated_all on public.solicitudes as permissive for all to authenticated
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy tarifas_traslado_config_authenticated_all on public.tarifas_traslado_config as permissive for all to authenticated
-  using ((( SELECT auth.role() AS role) = 'authenticated'::text))
-  with check ((( SELECT auth.role() AS role) = 'authenticated'::text));
+  using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
+  with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy "authenticated all" on public.zona_grupos as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 create policy "authenticated all" on public.zonas_confirmadas as permissive for all to authenticated
-  using (true)
-  with check (true);
+  using ((select public.es_usuaria_autorizada()))
+  with check ((select public.es_usuaria_autorizada()));
 
 -- ----------------------------------------------------------------------------
 -- Storage: 3 buckets públicos de lectura y uno privado (comprobantes, 08/10/2026)
@@ -869,31 +899,31 @@ insert into storage.buckets (id, name, public) values
   ('comprobantes', 'comprobantes', false)
 on conflict (id) do nothing;
 
--- comprobantes: privado, solo usuarias logueadas (tickets de gastos extra).
+-- comprobantes: privado, solo usuarias autorizadas (tickets de gastos extra).
 create policy comprobantes_autenticados_leer on storage.objects as permissive for select to public
-  using (((bucket_id = 'comprobantes'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+  using (((bucket_id = 'comprobantes'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy comprobantes_autenticados_subir on storage.objects as permissive for insert to public
-  with check (((bucket_id = 'comprobantes'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+  with check (((bucket_id = 'comprobantes'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy comprobantes_autenticados_borrar on storage.objects as permissive for delete to public
-  using (((bucket_id = 'comprobantes'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+  using (((bucket_id = 'comprobantes'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 
 -- candidatas-fotos no tiene políticas desde el 05/10/2026: solo sube la Edge Function
 -- candidatas-webhook (clave de servicio) y las fotos se ven por URL pública. Antes había
 -- dos políticas que dejaban subir y listar sin login.
 create policy juguetes_fotos_authenticated_delete on storage.objects as permissive for delete to public
-  using (((bucket_id = 'juguetes-fotos'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+  using (((bucket_id = 'juguetes-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy juguetes_fotos_authenticated_update on storage.objects as permissive for update to public
-  using (((bucket_id = 'juguetes-fotos'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+  using (((bucket_id = 'juguetes-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy juguetes_fotos_authenticated_write on storage.objects as permissive for insert to public
-  with check (((bucket_id = 'juguetes-fotos'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+  with check (((bucket_id = 'juguetes-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy juguetes_fotos_public_read on storage.objects as permissive for select to public
   using ((bucket_id = 'juguetes-fotos'::text));
 create policy ninieras_fotos_authenticated_delete on storage.objects as permissive for delete to public
-  using (((bucket_id = 'ninieras-fotos'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+  using (((bucket_id = 'ninieras-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy ninieras_fotos_authenticated_update on storage.objects as permissive for update to public
-  using (((bucket_id = 'ninieras-fotos'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+  using (((bucket_id = 'ninieras-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy ninieras_fotos_authenticated_write on storage.objects as permissive for insert to public
-  with check (((bucket_id = 'ninieras-fotos'::text) AND (( SELECT auth.role() AS role) = 'authenticated'::text)));
+  with check (((bucket_id = 'ninieras-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
 create policy ninieras_fotos_public_read on storage.objects as permissive for select to public
   using ((bucket_id = 'ninieras-fotos'::text));
 
