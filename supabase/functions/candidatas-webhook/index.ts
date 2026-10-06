@@ -63,6 +63,21 @@ function normaliza(s: string): string {
   return (s || "").toString().trim().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
+// Compara el secreto sin cortar en el primer carácter distinto: así el tiempo de respuesta
+// no da pistas de cuántos caracteres acertó quien prueba claves (06/10/2026).
+function mismoSecreto(recibido: string | null, esperado: string | undefined): boolean {
+  if (!esperado || !recibido) return false;
+  const a = new TextEncoder().encode(recibido), b = new TextEncoder().encode(esperado);
+  if (a.length !== b.length) return false;
+  let dif = 0;
+  for (let i = 0; i < a.length; i++) dif |= a[i] ^ b[i];
+  return dif === 0;
+}
+
+// Foto de la candidata: solo imágenes, con la extensión que corresponde (antes la extensión
+// salía de lo que dijera el pedido).
+const FOTO_EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif" };
+
 function esSi(raw: string): boolean {
   return normaliza(raw || "").startsWith("si");
 }
@@ -119,15 +134,18 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
   }
 
-  const secret = req.headers.get("x-webhook-secret");
-  const expected = Deno.env.get("WEBHOOK_SECRET");
-  if (!expected || secret !== expected) {
+  if (!mismoSecreto(req.headers.get("x-webhook-secret"), Deno.env.get("WEBHOOK_SECRET"))) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
+  // Tope de tamaño (la foto viene en base64 y una foto de celular pesa unos 5 MB): un pedido gigante no llega a procesarse.
+  const texto = await req.text();
+  if (texto.length > 20 * 1024 * 1024) {
+    return new Response(JSON.stringify({ error: "Pedido demasiado grande" }), { status: 413 });
+  }
   let body: any;
   try {
-    body = await req.json();
+    body = JSON.parse(texto);
   } catch {
     return new Response(JSON.stringify({ error: "JSON invalido" }), { status: 400 });
   }
@@ -230,14 +248,17 @@ Deno.serve(async (req: Request) => {
     console.log("ZONAS no se pudieron traducir: " + String(e));
   }
 
-  if (body.foto_base64 && candidata.autoriza_foto === true) {
+  const fotoMime = String(body.foto_mime || "image/jpeg").toLowerCase();
+  if (body.foto_base64 && candidata.autoriza_foto === true && !FOTO_EXT[fotoMime]) {
+    console.log("FOTO descartada: no es una imagen (" + fotoMime.slice(0, 40) + ")");
+  } else if (body.foto_base64 && candidata.autoriza_foto === true) {
     try {
       const bytes = Uint8Array.from(atob(body.foto_base64), (c) => c.charCodeAt(0));
-      const ext = (body.foto_mime || "image/jpeg").split("/")[1] || "jpg";
+      const ext = FOTO_EXT[fotoMime];
       const path = `${crypto.randomUUID()}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from("candidatas-fotos")
-        .upload(path, bytes, { contentType: body.foto_mime || "image/jpeg", upsert: false });
+        .upload(path, bytes, { contentType: fotoMime, upsert: false });
       if (upErr) {
         console.log("FOTO error de upload: " + upErr.message);
       } else {

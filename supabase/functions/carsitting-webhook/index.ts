@@ -22,6 +22,17 @@ const CAMPOS: { key: string; headers: string[] }[] = [
   { key: "foto_asientos_url", headers: ["Foto de los asientos de atrás del auto"] },
 ];
 
+// Compara el secreto sin cortar en el primer carácter distinto: así el tiempo de respuesta
+// no da pistas de cuántos caracteres acertó quien prueba claves (06/10/2026).
+function mismoSecreto(recibido: string | null, esperado: string | undefined): boolean {
+  if (!esperado || !recibido) return false;
+  const a = new TextEncoder().encode(recibido), b = new TextEncoder().encode(esperado);
+  if (a.length !== b.length) return false;
+  let dif = 0;
+  for (let i = 0; i < a.length; i++) dif |= a[i] ^ b[i];
+  return dif === 0;
+}
+
 function normaliza(s: string): string {
   return (s || "").toString().trim().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
@@ -31,15 +42,18 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
   }
 
-  const secret = req.headers.get("x-webhook-secret");
-  const expected = Deno.env.get("WEBHOOK_SECRET");
-  if (!expected || secret !== expected) {
+  if (!mismoSecreto(req.headers.get("x-webhook-secret"), Deno.env.get("WEBHOOK_SECRET"))) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
+  // Tope de tamaño (el formulario manda solo texto y links): un pedido gigante no llega a procesarse.
+  const texto = await req.text();
+  if (texto.length > 1 * 1024 * 1024) {
+    return new Response(JSON.stringify({ error: "Pedido demasiado grande" }), { status: 413 });
+  }
   let body: any;
   try {
-    body = await req.json();
+    body = JSON.parse(texto);
   } catch {
     return new Response(JSON.stringify({ error: "JSON invalido" }), { status: 400 });
   }

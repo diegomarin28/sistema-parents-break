@@ -12,6 +12,18 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // no tiene horario de verano, el offset es fijo todo el año).
 // V8 (30/09/2026): recordatorio anual "Pedir la temporada de Punta" desde el 1 de octubre
 // a partir de las 9 (hora Montevideo), una vez por año (id temporada:AAAA).
+// V9 (06/10/2026, S4): solo la puede disparar el cron. Antes cualquiera con la URL la
+// disparaba. El cron manda el encabezado x-cron-secret con el valor de app_secrets
+// 'cron_push_secret' (migración 20261013_cron_push_secreto); sin esa clave, 401.
+
+function mismoSecreto(recibido: string | null, esperado: string | undefined): boolean {
+  if (!esperado || !recibido) return false;
+  const a = new TextEncoder().encode(recibido), b = new TextEncoder().encode(esperado);
+  if (a.length !== b.length) return false;
+  let dif = 0;
+  for (let i = 0; i < a.length; i++) dif |= a[i] ^ b[i];
+  return dif === 0;
+}
 
 const DEFAULTS_PUSH: Record<string, boolean> = {
   sin_asignar: true,
@@ -54,6 +66,9 @@ Deno.serve(async (req: Request) => {
 
     const { data: secrets } = await sb.from("app_secrets").select("clave,valor");
     const secretMap = Object.fromEntries((secrets || []).map((s: any) => [s.clave, s.valor]));
+    if (!mismoSecreto(req.headers.get("x-cron-secret"), secretMap["cron_push_secret"])) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    }
     const vapidPublic = secretMap["vapid_public_key"];
     const vapidPrivate = secretMap["vapid_private_key"];
     const vapidEmail = secretMap["vapid_contact_email"];
