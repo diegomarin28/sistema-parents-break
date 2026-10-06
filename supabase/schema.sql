@@ -15,7 +15,7 @@
 -- Pasos aparte (no son SQL): crear los usuarios en Authentication, desplegar las Edge
 -- Functions y cargar los secretos (app_secrets / Vault).
 --
--- Edge Functions desplegadas (código NO versionado en este repo todavía), todas con
+-- Edge Functions (código en supabase/functions/ desde el 06/10/2026), todas con
 -- verify_jwt = false:
 --   candidatas-webhook, resenas-webhook, carsitting-webhook, carsitting-recordatorio,
 --   whatsapp-webhook, enviar-push-urgentes, temporada-ninera
@@ -979,11 +979,15 @@ grant execute on function public.reprogramar_fechas_marketing_vencidas() to serv
 select cron.schedule('reprogramar-fechas-marketing', '0 6 * * *', $$select public.reprogramar_fechas_marketing_vencidas();$$);
 
 -- Cada 10 minutos: dispara la Edge Function de avisos push urgentes. En otro proyecto,
--- cambiar la URL por la de ese proyecto.
+-- cambiar la URL por la de ese proyecto. La función pide la clave x-cron-secret
+-- (app_secrets 'cron_push_secret', 13/10/2026): cargarla con un valor al azar.
 select cron.schedule('enviar-push-urgentes', '*/10 * * * *', $$
   select net.http_post(
     url := 'https://wvewzamdohrpfhpccvcz.supabase.co/functions/v1/enviar-push-urgentes',
-    headers := '{"Content-Type":"application/json"}'::jsonb,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', (select valor from public.app_secrets where clave = 'cron_push_secret')
+    ),
     body := '{}'::jsonb
   );
 $$);
