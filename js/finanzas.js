@@ -330,6 +330,7 @@ function filtrarFijosSemanaIncompleta(sits, esTrabajoFijo){
 }
 /* Números del resumen del mes (ver comentario en cargarFinanzas). */
 function resumenFinancieroMes(sitsTodos, gastosNegocio){
+  const hoy = todayISO();
   const suma = (lista, campo, cond=()=>true) => (lista||[]).filter(cond).reduce((s,r)=>s+(Number(r[campo])||0), 0);
   const facturado = suma(sitsTodos, 'cobro_familia');
   const costoNinieras = suma(sitsTodos, 'pago_ninera');
@@ -340,7 +341,10 @@ function resumenFinancieroMes(sitsTodos, gastosNegocio){
     gastos,
     cobrado: suma(sitsTodos, 'cobro_familia', r=>r.cobrado),
     porCobrar: suma(sitsTodos, 'cobro_familia', r=>!r.cobrado),
-    porPagar: suma(sitsTodos, 'pago_ninera', r=>!r.pagado),
+    // Como la lista de Por pagar (E7): lo de días que todavía no pasaron no se debe todavía
+    // (05/10/2026). Facturado y resultado sí lo cuentan, porque son del mes.
+    porPagar: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha <= hoy),
+    porPagarFuturo: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha > hoy),
     resultado: facturado - costoNinieras - gastos,
   };
 }
@@ -419,7 +423,7 @@ async function cargarFinanzas(){
     <div class="summarycard"><div class="statlabel">Facturado de ${monthLabel(finMes)}</div><div class="statnum" id="fin-facturado" style="font-size:19px;margin-top:3px;">${fmt(res.facturado)}</div></div>
     <div class="summarycard"><div class="statlabel">Cobrado (plata que ya entró)</div><div class="statnum" id="fin-cobrado" style="font-size:19px;margin-top:3px;color:var(--good);">${fmt(res.cobrado)}</div></div>
     <div class="summarycard"><div class="statlabel">Por cobrar</div><div class="statnum" id="fin-porcobrar" style="font-size:19px;margin-top:3px;color:var(--warn);">${fmt(res.porCobrar)}</div></div>
-    <div class="summarycard"><div class="statlabel">Por pagar a niñeras</div><div class="statnum" id="fin-porpagar" style="font-size:19px;margin-top:3px;color:var(--clay-text);">${fmt(res.porPagar)}</div></div>
+    <div class="summarycard"><div class="statlabel">Por pagar a niñeras</div><div class="statnum" id="fin-porpagar" style="font-size:19px;margin-top:3px;color:var(--clay-text);">${fmt(res.porPagar)}</div>${res.porPagarFuturo ? `<div class="helper" id="fin-porpagar-futuro" style="margin:2px 0 0;">Sin contar ${fmt(res.porPagarFuturo)} de días que todavía no pasaron.</div>` : ''}</div>
     <div class="summarycard fin-resultado" style="grid-column:1/-1;border-left:3px solid ${res.resultado>=0?'var(--good)':'var(--bad)'};">
       <div class="statlabel">Resultado de ${monthLabel(finMes)}</div>
       <div class="statnum" id="fin-resultado" style="font-size:21px;margin-top:3px;color:${res.resultado>=0?'var(--good)':'var(--bad)'};">${fmt(res.resultado)}</div>

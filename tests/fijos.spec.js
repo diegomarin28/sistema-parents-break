@@ -294,3 +294,74 @@ test.describe('app nueva con la base todavía sin migrar', () => {
     verificarLimpio(e, { ignorar: [/status of 404/] });
   });
 });
+
+// Fijo creado por error (05/10/2026): si todavía no pasó ningún día y no tiene nada
+// registrado, se puede borrar del todo con sus previstos. Si ya pasó algún día, solo se
+// termina. Hoy en los tests = domingo 04/10/2026.
+test.describe('borrar un fijo creado por error', () => {
+  const NUEVO = '40000000-0000-4000-8000-000000000031';
+  const prev = (id, fecha) => ({ id, tipo: 'sitting', registrado_por: 'Automático', asignacion_id: NUEVO, familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos',
+    ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', fecha, hora_inicio: '09:00:00', hora_fin: '12:00:00', termina_dia_siguiente: false,
+    cobro_familia: 1140, pago_ninera: 750, cobrado: false, pagado: false, cancelado: false, km: null, origen: null, destino: null, notas: null,
+    created_at: '2026-10-04T12:00:00Z', estado: 'previsto', generado_automatico: true, revisado_at: null });
+  function datosConFijoNuevo(desde) {
+    const d = datosBase();
+    d.asignaciones.push({ id: NUEVO, familia_id: ID.fDos, ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', cobro_hora: null, pago_hora: null,
+      created_at: '2026-10-04T12:00:00Z', dias: ['M', 'J'], hora_inicio: '09:00:00', hora_fin: '12:00:00', vigente_desde: desde, vigente_hasta: null, tipo: 'sitting' });
+    d.sittings_traslados.push(prev('71000000-0000-4000-8000-000000000001', '2026-10-06'), prev('71000000-0000-4000-8000-000000000002', '2026-10-08'));
+    return d;
+  }
+  test('todavía no pasó ningún día: se borra con sus previstos, con confirmación', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConFijoNuevo('2026-10-05') });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalTerminarFijo(id), NUEVO);
+    await expect(page.locator('#editmodal')).toContainText('con sus 2 días previstos');
+    await page.locator('#borrar-fijo-btn').click();
+    await expect(page.locator('.confirmmsg')).toContainText('No se puede deshacer');
+    await page.locator('#confirm-no').click();
+    expect(e.escrituras.filter(w => w.metodo === 'DELETE')).toHaveLength(0);
+    await page.locator('#borrar-fijo-btn').click();
+    await page.locator('#confirm-si').click();
+    await expect(page.locator('.toaststack .toast', { hasText: 'Fijo borrado.' })).toBeVisible();
+    expect(e.db.asignaciones.find(a => a.id === NUEVO)).toBeUndefined();
+    expect(e.db.sittings_traslados.filter(s => s.asignacion_id === NUEVO)).toHaveLength(0);
+    expect(e.db.asignaciones.find(a => a.id === ID.aFijo)).toBeTruthy();
+    verificarLimpio(e);
+  });
+  test('si ya pasó algún día, solo se puede terminar', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConFijoNuevo('2026-09-29') });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalTerminarFijo(id), NUEVO);
+    await expect(page.locator('#editmodal button', { hasText: 'Terminar el fijo' })).toBeVisible();
+    await expect(page.locator('#borrar-fijo-btn')).toHaveCount(0);
+    verificarLimpio(e);
+  });
+  test('con algo ya registrado (aunque sea futuro) no se ofrece borrar', async ({ page }) => {
+    const d = datosConFijoNuevo('2026-10-05');
+    d.sittings_traslados.find(s => s.fecha === '2026-10-06').estado = 'confirmado';
+    const e = await abrirApp(page, { datos: d });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalTerminarFijo(id), NUEVO);
+    await expect(page.locator('#borrar-fijo-btn')).toHaveCount(0);
+    verificarLimpio(e);
+  });
+  test('si se registró algo mientras el modal estaba abierto, no borra y avisa', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConFijoNuevo('2026-10-05') });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalTerminarFijo(id), NUEVO);
+    await expect(page.locator('#borrar-fijo-btn')).toBeVisible();
+    e.db.sittings_traslados.find(s => s.fecha === '2026-10-06').estado = 'confirmado';
+    await page.locator('#borrar-fijo-btn').click();
+    await expect(page.locator('#terminar-warn')).toContainText('no se puede borrar');
+    expect(e.escrituras.filter(w => w.metodo === 'DELETE')).toHaveLength(0);
+    verificarLimpio(e);
+  });
+  test('el fijo de siempre (empezó en setiembre) no ofrece borrar', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'familias');
+    await page.evaluate(id => abrirModalTerminarFijo(id), ID.aFijo);
+    await expect(page.locator('#editmodal button', { hasText: 'Terminar el fijo' })).toBeVisible();
+    await expect(page.locator('#borrar-fijo-btn')).toHaveCount(0);
+    verificarLimpio(e);
+  });
+});
