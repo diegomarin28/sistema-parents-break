@@ -405,6 +405,13 @@ async function guardarEdicionFamilia(id){
   cerrarModal();
   // Fijos automáticos: con tarifa o nombre nuevos se recalculan los previstos que nadie tocó.
   await sincronizarPrevistosFijos();
+  // Tarifa nueva: también el sitting de hoy de sus fijos, si lo cargó el proceso y nadie lo
+  // tocó (06/10/2026, alinearRegistroDeHoy en agenda.js).
+  const antes = familiasItems.find(x=>x.id===id);
+  if(antes && (String(antes.cobro_hora ?? '') !== String(cambios.cobro_hora ?? '') || String(antes.pago_hora ?? '') !== String(cambios.pago_hora ?? ''))){
+    const { data: fijosFam } = await sb.from('asignaciones').select('*').eq('familia_id', id);
+    for(const a of (fijosFam||[]).filter(a=>tipoAsignacion(a)==='sitting')) await alinearRegistroDeHoy(a.id, a, null, {noCancelar:true});
+  }
   if(errHijos) toast('Se guardó lo demás, pero no los hijos: '+errHijos.message, 'bad');
   else toast('Cambios guardados.');
   const scrollF1 = guardarScrollMainarea();

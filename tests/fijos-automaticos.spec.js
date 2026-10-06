@@ -443,3 +443,195 @@ test.describe('precio fijo de un traslado fijo', () => {
     verificarLimpio(e);
   });
 });
+
+// Cambios del fijo "desde hoy" (06/10/2026, decisión de Diego): el sitting de hoy ya se
+// confirmó solo a las 03:00 y el proceso de la noche no lo vuelve a tocar. Si la niñera, el
+// horario o el precio cambian desde hoy, el de hoy sigue al fijo; pausar desde hoy lo cancela.
+// Siempre que nadie lo haya tocado: si lo editaron (o ya está cobrado o pagado), avisa y no lo pisa.
+// Acá "hoy" es el lunes 05/10/2026 a las 10:00.
+test.describe('cambios del fijo desde hoy: el sitting de hoy sigue al fijo', () => {
+  const AHORA = '2026-10-05T10:00:00-03:00';
+  const hoyDe = e => e.db.sittings_traslados.find(s => s.id === P.lun5);
+  function datosHoy(extraHoy = {}) {
+    const d = datosActivos();
+    Object.assign(d.sittings_traslados.find(s => s.id === P.lun5), { estado: 'confirmado', ...extraHoy });
+    return d;
+  }
+  async function abrirFijoDel(page, fecha) {
+    await irAModulo(page, 'agenda');
+    await verAgendaDesde(page, '2026-10-05');
+    await abrirDia(page, fecha);
+  }
+  async function cambiarNinera(page, nombre) {
+    await page.locator(`#agenda-fija-ninera-${ID.aFijo}`).fill(nombre);
+    await page.locator('#editmodal .autocomplete-item', { hasText: nombre }).click();
+    await page.locator(`#agenda-fija-guardar-${ID.aFijo}`).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+  }
+  const avisos = page => page.locator('.toaststack .toast.bad');
+
+  test('cambiar la niñera desde hoy: el de hoy pasa a la niñera nueva y al fijo nuevo', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await abrirFijoDel(page, '2026-10-07');
+    await expect(page.locator(`#agenda-fija-desde-${ID.aFijo}`)).toHaveValue('2026-10-05');
+    await cambiarNinera(page, 'Carla Ejemplo');
+    const nuevo = escrituras(e, 'asignaciones', 'POST')[0];
+    expect(nuevo.cuerpo).toMatchObject({ ninera_nombre: 'Carla Ejemplo', vigente_desde: '2026-10-05' });
+    const nuevoId = e.db.asignaciones.find(a => a.ninera_nombre === 'Carla Ejemplo').id;
+    await expect.poll(() => hoyDe(e).ninera_nombre).toBe('Carla Ejemplo');
+    expect(hoyDe(e)).toMatchObject({ ninera_id: ID.nCarla, asignacion_id: nuevoId, generado_automatico: true, cancelado: false, cobro_familia: 1140, pago_ninera: 750 });
+    await expect(avisos(page)).toHaveCount(0);
+    verificarLimpio(e);
+  });
+
+  test('si el de hoy lo editaron a mano, avisa y no lo pisa', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy({ generado_automatico: false, hora_fin: '20:00:00', cobro_familia: 1520 }), ahora: AHORA });
+    await abrirFijoDel(page, '2026-10-07');
+    await cambiarNinera(page, 'Carla Ejemplo');
+    await expect(avisos(page).filter({ hasText: 'lo había cambiado alguien a mano' })).toBeVisible();
+    expect(hoyDe(e)).toMatchObject({ ninera_nombre: 'Ana Ficticia', asignacion_id: ID.aFijo, hora_fin: '20:00:00', cobro_familia: 1520 });
+    expect(escrituras(e, 'sittings_traslados', 'PATCH')).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('si el de hoy ya está pagado, tampoco lo toca', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy({ pagado: true }), ahora: AHORA });
+    await abrirFijoDel(page, '2026-10-07');
+    await cambiarNinera(page, 'Carla Ejemplo');
+    await expect(avisos(page).filter({ hasText: 'ya está cobrado o pagado' })).toBeVisible();
+    expect(hoyDe(e).ninera_nombre).toBe('Ana Ficticia');
+    verificarLimpio(e);
+  });
+
+  test('cambiar la niñera desde una fecha futura no toca el de hoy', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await abrirFijoDel(page, '2026-10-07');
+    await page.fill(`#agenda-fija-desde-${ID.aFijo}`, '2026-10-12');
+    await cambiarNinera(page, 'Carla Ejemplo');
+    expect(hoyDe(e)).toMatchObject({ ninera_nombre: 'Ana Ficticia', asignacion_id: ID.aFijo });
+    expect(escrituras(e, 'sittings_traslados', 'PATCH')).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('otro horario desde hoy: el de hoy toma el horario y los montos nuevos', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await abrirFijoDel(page, '2026-10-07');
+    await page.locator('#agenda-fija-edit-toggle').click();
+    await expect(page.locator('#agenda-fija-edit-desde')).toHaveValue('2026-10-05');
+    await page.selectOption('#agenda-fija-edit-hi-hh', '15');
+    await page.locator('#editmodal button', { hasText: 'Guardar horario/días desde esa fecha' }).click();
+    // 15 a 19 = 4 h a $380 / $250.
+    await expect.poll(() => hoyDe(e).hora_inicio).toBe('15:00');
+    expect(hoyDe(e)).toMatchObject({ hora_fin: '19:00', cobro_familia: 1520, pago_ninera: 1000, generado_automatico: true });
+    verificarLimpio(e);
+  });
+
+  test('otros días desde hoy y hoy ya no es uno: el de hoy se cancela', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await abrirFijoDel(page, '2026-10-07');
+    await page.locator('#agenda-fija-edit-toggle').click();
+    await page.locator('#agenda-fija-edit-dias .daybtn[data-dia="L"]').click(); // saca el lunes
+    await page.locator('#agenda-fija-edit-dias .daybtn[data-dia="J"]').click(); // agrega el jueves
+    await page.locator('#editmodal button', { hasText: 'Guardar horario/días desde esa fecha' }).click();
+    await expect.poll(() => hoyDe(e).cancelado).toBe(true);
+    expect(hoyDe(e)).toMatchObject({ cobro_familia: 0, pago_ninera: 0, notas: 'Cambió el horario del fijo: hoy no va' });
+    verificarLimpio(e);
+  });
+
+  test('pausar desde hoy cancela el de hoy ($0); si estaba cobrado, avisa', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalPausarFijo(id), ID.aFijo);
+    await expect(page.locator('#pausa-desde')).toHaveValue('2026-10-05');
+    await page.fill('#pausa-hasta', '2026-10-09');
+    await page.fill('#pausa-motivo', 'Vacaciones');
+    await page.locator('#editmodal button', { hasText: /^Pausar$/ }).click();
+    await expect.poll(() => hoyDe(e).cancelado).toBe(true);
+    expect(hoyDe(e)).toMatchObject({ cobro_familia: 0, pago_ninera: 0, notas: 'Fijo en pausa: Vacaciones' });
+    verificarLimpio(e);
+  });
+
+  test('pausar desde hoy con el de hoy ya cobrado: avisa y no lo toca', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy({ cobrado: true }), ahora: AHORA });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalPausarFijo(id), ID.aFijo);
+    await page.fill('#pausa-hasta', '2026-10-09');
+    await page.locator('#editmodal button', { hasText: /^Pausar$/ }).click();
+    await expect(avisos(page).filter({ hasText: 'ya está cobrado o pagado' })).toBeVisible();
+    expect(hoyDe(e)).toMatchObject({ cancelado: false, cobro_familia: 1140 });
+    verificarLimpio(e);
+  });
+
+  test('pausa que empieza mañana no toca el de hoy', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalPausarFijo(id), ID.aFijo);
+    await page.fill('#pausa-desde', '2026-10-06');
+    await page.fill('#pausa-hasta', '2026-10-09');
+    await page.locator('#editmodal button', { hasText: /^Pausar$/ }).click();
+    await expect(page.locator('.toaststack .toast').last()).toContainText('Fijo pausado');
+    expect(hoyDe(e).cancelado).toBe(false);
+    expect(escrituras(e, 'sittings_traslados', 'PATCH')).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('tarifa nueva de la familia: el de hoy toma los montos nuevos', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await irAModulo(page, 'familias');
+    await page.evaluate(id => editarFamilia(id), ID.fUno);
+    await page.fill('#ed-fam-cobro', '420');
+    await page.locator('#editmodal button', { hasText: 'Guardar' }).last().click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    // 3 h a $420 / $250.
+    await expect.poll(() => hoyDe(e).cobro_familia).toBe(1260);
+    expect(hoyDe(e)).toMatchObject({ pago_ninera: 750, ninera_nombre: 'Ana Ficticia', cancelado: false });
+    verificarLimpio(e);
+  });
+
+  test('otros datos de la familia (sin tocar la tarifa) no tocan el de hoy', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await irAModulo(page, 'familias');
+    await page.evaluate(id => editarFamilia(id), ID.fUno);
+    await page.fill('#ed-fam-notas', 'Tiene perro');
+    await page.locator('#editmodal button', { hasText: 'Guardar' }).last().click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    await page.waitForTimeout(300);
+    expect(escrituras(e, 'sittings_traslados', 'PATCH')).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('precio nuevo de un traslado fijo: el traslado de hoy toma el precio nuevo', async ({ page }) => {
+    const aTras = 'b2000000-0000-4000-8000-000000000001';
+    const d = datosHoy();
+    d.asignaciones = d.asignaciones.map(a => ({ ...a, cobro_traslado: null, pago_traslado: null }));
+    d.asignaciones.push({ id: aTras, familia_id: ID.fDos, ninera_id: ID.nBruno, ninera_nombre: 'Bruno Inventado', cobro_hora: null, pago_hora: null, created_at: '2026-09-01T00:00:00Z', dias: ['L'], hora_inicio: '08:00:00', hora_fin: null, vigente_desde: '2026-09-01', vigente_hasta: null, tipo: 'traslado', cobro_traslado: 956, pago_traslado: 559 });
+    d.sittings_traslados.push(sitting('a1000000-0000-4000-8000-000000000105', '2026-10-05', {
+      tipo: 'traslado', familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos', ninera_id: ID.nBruno, ninera_nombre: 'Bruno Inventado',
+      hora_inicio: '08:00:00', hora_fin: null, cobro_familia: 956, pago_ninera: 559, asignacion_id: aTras,
+      estado: 'confirmado', generado_automatico: true, revisado_at: null }));
+    const e = await abrirApp(page, { datos: d, ahora: AHORA });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalVigenciaAsignacion(id), aTras);
+    await page.fill('#vig-cobro-traslado', '990');
+    await page.fill('#vig-pago-traslado', '580');
+    await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    const tras = () => e.db.sittings_traslados.find(s => s.id === 'a1000000-0000-4000-8000-000000000105');
+    await expect.poll(() => tras().cobro_familia).toBe(990);
+    expect(tras()).toMatchObject({ pago_ninera: 580, hora_inicio: '08:00', cancelado: false });
+    // El sitting de hoy del otro fijo no se toca.
+    expect(hoyDe(e)).toMatchObject({ cobro_familia: 1140, ninera_nombre: 'Ana Ficticia' });
+    verificarLimpio(e);
+  });
+
+  test('con los fijos automáticos apagados no toca nada', async ({ page }) => {
+    const d = datosHoy();
+    d.app_config = [];
+    const e = await abrirApp(page, { datos: d, ahora: AHORA });
+    await abrirFijoDel(page, '2026-10-07');
+    await cambiarNinera(page, 'Carla Ejemplo');
+    expect(hoyDe(e).ninera_nombre).toBe('Ana Ficticia');
+    expect(escrituras(e, 'sittings_traslados', 'PATCH')).toEqual([]);
+    verificarLimpio(e);
+  });
+});

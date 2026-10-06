@@ -154,6 +154,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   cambio de un solo día corrige la fila prevista (y la marca `generado_automatico=false`);
   un cambio del fijo (niñera, horario, vigencia, pausa, tarifa) llama a
   `sincronizarPrevistosFijos()`. Los cambios de horario también van "desde [fecha]".
+  Si el cambio (niñera, horario, precio o tarifa) rige desde hoy, el sitting de hoy ya
+  confirmado sigue al fijo, y pausar desde hoy lo cancela (`alinearRegistroDeHoy`, agenda.js);
+  solo si es automático y nadie lo tocó (sin editar, cobrar ni pagar): si no, se avisa.
 - Entrevista a medias (09/10/2026): `entrevistas.estado` 'en_curso' / 'completa'. A medias la
   candidata sigue en 'intake'; al completarla se actualiza la misma fila (`entrevistaState.entrevistaId`).
 - Candidatas: lo corregido en la entrevista vive en `notas_ficha` y pisa la respuesta del
