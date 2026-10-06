@@ -1453,6 +1453,9 @@ async function terminarFijoDesde(asigId){
   if(error){ warn.innerHTML = errBox(error); return; }
   cerrarModal();
   await sincronizarPrevistosFijos();
+  // Terminar desde hoy (o antes): el de hoy ya se confirmó solo a las 03:00; se cancela ($0)
+  // si nadie lo tocó, igual que con una pausa (06/10/2026, decisión de Diego).
+  if(desde <= todayISO()) await alinearRegistroDeHoy(asigId, {...a, vigente_hasta: hasta}, 'Fijo terminado');
   toast(`Listo: el fijo corre hasta el ${fmt(hasta)}. Desde el ${fmt(desde)} ya no aparece en la Agenda.`);
   if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
   if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
