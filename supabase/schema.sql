@@ -62,6 +62,9 @@ create table public.asignaciones (
   -- Precio fijo de un traslado fijo (06/10/2026). Vacío = el del último traslado.
   cobro_traslado numeric,
   pago_traslado numeric,
+  -- Fecha real de inicio si el fijo empezó antes de la app (10/10/2026). Solo se muestra;
+  -- vigente_desde sigue siendo desde cuándo se registra en la app.
+  inicio_real date,
   constraint asignaciones_pkey PRIMARY KEY (id),
   constraint asignaciones_tipo_check CHECK (((tipo IS NULL) OR (tipo = ANY (ARRAY['sitting'::text, 'traslado'::text])))),
   constraint asignaciones_vigencia_check CHECK (((vigente_hasta IS NULL) OR (vigente_desde IS NULL) OR (vigente_hasta >= vigente_desde)))

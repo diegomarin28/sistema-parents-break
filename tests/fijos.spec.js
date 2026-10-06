@@ -365,3 +365,43 @@ test.describe('borrar un fijo creado por error', () => {
     verificarLimpio(e);
   });
 });
+
+// "Empezó el" (10/10/2026): fecha real de un fijo que arrancó antes de la app. Solo se
+// muestra; vigente_desde sigue siendo desde cuándo se registra, así la Agenda no dibuja
+// los meses que están en los Docs.
+test.describe('fecha real de inicio de un fijo ("empezó el")', () => {
+  function datosConInicioReal(inicio) {
+    const d = datosBase();
+    d.asignaciones = d.asignaciones.map(a => ({ ...a, inicio_real: inicio }));
+    return d;
+  }
+  test('se ve en la ficha y la Agenda no dibuja nada antes de "vigente desde"', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConInicioReal('2026-05-26') });
+    await irAModulo(page, 'familias');
+    await page.evaluate(id => verFamilia(id), ID.fUno);
+    await expect(page.locator('#editmodal')).toContainText('desde el 01/09/26 (empezó el 26/05/26, antes de la app)');
+    await page.evaluate(() => cerrarModal());
+    await irAModulo(page, 'agenda');
+    await verAgendaDesde(page, '2026-06-01');
+    expect(await fijosProyectados(page)).toEqual([]);
+    verificarLimpio(e);
+  });
+  test('se carga desde "Vigencia" sin tocar "vigente desde"', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConInicioReal(null) });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalVigenciaAsignacion(id), ID.aFijo);
+    await page.fill('#vig-inicio-real', '2026-04-20');
+    await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    const upd = e.escrituras.filter(w => w.tabla === 'asignaciones' && w.metodo === 'PATCH').at(-1);
+    expect(upd.cuerpo).toMatchObject({ inicio_real: '2026-04-20', vigente_desde: '2026-09-01' });
+    verificarLimpio(e);
+  });
+  test('sin la columna (base sin migrar) el campo no aparece', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalVigenciaAsignacion(id), ID.aFijo);
+    await expect(page.locator('#vig-inicio-real')).toHaveCount(0);
+    verificarLimpio(e);
+  });
+});
