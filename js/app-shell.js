@@ -191,7 +191,7 @@ async function loadDashboardData(){
     sb.from('candidatas').select('estado').in('estado', ['intake','entrevistada']),
     sb.from('ninieras').select('nombre,tipo,activa'),
     sb.from('familias').select('cobro_hora'),
-    sinPrevistos(sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera,cobrado,pagado')).gte('fecha', primerDiaMesesAtras(6)),
+    leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera,cobrado,pagado')).gte('fecha', primerDiaMesesAtras(6)).order('id')),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', primerDiaMesesAtras(6)),
     sb.from('sittings_traslados').select('fecha,familia_nombre,ninera_nombre').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()),
     sb.from('solicitudes').select('*').gte('fecha', diasAtras(PENDIENTE_DIAS_ATRAS)).lte('fecha', todayISO()).eq('estado','confirmada'),

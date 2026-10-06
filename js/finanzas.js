@@ -498,7 +498,7 @@ async function cargarBalanceMultiMes(nMeses){
   const desde = `${meses[0]}-01`;
   const hasta = shiftMes(meses[meses.length-1], 1)+'-01';
   const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}] = await Promise.all([
-    sinPrevistos(sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera')).gte('fecha', desde).lt('fecha', hasta),
+    leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera')).gte('fecha', desde).lt('fecha', hasta).order('id')),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('monto,desde,activo'),
   ]);
