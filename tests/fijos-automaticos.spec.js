@@ -688,3 +688,86 @@ test.describe('terminar el fijo desde hoy: el sitting de hoy se cancela', () => 
     verificarLimpio(e);
   });
 });
+
+// "Cargar sitting" desde Hoy > "Sin registrar" (06/10/2026, uso real): el día de un fijo se
+// cargaba como sitting suelto. Un sitting fijo avisaba que la niñera "ya está comprometida"
+// con esa misma familia (chocaba contra su propio fijo), un traslado fijo abría como sitting
+// en $0, y ninguno quedaba vinculado al fijo (asignacion_id vacío).
+test.describe('cargar un día de un fijo desde "Sin registrar"', () => {
+  const aTras = 'b2000000-0000-4000-8000-000000000002';
+  function datosConTrasladoFijo() {
+    const d = datosActivos();
+    d.asignaciones = d.asignaciones.map(a => ({ ...a, cobro_traslado: null, pago_traslado: null }));
+    d.asignaciones.push({ id: aTras, familia_id: ID.fDos, ninera_id: ID.nBruno, ninera_nombre: 'Bruno Inventado', cobro_hora: null, pago_hora: null, created_at: '2026-09-01T00:00:00Z', dias: ['M'], hora_inicio: '08:00:00', hora_fin: null, vigente_desde: '2026-09-01', vigente_hasta: null, tipo: 'traslado', cobro_traslado: 488, pago_traslado: 282 });
+    return d;
+  }
+  async function cargarDesdePendiente(page, texto) {
+    await irAModulo(page, 'pend-hoy');
+    await page.locator('#modcontent .agendarow', { hasText: texto }).first().locator('button', { hasText: 'Cargar sitting' }).click();
+    await expect(page.locator('#editmodal')).toBeVisible();
+    await esperarQuieta(page);
+  }
+
+  test('sitting fijo: sin aviso de doble reserva contra su propio fijo y vinculado al fijo', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosActivos() });
+    await cargarDesdePendiente(page, 'Ana Ficticia');
+    await expect(page.locator('#sit-tipo-sitting')).toHaveClass(/selected/);
+    await expect(page.locator('#sit-fecha')).toHaveValue('2026-09-21');
+    await expect(page.locator('#sit-cobro')).toHaveValue('1140');
+    await expect(page.locator('#sit-pago')).toHaveValue('750');
+    await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    await expect(page.locator('.confirmoverlay')).toHaveCount(0);
+    const [alta] = escrituras(e, 'sittings_traslados', 'POST');
+    expect(alta.cuerpo).toMatchObject({ tipo: 'sitting', asignacion_id: ID.aFijo, familia_id: ID.fUno, ninera_nombre: 'Ana Ficticia', fecha: '2026-09-21', hora_inicio: '16:00', hora_fin: '19:00', cobro_familia: 1140, pago_ninera: 750 });
+    verificarLimpio(e);
+  });
+
+  test('traslado fijo: abre como traslado, con el precio del fijo, y queda vinculado', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConTrasladoFijo() });
+    await cargarDesdePendiente(page, 'Bruno Inventado');
+    await expect(page.locator('#sit-tipo-traslado')).toHaveClass(/selected/);
+    await expect(page.locator('#sit-cobro')).toHaveValue('488');
+    await expect(page.locator('#sit-pago')).toHaveValue('282');
+    await expect(page.locator('#sit-precio-sugerido-box')).toHaveText('Precio del fijo.');
+    await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    const [alta] = escrituras(e, 'sittings_traslados', 'POST');
+    expect(alta.cuerpo).toMatchObject({ tipo: 'traslado', asignacion_id: aTras, familia_id: ID.fDos, ninera_nombre: 'Bruno Inventado', fecha: '2026-09-22', hora_inicio: '08:00', cobro_familia: 488, pago_ninera: 282 });
+    verificarLimpio(e);
+  });
+
+  test('la doble reserva real (otra familia a la misma hora) se sigue avisando', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosActivos() });
+    await irAModulo(page, 'sittings');
+    await page.evaluate(() => abrirModalSitForm());
+    await esperarQuieta(page);
+    await page.fill('#sit-familia', 'Familia Prueba Dos');
+    await page.fill('#sit-ninera', 'Ana Ficticia');
+    await page.evaluate(() => { onSitFamiliaInput(); onSitNineraInput(); document.getElementById('sit-fecha').value = '2026-09-21'; setHoraSelect('sit-horaini', '17:00'); setHoraSelect('sit-horafin', '18:00'); });
+    await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
+    const aviso = page.locator('.confirmoverlay:not(#editmodal)');
+    await expect(aviso).toContainText('ya está comprometida con Familia Prueba Uno');
+    await aviso.locator('button', { hasText: 'Cancelar' }).click();
+    expect(escrituras(e, 'sittings_traslados', 'POST')).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('un sitting suelto (sin fijo) no se vincula a ninguna asignación', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosActivos() });
+    await cargarDesdePendiente(page, 'Ana Ficticia');
+    await page.evaluate(() => cerrarModal()); // se abrió desde un fijo y se cerró sin guardar
+    await irAModulo(page, 'sittings');
+    await page.evaluate(() => abrirModalSitForm());
+    await esperarQuieta(page);
+    await page.fill('#sit-familia', 'Familia Prueba Dos');
+    await page.fill('#sit-ninera', 'Bruno Inventado');
+    await page.evaluate(() => { onSitFamiliaInput(); onSitNineraInput(); document.getElementById('sit-fecha').value = '2026-09-24'; setHoraSelect('sit-horaini', '10:00'); setHoraSelect('sit-horafin', '12:00'); });
+    await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    const [alta] = escrituras(e, 'sittings_traslados', 'POST');
+    expect(alta.cuerpo.asignacion_id).toBeUndefined();
+    expect(alta.cuerpo.tipo).toBe('sitting');
+    verificarLimpio(e);
+  });
+});

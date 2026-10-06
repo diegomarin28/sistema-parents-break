@@ -1104,21 +1104,26 @@ function chequearDobleReservaAgenda(nineraNombre, fecha, horaInicio, horaFin, ex
   }
   return null;
 }
-/* Misma idea pero consultando la base — para usar fuera de Agenda (ej. cargando un sitting a mano). */
-async function chequearDobleReservaDB(nineraNombre, fecha, horaInicio, horaFin){
+/* Misma idea pero consultando la base — para usar fuera de Agenda (ej. cargando un sitting a mano).
+   familiaId: lo de la misma familia no es doble reserva. Cargar un día del fijo de Laura con
+   Romina chocaba contra ese mismo fijo ("ya está comprometida con [la misma familia]", 06/10/2026);
+   un registro repetido de la misma familia ya lo avisa chequearRegistroExistenteMismoDia. */
+async function chequearDobleReservaDB(nineraNombre, fecha, horaInicio, horaFin, {familiaId=null, asignacionId=null}={}){
   if(!horaInicio) return null;
+  const mismaFamilia = x => !!familiaId && x.familia_id===familiaId;
   const [{data:regs}, {data:asigs}, {data:sols}] = await Promise.all([
-    sb.from('sittings_traslados').select('familia_nombre,hora_inicio,hora_fin,ninera_nombre').eq('fecha', fecha),
+    sb.from('sittings_traslados').select('familia_id,familia_nombre,hora_inicio,hora_fin,ninera_nombre,asignacion_id').eq('fecha', fecha),
     sb.from('asignaciones').select('*, familias(nombre)'),
     sb.from('solicitudes').select('familia_nombre,hora_inicio,hora_fin,estado,solicitud_ninieras(ninera_nombre,estado)').eq('fecha', fecha),
   ]);
   const key = normaliza(nineraNombre);
   const diaSemana = diaDeFecha(fecha);
   for(const r of (regs||[])){
-    if(normaliza(r.ninera_nombre)!==key) continue;
+    if(normaliza(r.ninera_nombre)!==key || mismaFamilia(r) || (asignacionId && r.asignacion_id===asignacionId)) continue;
     if(rangosSolapan(horaInicio, horaFin, r.hora_inicio, r.hora_fin)) return {familia_nombre:r.familia_nombre, hora_inicio:r.hora_inicio, hora_fin:r.hora_fin};
   }
   for(const a of (asigs||[])){
+    if(a.id===asignacionId || mismaFamilia(a)) continue;
     if(normaliza(a.ninera_nombre)!==key || !Array.isArray(a.dias) || !a.dias.includes(diaSemana) || !asignacionVigenteEn(a, fecha)) continue;
     if(rangosSolapan(horaInicio, horaFin, a.hora_inicio, a.hora_fin)) return {familia_nombre:a.familias?.nombre||'(familia)', hora_inicio:a.hora_inicio, hora_fin:a.hora_fin};
   }

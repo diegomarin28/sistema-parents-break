@@ -320,7 +320,7 @@ async function loadDashboardData(){
       (snRango||[]).forEach(r=>{ (porSol[r.solicitud_id] ||= []).push(r); });
       solicitudesConfirmadas.forEach(s=>{
         (porSol[s.id]||[]).forEach(n=>{
-          previstos.push({ fecha: s.fecha, ninera_nombre: n.ninera_nombre, familia_nombre: s.familia_nombre, hora_inicio: s.hora_inicio, hora_fin: s.hora_fin });
+          previstos.push({ fecha: s.fecha, ninera_nombre: n.ninera_nombre, familia_nombre: s.familia_nombre, hora_inicio: s.hora_inicio, hora_fin: s.hora_fin, tipo: s.tipo==='traslado' ? 'traslado' : 'sitting' });
         });
       });
     }
@@ -336,7 +336,10 @@ async function loadDashboardData(){
       rangoFechas(desde, hasta).forEach(fecha=>{
         const dia = diaSemanaDeISO(fecha);
         (asigs||[]).filter(a=>Array.isArray(a.dias) && a.dias.includes(dia) && asignacionVigenteEn(a, fecha) && !fijoPausadoEn(pausas, a.id, fecha) && !cubiertos.has(a.id+'|'+fecha))
-          .forEach(a=>previstos.push({ fecha, ninera_nombre: a.ninera_nombre, familia_nombre: a.familias?.nombre || '', hora_inicio: a.hora_inicio, hora_fin: a.hora_fin, esFijo: true }));
+          .forEach(a=>previstos.push({
+            fecha, ninera_nombre: a.ninera_nombre, familia_nombre: a.familias?.nombre || '', hora_inicio: a.hora_inicio, hora_fin: a.hora_fin, esFijo: true,
+            asignacion_id: a.id, tipo: tipoAsignacion(a), cobro_traslado: a.cobro_traslado ?? null, pago_traslado: a.pago_traslado ?? null,
+          }));
       });
     }
 
@@ -469,13 +472,21 @@ function renderPendHoy(cont){
   `;
 }
 async function cargarSittingDesdePendiente(item){
+  // El día de un fijo se carga como el fijo: vinculado a la asignación, con su tipo y, si es
+  // traslado, con su precio. Antes abría siempre como sitting suelto: un traslado fijo quedó
+  // como sitting de $0 y ninguno de los dos quedó vinculado al fijo (06/10/2026).
+  const traslado = item.tipo==='traslado';
   sitPrefill = {
     familiaNombre: item.familia_nombre,
     nineraNombre: item.ninera_nombre,
     fecha: item.fecha,
     horaInicio: item.hora_inicio,
     horaFin: item.hora_fin,
-    notas: 'Cargado desde "Sittings sin registrar"',
+    tipo: traslado ? 'traslado' : 'sitting',
+    asignacionId: item.asignacion_id || null,
+    cobro: traslado ? item.cobro_traslado ?? null : null,
+    pago: traslado ? item.pago_traslado ?? null : null,
+    notas: item.asignacion_id ? `${traslado?'Traslado':'Sitting'} fijo — cargado desde "Sittings sin registrar"` : 'Cargado desde "Sittings sin registrar"',
   };
   await setModulo('sittings');
   abrirModalSitForm();
