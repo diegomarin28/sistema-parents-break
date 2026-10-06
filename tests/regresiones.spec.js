@@ -179,3 +179,73 @@ test.describe('formulario de Sittings: cambiar el tipo no pisa la fecha', () => 
     verificarLimpio(e);
   });
 });
+
+// 06/10/2026 (testing de la noche): la lista de Sittings tiene solo el mes elegido. Tocar una
+// fila del historial de otro mes (o "Ver ese sitting", o editar desde la Agenda) abría el
+// formulario VACÍO, con la fecha de hoy, pero apuntando a ese registro: al guardar se pisaba
+// el registro viejo con lo que se escribiera.
+test.describe('editar un registro de otro mes', () => {
+  const SIT_28 = '70000000-0000-4000-8000-000000000003'; // lunes 28/09, Ana, Familia Prueba Uno
+  const valoresForm = page => page.evaluate(() => ({
+    familia: document.getElementById('sit-familia').value, ninera: document.getElementById('sit-ninera').value,
+    fecha: document.getElementById('sit-fecha').value, cobro: document.getElementById('sit-cobro').value, pago: document.getElementById('sit-pago').value,
+  }));
+  const datos28 = { familia: 'Familia Prueba Uno', ninera: 'Ana Ficticia', fecha: '2026-09-28', cobro: '1140', pago: '750' };
+
+  test('desde el historial (la lista está en octubre): el formulario trae el registro y guarda sin pisarlo', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'sittings');
+    expect(await page.evaluate(() => sitMes)).toBe('2026-10');
+    await page.locator(`tr[title="Tocar para editar"][onclick*="${SIT_28}"]`).click();
+    await expect(page.locator('#sit-familia')).toHaveValue('Familia Prueba Uno');
+    expect(await valoresForm(page)).toEqual(datos28);
+    await expect(page.locator('#editmodal h2').first()).toHaveText('Editar registro');
+    await page.fill('#sit-notas', 'Llegó 10 minutos tarde');
+    await page.locator('#editmodal button', { hasText: 'Guardar cambios' }).click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    const [cambio] = e.escrituras.filter(w => w.tabla === 'sittings_traslados' && w.metodo === 'PATCH');
+    expect(cambio.params).toEqual({ id: `eq.${SIT_28}` });
+    expect(cambio.cuerpo).toMatchObject({ familia_nombre: 'Familia Prueba Uno', ninera_nombre: 'Ana Ficticia', fecha: '2026-09-28', cobro_familia: 1140, pago_ninera: 750, notas: 'Llegó 10 minutos tarde' });
+    verificarLimpio(e);
+  });
+
+  test('"Ver ese sitting" al cargar uno repetido de otro mes abre el que ya estaba', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'sittings');
+    await page.locator('button[onclick^="abrirModalSitForm"]').first().click();
+    await page.evaluate(() => {
+      document.getElementById('sit-familia').value = 'Familia Prueba Uno';
+      sitFamiliaSel = sitFamilias.find(f => f.nombre === 'Familia Prueba Uno');
+      document.getElementById('sit-ninera').value = 'Ana Ficticia';
+      sitNineraSel = sitNinieras.find(n => n.nombre === 'Ana Ficticia');
+      setHoraSelect('sit-horaini', '16:00'); setHoraSelect('sit-horafin', '19:00');
+    });
+    await page.fill('#sit-fecha', '2026-09-28');
+    await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
+    await page.locator('#confirm3-ver').click();
+    await expect(page.locator('#sit-cobro')).toHaveValue('1140');
+    expect(await valoresForm(page)).toEqual(datos28);
+    expect(await page.evaluate(() => sitEditId)).toBe(SIT_28);
+    expect(e.escrituras.filter(w => w.tabla === 'sittings_traslados')).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('desde la Agenda, un registro de la semana anterior (otro mes)', async ({ page }) => {
+    const e = await abrirApp(page);
+    await page.evaluate(id => editarRegistroDesdeAgenda(id), SIT_28);
+    await expect(page.locator('#sit-familia')).toHaveValue('Familia Prueba Uno');
+    expect(await valoresForm(page)).toEqual(datos28);
+    verificarLimpio(e);
+  });
+
+  test('si el registro ya no existe avisa y no abre un formulario vacío', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'sittings');
+    e.db.sittings_traslados = e.db.sittings_traslados.filter(s => s.id !== SIT_28);
+    await page.evaluate(id => abrirModalSitForm(id), SIT_28);
+    await expect(page.locator('.toaststack .toast', { hasText: 'ya no existe' })).toBeVisible();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    expect(await page.evaluate(() => sitEditId)).toBe(null);
+    verificarLimpio(e);
+  });
+});

@@ -1558,7 +1558,7 @@ async function eliminarRegistroDesdeAgenda(regId){
 async function editarRegistroDesdeAgenda(regId){
   cerrarModal();
   await setModulo('sittings'); // espera a que sitItems ya esté cargado antes de buscar el registro
-  abrirModalSitForm(regId);
+  await abrirModalSitForm(regId);
 }
 async function confirmarNinera(solNineraId){
   let sPrevio = null, nPrevio = null;
