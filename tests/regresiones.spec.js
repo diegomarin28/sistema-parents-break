@@ -138,6 +138,36 @@ test.describe('fechas en Montevideo (UTC-3)', () => {
   });
 });
 
+// 06/10/2026 (testing de la noche): el "/h" del campo de plata salía en cualquier monto
+// (cobro de un traslado, un saldo, un gasto) y en Sittings los montos salían sin separador
+// de miles ("$3420").
+test.describe('montos en pantalla', () => {
+  test('"/h" solo en la tarifa por hora', async ({ page }) => {
+    const e = await abrirApp(page);
+    const sufijo = sel => page.evaluate(s => getComputedStyle(document.querySelector(s).closest('.moneyfield'), '::after').content, sel);
+    await irAModulo(page, 'familias');
+    await page.evaluate(id => verFamilia(id), ID.fUno);
+    await page.locator('#fam-saldo button', { hasText: '+ Cargar ajuste' }).click();
+    expect(await sufijo('#ajuste-monto')).toBe('none');
+    await page.evaluate(() => { cerrarModalAjusteSaldo(); cerrarModal(); });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(() => abrirModalNuevaSolicitud());
+    expect(await sufijo('#agenda-cobro')).toBe('"/h"');
+    verificarLimpio(e);
+  });
+
+  test('Sittings: resumen, lista e historial con separador de miles', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'sittings');
+    await page.evaluate(async () => { sitMes = '2026-09'; await cargarSitLista(); });
+    await esperarQuieta(page);
+    expect(await page.locator('#sit-summary .statnum').allInnerTexts()).toEqual(['$3.870', '$2.500', '$1.370']);
+    await expect(page.locator('#sit-list-wrap')).toContainText('$1.140');
+    await expect(page.locator('tr[title="Tocar para editar"]').first()).toContainText('$1.140');
+    verificarLimpio(e);
+  });
+});
+
 test.describe('nombres con apóstrofo y HTML', () => {
   test("la foto de una niñera con apóstrofo en el nombre se abre (D'Alessandro)", async ({ page }) => {
     const datos = datosBase();

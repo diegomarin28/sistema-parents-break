@@ -107,7 +107,8 @@ textarea{resize:vertical;min-height:54px;}
 .moneyfield{position:relative;}
 .moneyfield input{padding-left:22px;padding-right:32px;}
 .moneyfield::before{content:'$';position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink-soft);font-size:14px;pointer-events:none;}
-.moneyfield::after{content:'/h';position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--ink-soft);font-size:12.5px;pointer-events:none;}
+/* '/h' solo en los campos que son por hora (06/10/2026: salía también en cobros de traslado, pagos totales, saldos y gastos). */
+.moneyfield.por-hora::after{content:'/h';position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--ink-soft);font-size:12.5px;pointer-events:none;}
 .navitem{position:relative;}
 .navdot{position:absolute;top:6px;right:10px;width:9px;height:9px;border-radius:50%;background:var(--clay-text);border:2px solid #5B5FA0;}
 .preciosugerido{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-top:8px;}
