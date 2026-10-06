@@ -1546,12 +1546,17 @@ function abrirModalRegistroDesdeAgenda(s){
   abrirModal(cuerpo);
 }
 async function eliminarRegistroDesdeAgenda(regId){
-  const ok = await confirmarAccion('¿Eliminar este registro? No se puede deshacer.');
+  // Con gastos extra: mismo cuidado que en Sittings (gastosDelRegistroABorrar, sittings.js).
+  const gastos = await gastosDelRegistroABorrar(regId);
+  if(!gastos) return;
+  const ok = await confirmarAccion('¿Eliminar este registro? No se puede deshacer.'+textoGastosAlBorrar(gastos));
   if(!ok) return;
   const { error } = await sb.from('sittings_traslados').delete().eq('id', regId);
   if(error){ toast('No se pudo eliminar: '+error.message, 'bad'); return; }
   cerrarModal();
-  toast('Registro eliminado.');
+  const faltas = await limpiarGastosDeRegistroBorrado(gastos);
+  if(faltas.length) toast('Registro eliminado, pero no se pudo borrar '+faltas.join(' ni ')+'.', 'bad');
+  else toast('Registro eliminado.');
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
 }

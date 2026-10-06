@@ -181,3 +181,91 @@ test('con la base sin migrar el formulario no muestra gastos extra y guarda como
   await expect(toasts(page).filter({ hasText: 'Registro guardado.' })).toBeVisible();
   verificarLimpio(e, { ignorar: [/status of 404/] });
 });
+
+// Borrar un registro con gastos (06/10/2026, testing de la noche): la base borra los gastos en
+// cascada, pero el saldo a favor de un gasto que pagó la familia quedaba vivo y se le seguía
+// descontando; los tickets quedaban en el bucket.
+test.describe('borrar un registro que tiene gastos extra', () => {
+  const AJ = 'a5000000-0000-4000-8000-000000000009';
+  function datosConGastoDeLaFamilia(extraGasto = {}, extraAjuste = {}) {
+    const d = datosCon(gasto({ pagado_por: 'familia', ajuste_id: AJ, ...extraGasto }));
+    d.ajustes_saldo = [{ id: AJ, sujeto: 'familia', familia_id: ID.fUno, ninera_id: null, nombre: 'Familia Prueba Uno', monto: -300,
+      motivo: 'Gasto extra que pagó la familia: Almuerzo para la niña (28/09)', fecha: '2026-09-28', aplicado: 0, aplicaciones: [], creado_por: null, created_at: '2026-09-28T20:00:00Z', ...extraAjuste }];
+    return d;
+  }
+  const borroTicket = e => e.escrituras.some(w => w.tabla.startsWith('/storage/v1/object/comprobantes') && w.metodo === 'DELETE');
+
+  test('desde Sittings: borra el registro, el saldo a favor que generó y el ticket', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConGastoDeLaFamilia() });
+    await irAModulo(page, 'sittings');
+    await page.evaluate(id => { eliminarSitting(id); }, SIT_28);
+    await expect(page.locator('.confirmoverlay.show')).toContainText('También se borra su gasto extra y el saldo a favor que generó la familia');
+    await page.locator('#confirm-si').click();
+    await expect(toasts(page).filter({ hasText: 'Registro eliminado.' })).toBeVisible();
+    expect(e.db.sittings_traslados.some(s => s.id === SIT_28)).toBe(false);
+    expect(e.db.ajustes_saldo).toEqual([]);
+    expect(borroTicket(e)).toBe(true);
+    verificarLimpio(e);
+  });
+
+  test('desde la Agenda: el mismo cuidado', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConGastoDeLaFamilia() });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => { eliminarRegistroDesdeAgenda(id); }, SIT_28);
+    await expect(page.locator('.confirmoverlay.show')).toContainText('También se borra su gasto extra');
+    await page.locator('#confirm-si').click();
+    await expect(toasts(page).filter({ hasText: 'Registro eliminado.' })).toBeVisible();
+    expect(e.db.ajustes_saldo).toEqual([]);
+    expect(borroTicket(e)).toBe(true);
+    verificarLimpio(e);
+  });
+
+  test('un gasto ya cobrado o reintegrado: no deja borrar el registro', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosCon(gasto({ reintegrado: true })) });
+    await irAModulo(page, 'sittings');
+    await page.evaluate(id => { eliminarSitting(id); }, SIT_28);
+    await expect(toasts(page).filter({ hasText: 'ya se cobraron o se reintegraron: no se puede eliminar' })).toBeVisible();
+    await expect(page.locator('.confirmoverlay.show')).toHaveCount(0);
+    expect(e.db.sittings_traslados.some(s => s.id === SIT_28)).toBe(true);
+    expect(e.escrituras).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('el saldo a favor del gasto ya se usó en un cobro: no deja borrar el registro', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosConGastoDeLaFamilia({}, { aplicado: 300 }) });
+    await irAModulo(page, 'sittings');
+    await page.evaluate(id => { eliminarSitting(id); }, SIT_28);
+    await expect(toasts(page).filter({ hasText: 'ya se usó en un cobro: no se puede eliminar' })).toBeVisible();
+    expect(e.db.sittings_traslados.some(s => s.id === SIT_28)).toBe(true);
+    expect(e.escrituras).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('sin gastos: se borra como siempre', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosCon() });
+    await irAModulo(page, 'sittings');
+    await page.evaluate(id => { eliminarSitting(id); }, SIT_28);
+    await expect(page.locator('.confirmoverlay.show')).toHaveText(/¿Eliminar este registro\? No se puede deshacer\./);
+    await expect(page.locator('.confirmoverlay.show')).not.toContainText('gasto');
+    await page.locator('#confirm-si').click();
+    await expect(toasts(page).filter({ hasText: 'Registro eliminado.' })).toBeVisible();
+    expect(e.escrituras.map(w => `${w.tabla} ${w.metodo}`)).toEqual(['sittings_traslados DELETE']);
+    verificarLimpio(e);
+  });
+});
+
+test('si falla un gasto: avisa cuál falta y no muestra además "Registro guardado"', async ({ page }) => {
+  const e = await abrirApp(page, { datos: datosCon() });
+  await nuevoTraslado(page);
+  await agregarGasto(page, { concepto: 'Almuerzo', monto: 300, pagoPor: 'ninera' });
+  await agregarGasto(page, { concepto: 'Uber', monto: 225, pagoPor: 'ninera' });
+  e.fallar = ({ tabla }) => tabla === 'gastos_extra' ? { message: 'falla simulada' } : undefined;
+  await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
+  const aviso = toasts(page).filter({ hasText: 'El registro se guardó, pero no se pudo guardar el gasto "Almuerzo"' });
+  await expect(aviso).toBeVisible();
+  await expect(aviso).toContainText('Tampoco se cargó "Uber".');
+  await expect(aviso).toContainText('editando el registro');
+  await page.waitForTimeout(300);
+  await expect(toasts(page).filter({ hasText: 'Registro guardado.' })).toHaveCount(0);
+  verificarLimpio(e, { ignorar: [/status of 500/] });
+});
