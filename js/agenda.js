@@ -951,9 +951,11 @@ async function guardarHorarioAsignacionFija(asigId){
     if(warn) warn.innerHTML = '<div class="warnbox">Este fijo no tiene fecha de inicio cargada. Tocá "Editar vigencia y tipo", cargá desde cuándo corre y después cambiá el horario.</div>';
     return;
   }
+  let aHoy = null; // el fijo que rige hoy después del cambio (para el sitting de hoy)
   if(enElMismoLugar){
     const { error } = await sb.from('asignaciones').update({hora_inicio: horaIni, hora_fin: horaFin, dias}).eq('id', asigId);
     if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+    aHoy = {...a, hora_inicio: horaIni, hora_fin: horaFin, dias};
   } else {
     const nuevaAsig = {
       familia_id: a.familia_id, ninera_nombre: a.ninera_nombre, ninera_id: a.ninera_id || null,
@@ -972,9 +974,12 @@ async function guardarHorarioAsignacionFija(asigId){
         : errBox(e2);
       return;
     }
+    aHoy = creada;
   }
   cerrarModal();
   await sincronizarPrevistosFijos();
+  // Si hoy deja de ser uno de sus días, el de hoy se cancela; si no, toma el horario nuevo.
+  if(desde <= todayISO()) await alinearRegistroDeHoy(asigId, aHoy, 'Cambió el horario del fijo: hoy no va');
   await cargarAgendaSolicitudes();
   const fechaTxt = new Date(desde+'T12:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
   toast(`Desde el ${fechaTxt} el fijo va de ${horaIni} a ${horaFin}. Lo anterior conserva su horario.`);
@@ -1242,9 +1247,11 @@ async function cambiarNineraAsignacionFija(asigId){
     warn.innerHTML = '<div class="warnbox">Este fijo no tiene fecha de inicio cargada. Tocá "Editar vigencia y tipo", cargá desde cuándo corre y después cambiá la niñera.</div>';
     return;
   }
+  let aHoy = null; // el fijo que rige hoy después del cambio (para el sitting de hoy)
   if(enElMismoLugar){
     const { error } = await sb.from('asignaciones').update({ninera_nombre: nueva, ninera_id: ninera?.id || null}).eq('id', asigId);
     if(error){ warn.innerHTML = errBox(error); return; }
+    aHoy = {...a, ninera_nombre: nueva, ninera_id: ninera?.id || null};
   } else {
     const nuevaAsig = {
       familia_id: a.familia_id, ninera_nombre: nueva, ninera_id: ninera?.id || null,
@@ -1264,9 +1271,11 @@ async function cambiarNineraAsignacionFija(asigId){
         : errBox(e2);
       return;
     }
+    aHoy = creada;
   }
   cerrarModal();
   await sincronizarPrevistosFijos();
+  if(desde <= todayISO()) await alinearRegistroDeHoy(asigId, aHoy, 'El fijo no corre hoy');
   await cargarAgendaSolicitudes();
   const fechaTxt = new Date(desde+'T12:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
   toast(`Desde el ${fechaTxt} el fijo lo hace ${nueva}. Lo anterior sigue como estaba.`);
@@ -1326,11 +1335,14 @@ async function guardarVigenciaAsignacion(asigId){
     cambios.cobro_traslado = cobroTxt==='' ? null : Number(cobroTxt);
     cambios.pago_traslado = pagoTxt==='' ? null : Number(pagoTxt);
   }
-  const { error } = await escribirAsignacion(p=>sb.from('asignaciones').update(p).eq('id', asigId), cambios);
+  const { data: actualizada, error } = await escribirAsignacion(p=>sb.from('asignaciones').update(p).eq('id', asigId).select().maybeSingle(), cambios);
   if(error){ warn.innerHTML = errBox(error); return; }
   if(asignacionesSinVigencia){ warn.innerHTML = '<div class="warnbox">La base todavía no tiene vigencia de los fijos (falta la migración). Avisale a Diego.</div>'; return; }
   cerrarModal();
   await sincronizarPrevistosFijos();
+  // Precio nuevo del traslado: también para el de hoy (06/10/2026). Un cambio de vigencia no
+  // cancela el de hoy desde acá (eso es "Terminar" o "Pausar").
+  if('cobro_traslado' in cambios && actualizada) await alinearRegistroDeHoy(asigId, actualizada, null, {noCancelar:true});
   toast('Vigencia del fijo guardada.');
   if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
   if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
@@ -1479,6 +1491,8 @@ async function guardarPausaFijo(asigId){
   if(error){ warn.innerHTML = errBox(error); return; }
   cerrarModal();
   await sincronizarPrevistosFijos();
+  const hoyP = todayISO();
+  if(desde <= hoyP && hasta >= hoyP) await alinearRegistroDeHoy(asigId, null, 'Fijo en pausa'+(motivo ? ': '+motivo : ''));
   const fmt = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'numeric',month:'long'});
   toast(`Fijo pausado del ${fmt(desde)} al ${fmt(hasta)}.`);
   if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
@@ -1494,6 +1508,79 @@ async function quitarPausaFijo(pausaId){
   toast('Pausa quitada.');
   if(document.getElementById('agenda-grid-wrap')) await cargarAgendaSolicitudes();
   if(document.getElementById('familiaslist') && typeof cargarFamilias==='function') await cargarFamilias();
+}
+/* Cambios del fijo "desde hoy" (06/10/2026, decisión de Diego). El sitting de hoy ya se
+   confirmó solo a las 03:00 y el proceso de la noche no vuelve a tocar el día de hoy: si la
+   niñera, el horario o el precio del fijo cambiaban desde hoy, el de hoy quedaba con lo de
+   antes (y se le pagaba a la niñera anterior). Acá se corrige el de hoy para que siga al
+   fijo: se actualiza, o se cancela ($0, como "no fue") si con el cambio el fijo ya no corre
+   hoy (una pausa, otros días). Solo si lo cargó el proceso y nadie lo tocó
+   (generado_automatico, sin cobrar ni pagar): si alguien lo editó, se avisa y no se pisa.
+   asigId: fijo al que está vinculado hoy el registro. aHoy: el fijo que rige hoy después del
+   cambio (el mismo, ya cambiado, o el nuevo), o null si hoy ya no corre. */
+function horaCorta(h){ return h ? String(h).slice(0,5) : null; }
+async function filaDeHoySegunFijo(aHoy, r){
+  const tipo = tipoAsignacion(aHoy);
+  const hi = horaCorta(aHoy.hora_inicio), hf = horaCorta(aHoy.hora_fin);
+  const cruza = !!(hi && hf && hf <= hi);
+  const fila = { asignacion_id: aHoy.id, ninera_id: aHoy.ninera_id || null, ninera_nombre: aHoy.ninera_nombre,
+    tipo, hora_inicio: hi, hora_fin: hf, termina_dia_siguiente: cruza };
+  if(tipo==='traslado'){
+    // Un traslado no se cobra por hora: el precio del fijo; si no tiene, el que ya traía.
+    fila.cobro_familia = aHoy.cobro_traslado ?? r.cobro_familia;
+    fila.pago_ninera = aHoy.pago_traslado ?? r.pago_ninera;
+  } else {
+    // Igual que generar_previstos_fijos: horas del fijo por la tarifa de la familia.
+    const { data: fam, error } = await sb.from('familias').select('cobro_hora,pago_hora').eq('id', aHoy.familia_id).maybeSingle();
+    if(error) throw error;
+    const horas = hi && hf ? ((agendaMinutos(hf) - agendaMinutos(hi) + (cruza ? 24*60 : 0)) / 60) : 0;
+    fila.cobro_familia = Math.round(horas * (Number(fam?.cobro_hora) || 0));
+    fila.pago_ninera = Math.round(horas * (Number(fam?.pago_hora) || 0));
+  }
+  return fila;
+}
+function filaDeHoyCambia(r, fila){
+  return Object.keys(fila).some(k=>{
+    if(k==='hora_inicio' || k==='hora_fin') return horaCorta(r[k]) !== fila[k];
+    if(k==='cobro_familia' || k==='pago_ninera') return Number(r[k]||0) !== Number(fila[k]||0);
+    if(k==='termina_dia_siguiente') return !!r[k] !== !!fila[k];
+    return (r[k] ?? null) !== (fila[k] ?? null);
+  });
+}
+async function alinearRegistroDeHoy(asigId, aHoy, motivoCancelado, {noCancelar=false}={}){
+  await esperarConfigFijos();
+  if(!fijosAutomaticosActivos || !asigId) return;
+  const hoy = todayISO();
+  try{
+    const { data: filas, error } = await sb.from('sittings_traslados').select('*').eq('asignacion_id', asigId).eq('fecha', hoy);
+    if(error) throw error;
+    for(const r of (filas||[])){
+      const corre = !!aHoy && Array.isArray(aHoy.dias) && aHoy.dias.includes(diaSemanaDeISO(hoy)) && asignacionVigenteEn(aHoy, hoy);
+      const tocado = !r.generado_automatico || r.cobrado || r.pagado;
+      let cambios;
+      if(!corre){
+        if(r.cancelado || noCancelar) continue; // ya estaba como que no va, o el cambio es solo de precio
+        cambios = { cancelado: true, cobro_familia: 0, pago_ninera: 0, cobrado: true, pagado: true,
+          generado_automatico: false, notas: motivoCancelado || 'El fijo no corre hoy' };
+      } else {
+        if(r.cancelado) continue; // "no fue": lo decidió alguien, no se revive
+        const fila = await filaDeHoySegunFijo(aHoy, r);
+        if(!filaDeHoyCambia(r, fila)) continue;
+        cambios = fila;
+      }
+      if(tocado){
+        toast(`El sitting de hoy (${r.familia_nombre}, ${r.ninera_nombre}) lo había cambiado alguien a mano o ya está cobrado o pagado: no se tocó. Si también cambia hoy, corregilo en Sittings & traslados.`, 'bad');
+        continue;
+      }
+      // Solo si sigue sin tocar (por si alguien lo editó en este mismo momento).
+      const { data: hechas, error: e2 } = await sb.from('sittings_traslados').update(cambios)
+        .eq('id', r.id).eq('generado_automatico', true).eq('cobrado', false).eq('pagado', false).select('id');
+      if(e2) throw e2;
+      if(!(hechas||[]).length) toast(`El sitting de hoy (${r.familia_nombre}) lo acaba de cambiar alguien: no se tocó. Revisalo en Sittings & traslados.`, 'bad');
+    }
+  }catch(err){
+    toast('Se guardó el cambio del fijo, pero no se pudo corregir el sitting de hoy ('+(err?.message||err)+'). Revisalo en Sittings & traslados.', 'bad');
+  }
 }
 /* Días previstos que alguien cambió a mano (un horario distinto, un reemplazo, un "no va")
    y que, después de cambiar el fijo, ya no le corresponden: el fijo terminó, cambió de
