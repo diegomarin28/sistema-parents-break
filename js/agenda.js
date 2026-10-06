@@ -541,7 +541,9 @@ function abrirModalNuevaSolicitud(){
     <button class="btn primary" style="width:100%;margin-top:6px;" onclick="conGuardado(this, ()=>guardarSolicitud())">Guardar solicitud</button>
   `;
   abrirModal(html);
-  setTimeout(()=>attachAutocomplete('agenda-repetir-ninera', 'agenda-repetir-ninera-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
+  // El modal se arma en el momento: el autocompletar se engancha ya (con un setTimeout, lo que
+  // se escribía en esos primeros milisegundos no abría la lista; 06/10/2026, falló en el CI).
+  attachAutocomplete('agenda-repetir-ninera', 'agenda-repetir-ninera-dropdown', ()=>agendaNinierasBase, ()=>{});
 }
 async function guardarSolicitud(){
   if(agendaModoNueva==='repetir') return await guardarAsignacionFijaNueva();
@@ -881,7 +883,7 @@ function abrirModalAsignacionFija(s){
     setHoraSelect('agenda-fija-hf', (prev ? prev.hora_fin : a.hora_fin)||'');
     if(prev && prev.termina_dia_siguiente){ const c = document.getElementById('agenda-fija-cruza'); if(c) c.checked = true; }
   }
-  setTimeout(()=>attachAutocomplete('agenda-fija-ninera-'+asigId, 'agenda-fija-ninera-'+asigId+'-dropdown', ()=>agendaNinierasBase, ()=>{}), 20);
+  attachAutocomplete('agenda-fija-ninera-'+asigId, 'agenda-fija-ninera-'+asigId+'-dropdown', ()=>agendaNinierasBase, ()=>{});
   if(esTraslado && !s._yaRegistrado){
     if(prev){
       const c = document.getElementById('agenda-fija-cobro'), p = document.getElementById('agenda-fija-pago');
@@ -1137,7 +1139,7 @@ function mostrarReemplazoFijoHoy(id){
     <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>confirmarReemplazoFijoHoy(${argJs(id)}))">Registrar reemplazo</button>`;
   setHoraSelect('agenda-fija-rhi', a.hora_inicio||'');
   setHoraSelect('agenda-fija-rhf', a.hora_fin||'');
-  setTimeout(()=>attachAutocomplete('agenda-fija-reemplazo-ninera', 'agenda-fija-reemplazo-ninera-dropdown', ()=>agendaNinierasBase, (o)=>{ agendaReemplazoNineraSel = o; }), 20);
+  attachAutocomplete('agenda-fija-reemplazo-ninera', 'agenda-fija-reemplazo-ninera-dropdown', ()=>agendaNinierasBase, (o)=>{ agendaReemplazoNineraSel = o; });
 }
 async function confirmarReemplazoFijoHoy(id){
   const s = agendaSolicitudes.find(x=>x.id===id);
