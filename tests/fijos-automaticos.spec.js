@@ -635,3 +635,56 @@ test.describe('cambios del fijo desde hoy: el sitting de hoy sigue al fijo', () 
     verificarLimpio(e);
   });
 });
+
+// Terminar el fijo desde hoy (06/10/2026, decisión de Diego): igual que la pausa. El de hoy,
+// ya confirmado a las 03:00, se cancela en $0 si nadie lo tocó; si no, se avisa.
+test.describe('terminar el fijo desde hoy: el sitting de hoy se cancela', () => {
+  const AHORA = '2026-10-05T10:00:00-03:00';
+  const hoyDe = e => e.db.sittings_traslados.find(s => s.id === P.lun5);
+  function datosHoy(extraHoy = {}) {
+    const d = datosActivos();
+    Object.assign(d.sittings_traslados.find(s => s.id === P.lun5), { estado: 'confirmado', ...extraHoy });
+    return d;
+  }
+  async function terminarDesde(page, fecha) {
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalTerminarFijo(id), ID.aFijo);
+    await page.fill('#terminar-desde', fecha);
+    await page.locator('#editmodal button', { hasText: 'Terminar el fijo' }).click();
+    await expect(page.locator('.toaststack .toast').filter({ hasText: 'el fijo corre hasta' })).toBeVisible();
+  }
+
+  test('desde hoy: el de hoy queda en $0 como "no va"', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await terminarDesde(page, '2026-10-05');
+    expect(escrituras(e, 'asignaciones', 'PATCH')[0].cuerpo).toEqual({ vigente_hasta: '2026-10-04' });
+    await expect.poll(() => hoyDe(e).cancelado).toBe(true);
+    expect(hoyDe(e)).toMatchObject({ cobro_familia: 0, pago_ninera: 0, notas: 'Fijo terminado' });
+    verificarLimpio(e);
+  });
+
+  test('desde hoy con el de hoy editado a mano: avisa y no lo toca', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy({ generado_automatico: false }), ahora: AHORA });
+    await terminarDesde(page, '2026-10-05');
+    await expect(page.locator('.toaststack .toast.bad').filter({ hasText: 'lo había cambiado alguien a mano' })).toBeVisible();
+    expect(hoyDe(e)).toMatchObject({ cancelado: false, cobro_familia: 1140 });
+    verificarLimpio(e);
+  });
+
+  test('desde hoy con el de hoy ya pagado: avisa y no lo toca', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy({ pagado: true }), ahora: AHORA });
+    await terminarDesde(page, '2026-10-05');
+    await expect(page.locator('.toaststack .toast.bad').filter({ hasText: 'ya está cobrado o pagado' })).toBeVisible();
+    expect(hoyDe(e)).toMatchObject({ cancelado: false, pago_ninera: 750 });
+    verificarLimpio(e);
+  });
+
+  test('desde mañana: el de hoy queda como está', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datosHoy(), ahora: AHORA });
+    await terminarDesde(page, '2026-10-06');
+    expect(escrituras(e, 'asignaciones', 'PATCH')[0].cuerpo).toEqual({ vigente_hasta: '2026-10-05' });
+    expect(hoyDe(e)).toMatchObject({ cancelado: false, cobro_familia: 1140 });
+    expect(escrituras(e, 'sittings_traslados', 'PATCH')).toEqual([]);
+    verificarLimpio(e);
+  });
+});

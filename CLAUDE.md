@@ -155,8 +155,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   un cambio del fijo (niñera, horario, vigencia, pausa, tarifa) llama a
   `sincronizarPrevistosFijos()`. Los cambios de horario también van "desde [fecha]".
   Si el cambio (niñera, horario, precio o tarifa) rige desde hoy, el sitting de hoy ya
-  confirmado sigue al fijo, y pausar desde hoy lo cancela (`alinearRegistroDeHoy`, agenda.js);
-  solo si es automático y nadie lo tocó (sin editar, cobrar ni pagar): si no, se avisa.
+  confirmado sigue al fijo, y pausarlo o terminarlo desde hoy lo cancela en $0
+  (`alinearRegistroDeHoy`, agenda.js); solo si es automático y nadie lo tocó (sin editar,
+  cobrar ni pagar): si no, se avisa.
 - Entrevista a medias (09/10/2026): `entrevistas.estado` 'en_curso' / 'completa'. A medias la
   candidata sigue en 'intake'; al completarla se actualiza la misma fila (`entrevistaState.entrevistaId`).
 - Candidatas: lo corregido en la entrevista vive en `notas_ficha` y pisa la respuesta del
@@ -176,6 +177,11 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 
 ## Pendientes conocidos
+- Conciliación con el extracto + saldo a favor (B10, 06/10/2026), para cuando se retome la
+  conciliación (está en pausa): hoy busca el total sin descontar el saldo a favor (un pago
+  neto no aparece o queda como dudoso) y al marcar cobrado/pagado desde ahí no anota el saldo
+  como usado (`registrarAplicacionAjustes`), así que se volvería a descontar. Mientras tanto,
+  con saldo a favor se marca desde Por cobrar / Por pagar.
 - Plan de PRs acordado el 04/10/2026: fix E1/E2, fechas (todayISO), escape de HTML,
   guardados con éxito falso, confirmación al marcar pagado, pantalla de carga, alta de
   niñera solo con nombre, bloques del formulario en la entrevista, diseño de fijos
