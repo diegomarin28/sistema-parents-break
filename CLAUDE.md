@@ -9,7 +9,11 @@ a las familias y niñeras.
 - `index.html` = head + CSS + `<div id="app">` (con la pantalla de carga inicial) + scripts.
   Todo el HTML de la app lo genera JS. supabase-js se carga de `vendor/`, justo antes de core.js.
 - Supabase (proyecto "Parents-break", ref `wvewzamdohrpfhpccvcz`): Postgres + Auth (contraseña
-  y passkeys) + RLS solo para usuarios autenticados + Realtime + Storage + Edge Functions.
+  y passkeys) + RLS + Realtime + Storage + Edge Functions.
+- Acceso (11/10/2026): el registro público está apagado y las políticas RLS solo dejan entrar a
+  las cuentas de `usuarias_autorizadas` (activas), con `(select public.es_usuaria_autorizada())`.
+  Una política nueva usa eso, nunca "authenticated" a secas. Sumar o sacar a alguien es un
+  insert/update en esa tabla (por id, con OK de Diego).
 - PWA: `manifest.json` + `sw.js`. El service worker solo maneja push y notificationclick: NO
   hay modo offline (no tiene listener de fetch). Agregar offline es un pendiente aparte.
 - Estructura de la base (sin datos): `supabase/schema.sql`. Si un PR cambia la estructura,
