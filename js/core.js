@@ -969,6 +969,24 @@ async function sbLeer(consulta, queCosa='los datos', fallback=null){
   }
 }
 
+/* Consultas que leen una tabla entera (06/10/2026, testing de la noche). Supabase devuelve
+   como mucho 1.000 filas por pedido y corta sin avisar: con más sittings que eso, el filtro
+   de familias del historial, la actividad de las niñeras o los gráficos de varios meses
+   quedaban incompletos sin ningún error. (El 06/10 había 575; con los fijos automáticos
+   pasan los 1.000 en pocos meses.) Esto pide de a 1.000 hasta traer todo. armar() tiene que
+   devolver una consulta NUEVA cada vez, con un orden fijo (por ejemplo .order('id')) para
+   que las tandas no se pisen. Devuelve { data, error } como una consulta común. */
+const FILAS_POR_PEDIDO = 1000;
+async function leerTodasLasFilas(armar){
+  const filas = [];
+  for(let desde = 0; ; desde += FILAS_POR_PEDIDO){
+    const { data, error } = await armar().range(desde, desde + FILAS_POR_PEDIDO - 1);
+    if(error) return { data: null, error };
+    filas.push(...(data||[]));
+    if(!data || data.length < FILAS_POR_PEDIDO) return { data: filas, error: null };
+  }
+}
+
 /* Envoltorio para escrituras de Supabase (insert/update/delete/upsert): si falla, avisa con
    un mensaje consistente y devuelve false para poder cortar el flujo. Antes algunas escrituras
    sueltas no chequeaban error en absoluto (fallaban en silencio, la pantalla seguía como si

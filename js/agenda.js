@@ -644,7 +644,7 @@ async function abrirModalAsignar(solicitudId){
   const [{data:histFam}, {data:histTotal}, {data:sitTotal}] = await Promise.all([
     sb.from('solicitud_ninieras').select('ninera_nombre, solicitudes!inner(familia_nombre)').eq('estado','confirmada').eq('solicitudes.familia_nombre', s.familia_nombre),
     sb.from('solicitud_ninieras').select('ninera_nombre').eq('estado','confirmada'),
-    sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre')),
+    leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre')).order('id')),
   ]);
   const conteoFamilia = {};
   (histFam||[]).forEach(r=>{ const k=normaliza(r.ninera_nombre); conteoFamilia[k]=(conteoFamilia[k]||0)+1; });

@@ -79,7 +79,7 @@ async function cargarSitHistorial(){
   const [{data:pagina, count}, {data:resenas}, {data:soloFamilias}] = await Promise.all([
     sinPrevistos(sb.from('sittings_traslados').select('*', {count:'exact'})).order('fecha', {ascending:false}).range(0, SIT_HIST_PAGE-1),
     sb.from('resenas_ninieras').select('ninera_nombre,puntuacion'),
-    sinPrevistos(sb.from('sittings_traslados').select('familia_nombre')), // solo esta columna: liviano aunque la tabla crezca, así el filtro de familia siempre tiene todas las opciones
+    leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('familia_nombre')).order('id')), // solo esta columna: liviano aunque la tabla crezca, así el filtro de familia siempre tiene todas las opciones
   ]);
   sitHistItems = pagina || [];
   sitHistOffset = sitHistItems.length;

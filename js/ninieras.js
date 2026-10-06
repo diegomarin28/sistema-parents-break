@@ -85,7 +85,7 @@ let ninUtilUltimaActividad = {};
    el equipo. No bloquea el resto de la pantalla si falla — es secundario. */
 async function cargarUtilizacionNinieras(){
   await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
-  const { data, error } = await sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre,fecha'));
+  const { data, error } = await leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre,fecha')).order('id'));
   if(error || !document.getElementById('nin-utilizacion-wrap')) return;
   const desde30 = sumarDiasISO(todayISO(), -NIN_UTIL_DIAS);
   const porNinera = {};
