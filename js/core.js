@@ -1194,10 +1194,12 @@ function sumarDiasISO(fechaISO, n){
 }
 function textoVigencia(a){
   const f = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
-  if(a.vigente_desde && a.vigente_hasta) return `del ${f(a.vigente_desde)} al ${f(a.vigente_hasta)}`;
-  if(a.vigente_desde) return `desde el ${f(a.vigente_desde)}`;
-  if(a.vigente_hasta) return `hasta el ${f(a.vigente_hasta)}`;
-  return 'sin fecha de inicio';
+  // "Empezó el" (10/10/2026): fecha real si el fijo arrancó antes de la app. Solo informativo.
+  const empezo = a.inicio_real && (!a.vigente_desde || a.inicio_real < a.vigente_desde) ? ` (empezó el ${f(a.inicio_real)}, antes de la app)` : '';
+  if(a.vigente_desde && a.vigente_hasta) return `del ${f(a.vigente_desde)} al ${f(a.vigente_hasta)}${empezo}`;
+  if(a.vigente_desde) return `desde el ${f(a.vigente_desde)}${empezo}`;
+  if(a.vigente_hasta) return `hasta el ${f(a.vigente_hasta)}${empezo}`;
+  return 'sin fecha de inicio'+empezo;
 }
 /* Escribe en asignaciones tolerando que la base todavía no tenga las columnas nuevas
    (si se publicara la app antes de correr la migración): en ese caso reintenta sin

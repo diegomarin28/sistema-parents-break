@@ -1287,6 +1287,8 @@ async function abrirModalVigenciaAsignacion(asigId){
       <div class="field"><label>Tipo</label><select id="vig-tipo" onchange="const b=document.getElementById('vig-precio-box'); if(b) b.style.display=this.value==='traslado'?'':'none';"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
     </div>
     <div class="helper">"Hasta" vacío = sigue vigente. La Agenda solo muestra el fijo entre esas fechas; lo que ya está registrado no se toca.</div>
+    ${'inicio_real' in a ? `<div class="field" style="margin-top:10px;"><label>Empezó el (si arrancó antes de la app)</label><input type="date" id="vig-inicio-real" value="${escaparHtml(a.inicio_real)}"></div>
+    <div class="helper">Solo se muestra en la ficha. La Agenda no dibuja nada antes de "Vigente desde".</div>` : ''}
     ${conPrecio ? `<div id="vig-precio-box" style="margin-top:12px;">
       <div class="grid2">
         <div class="field"><label>Cobro por traslado</label><div class="moneyfield"><input type="number" id="vig-cobro-traslado" value="${escaparHtml(a.cobro_traslado??'')}"></div></div>
@@ -1312,6 +1314,8 @@ async function guardarVigenciaAsignacion(asigId){
   if(hasta && hasta < desde){ warn.innerHTML = '<div class="warnbox">"Hasta" no puede ser antes que "desde".</div>'; return; }
   if(asignacionesSinVigencia){ warn.innerHTML = '<div class="warnbox">La base todavía no tiene vigencia de los fijos (falta la migración). Avisale a Diego.</div>'; return; }
   const cambios = {vigente_desde: desde, vigente_hasta: hasta, tipo};
+  const inicioRealEl = document.getElementById('vig-inicio-real');
+  if(inicioRealEl) cambios.inicio_real = inicioRealEl.value || null;
   const cobroEl = document.getElementById('vig-cobro-traslado'), pagoEl = document.getElementById('vig-pago-traslado');
   if(cobroEl && pagoEl && tipo==='traslado'){
     const cobroTxt = cobroEl.value.trim(), pagoTxt = pagoEl.value.trim();

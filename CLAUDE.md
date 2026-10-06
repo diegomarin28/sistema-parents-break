@@ -139,6 +139,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   Nunca pisar la niñera de una asignación con historia: cerrarla y abrir otra desde una
   fecha. Lo que se registra desde un fijo lleva `asignacion_id`. Para saber si un fijo
   corre un día, usar `asignacionVigenteEn(a, fecha)` (core.js).
+- Fijos que empezaron antes de la app (10/10/2026): la fecha real va en `inicio_real` (solo se
+  muestra, "empezó el"); `vigente_desde` es desde cuándo se registra en la app. Nunca llevar
+  `vigente_desde` hacia atrás a meses que están en los Docs.
 - Finanzas: el resultado del mes se calcula sobre lo facturado; cobrado/pagado solo dicen si
   la plata ya entró o salió (error E1, 05/10/2026).
 - Fijos automáticos (06/10/2026): la base carga sola los próximos 14 días de cada fijo como
