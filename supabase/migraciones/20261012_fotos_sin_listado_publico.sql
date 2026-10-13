@@ -2,7 +2,8 @@
 -- Migración 12/10/2026 (S2): las fotos de niñeras y de juguetes ya no se pueden LISTAR sin
 -- sesión. Las dos políticas *_public_read dejaban que cualquiera, sin cuenta, pidiera la lista
 -- de archivos de esos buckets (y viera los nombres). Pasan a pedir una cuenta autorizada,
--- igual que subir y borrar.
+-- igual que subir y borrar. Conservan su nombre (*_public_read): así se aplicó en producción
+-- el 13/10/2026. Se puede volver a correr sin error.
 -- Las fotos se siguen viendo por su link: los buckets son públicos y la URL pública
 -- (getPublicUrl, lo que usa la app) no pasa por estas políticas. No se borran (drop): la app
 -- sube con upsert, que necesita poder leer el bucket con la sesión.
@@ -21,17 +22,16 @@ alter table public.respaldo_politicas_fotos_20261012 enable row level security;
 
 do $$
 begin
-  if (select count(*) from public.respaldo_politicas_fotos_20261012) <> 2 then
+  if (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects'
+        and policyname in ('juguetes_fotos_public_read', 'ninieras_fotos_public_read')) <> 2 then
     raise exception 'Se esperaban las 2 políticas *_public_read';
   end if;
 end $$;
 
 alter policy juguetes_fotos_public_read on storage.objects
   using (((bucket_id = 'juguetes-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
-alter policy juguetes_fotos_public_read on storage.objects rename to juguetes_fotos_autorizadas_leer;
 
 alter policy ninieras_fotos_public_read on storage.objects
   using (((bucket_id = 'ninieras-fotos'::text) AND ( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada)));
-alter policy ninieras_fotos_public_read on storage.objects rename to ninieras_fotos_autorizadas_leer;
 
 commit;
