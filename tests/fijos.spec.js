@@ -213,11 +213,15 @@ test.describe('vigencia editable desde la app', () => {
     await page.selectOption('#agenda-repetir-tipo', 'traslado');
     await expect(page.locator('#agenda-repetir-desde')).toHaveValue('2026-10-04');
     await page.locator('#agenda-repetir-dias .daybtn[data-dia="V"]').click();
+    // Un traslado fijo necesita horario y precio (13/10/2026).
+    await page.evaluate(() => setHoraSelect('agenda-rep-hi', '08:00'));
+    await page.fill('#agenda-repetir-cobro', '956');
+    await page.fill('#agenda-repetir-pago', '559');
     await page.locator('#editmodal button', { hasText: 'Guardar solicitud' }).click();
     await expect(page.locator('#editmodal')).toHaveCount(0);
     const alta = e.escrituras.find(w => w.tabla === 'asignaciones' && w.metodo === 'POST');
     expect(alta.cuerpo).toEqual([expect.objectContaining({ familia_id: ID.fDos, ninera_nombre: 'Carla Ejemplo', ninera_id: ID.nCarla,
-      tipo: 'traslado', vigente_desde: '2026-10-04', dias: ['V'] })]);
+      tipo: 'traslado', vigente_desde: '2026-10-04', dias: ['V'], cobro_traslado: 956, pago_traslado: 559 })]);
     verificarLimpio(e);
   });
 });
@@ -266,6 +270,7 @@ test.describe('app nueva con la base todavía sin migrar', () => {
     await page.evaluate(id => verFamilia(id), ID.fDos);
     await page.fill(`#asig-nombre-${ID.fDos}`, 'Carla Ejemplo');
     await page.locator(`#asig-dias-${ID.fDos} .daybtn`, { hasText: 'V' }).click();
+    await page.evaluate(id => setHoraSelect('asig-horaini-'+id, '10:00'), ID.fDos); // sin horario no se crea (13/10/2026)
     await page.locator('#editmodal button', { hasText: '+ Asignar niñera' }).click();
     await expect(page.locator('#editmodal')).toContainText('Carla Ejemplo');
     const altas = e.escrituras.filter(w => w.tabla === 'asignaciones' && w.metodo === 'POST');

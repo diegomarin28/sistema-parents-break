@@ -545,6 +545,7 @@ create table public.gastos_extra (
   ajuste_id uuid,
   creado_por text,
   created_at timestamp with time zone default now() not null,
+  absorbe_pb boolean default false not null, -- lo absorbe Parents Break (14/10/2026)
   constraint gastos_extra_pkey PRIMARY KEY (id),
   constraint gastos_extra_monto_check CHECK ((monto > (0)::numeric)),
   constraint gastos_extra_pagado_por_check CHECK ((pagado_por = ANY (ARRAY['ninera'::text, 'familia'::text])))

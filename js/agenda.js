@@ -525,6 +525,10 @@ function abrirModalNuevaSolicitud(){
         <div class="field"><label>Tipo</label><select id="agenda-repetir-tipo"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
         <div class="field"><label>Desde</label><input type="date" id="agenda-repetir-desde" value="${todayISO()}"></div>
       </div>
+      <div class="grid2">
+        <div class="field"><label>Cobro por traslado (solo traslados)</label><div class="moneyfield"><input type="number" id="agenda-repetir-cobro"></div></div>
+        <div class="field"><label>Pago a la niñera por traslado</label><div class="moneyfield"><input type="number" id="agenda-repetir-pago"></div></div>
+      </div>
       <div class="field"><label>Días</label>
         <div class="dayrow" id="agenda-repetir-dias">
           ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" data-dia="${d}" onclick="toggleAgendaDia(this)">${DIAS_CORTO[d]}</button>`).join('')}
@@ -611,7 +615,8 @@ async function guardarAsignacionFijaNueva(){
   const ninera = agendaNinierasBase.find(n=>normaliza(n.nombre)===normaliza(nineraNombre));
   const tipo = document.getElementById('agenda-repetir-tipo')?.value || 'sitting';
   const desde = document.getElementById('agenda-repetir-desde')?.value || todayISO();
-  const base = { familia_id: fam?fam.id:null, ninera_nombre:nineraNombre, ninera_id: ninera?.id || null, tipo, vigente_desde: desde };
+  const precio = tipo==='traslado' ? { cobro_traslado: Number(document.getElementById('agenda-repetir-cobro')?.value)||null, pago_traslado: Number(document.getElementById('agenda-repetir-pago')?.value)||null } : {};
+  const base = { familia_id: fam?fam.id:null, ninera_nombre:nineraNombre, ninera_id: ninera?.id || null, tipo, vigente_desde: desde, ...precio };
   let filas = [];
   if(varia){
     for(const d of dias){
@@ -620,6 +625,11 @@ async function guardarAsignacionFijaNueva(){
   } else {
     filas.push({ ...base, dias, hora_inicio: leerHora('agenda-rep-hi')||null, hora_fin: leerHora('agenda-rep-hf')||null });
   }
+  for(const fila of filas){
+    const problema = problemaFijoNuevo(fila);
+    if(problema){ warn.innerHTML = `<div class="warnbox">${escaparHtml(problema)}${varia ? ` (${escaparHtml(DIAS_CORTO[fila.dias[0]]||fila.dias[0])})` : ''}</div>`; return; }
+  }
+  if(!(await avisarSiFijoDuplicado({ familia_id: base.familia_id, ninera_nombre: nineraNombre, dias, vigente_desde: desde }))) return;
   let choque = null;
   for(const fila of filas){
     choque = await chequearFijoNuevoContraTodo(nineraNombre, fila.dias, fila.hora_inicio, fila.hora_fin);
@@ -909,9 +919,13 @@ async function precargarPrecioTrasladoFijo(a){
     if(helper0) helper0.textContent = 'Precio del fijo.';
     return;
   }
-  let { data } = await sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').eq('asignacion_id', a.id).eq('cancelado', false).order('fecha', {ascending:false}).limit(1);
+  // Solo traslados que ya pasaron y no son previstos: antes tomaba un previsto del futuro
+  // ("último traslado (22/10)") que a su vez venía de un precio con la comida sumada (13/10/2026).
+  // cobro_familia nunca incluye los gastos extra (van aparte), así que no hay nada que restar.
+  const hoy = todayISO();
+  let { data } = await sinPrevistos(sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').eq('asignacion_id', a.id).eq('cancelado', false)).lte('fecha', hoy).order('fecha', {ascending:false}).limit(1);
   if(!data || !data.length){
-    ({ data } = await sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').eq('familia_id', a.familia_id).eq('tipo', 'traslado').eq('cancelado', false).order('fecha', {ascending:false}).limit(1));
+    ({ data } = await sinPrevistos(sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera').eq('familia_id', a.familia_id).eq('tipo', 'traslado').eq('cancelado', false)).lte('fecha', hoy).order('fecha', {ascending:false}).limit(1));
   }
   const ultimo = (data||[])[0];
   const cobro = document.getElementById('agenda-fija-cobro');
@@ -1305,7 +1319,7 @@ async function abrirModalVigenciaAsignacion(asigId){
         <div class="field"><label>Cobro por traslado</label><div class="moneyfield"><input type="number" id="vig-cobro-traslado" value="${escaparHtml(a.cobro_traslado??'')}"></div></div>
         <div class="field"><label>Pago a la niñera por traslado</label><div class="moneyfield"><input type="number" id="vig-pago-traslado" value="${escaparHtml(a.pago_traslado??'')}"></div></div>
       </div>
-      <div class="helper">Lo que se cobra y se paga cada traslado de este fijo. Vacío = se toma el del último traslado.</div>
+      <div class="helper">Lo que se cobra y se paga cada traslado de este fijo (sin gastos extra: esos van aparte, con su ticket).</div>
     </div>` : ''}
     <div id="vig-warn"></div>
     <div class="confirmbtns">
@@ -1330,10 +1344,10 @@ async function guardarVigenciaAsignacion(asigId){
   const cobroEl = document.getElementById('vig-cobro-traslado'), pagoEl = document.getElementById('vig-pago-traslado');
   if(cobroEl && pagoEl && tipo==='traslado'){
     const cobroTxt = cobroEl.value.trim(), pagoTxt = pagoEl.value.trim();
-    if((cobroTxt==='') !== (pagoTxt==='')){ warn.innerHTML = '<div class="warnbox">Cargá el cobro y el pago del traslado, o dejá los dos vacíos.</div>'; return; }
-    if((cobroTxt!=='' && !(Number(cobroTxt)>=0)) || (pagoTxt!=='' && !(Number(pagoTxt)>=0))){ warn.innerHTML = '<div class="warnbox">El cobro y el pago tienen que ser números.</div>'; return; }
-    cambios.cobro_traslado = cobroTxt==='' ? null : Number(cobroTxt);
-    cambios.pago_traslado = pagoTxt==='' ? null : Number(pagoTxt);
+    // Sin precio ya no se puede (13/10/2026): el "último traslado" puede traer la comida sumada.
+    if(!(Number(cobroTxt)>0) || !(Number(pagoTxt)>0)){ warn.innerHTML = '<div class="warnbox">Un traslado fijo necesita lo que se cobra y lo que se paga a la niñera por cada traslado.</div>'; return; }
+    cambios.cobro_traslado = Number(cobroTxt);
+    cambios.pago_traslado = Number(pagoTxt);
   }
   const { data: actualizada, error } = await escribirAsignacion(p=>sb.from('asignaciones').update(p).eq('id', asigId).select().maybeSingle(), cambios);
   if(error){ warn.innerHTML = errBox(error); return; }

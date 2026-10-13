@@ -329,7 +329,7 @@ function filtrarFijosSemanaIncompleta(sits, esTrabajoFijo){
   return (sits||[]).filter(r => !esTrabajoFijo(r) || finDeSemanaDesde(lunesDeSemana(r.fecha)) < hoy);
 }
 /* Números del resumen del mes (ver comentario en cargarFinanzas). */
-function resumenFinancieroMes(sitsTodos, gastosNegocio){
+function resumenFinancieroMes(sitsTodos, gastosNegocio, gastosAbsorbidos=0){
   const hoy = todayISO();
   const suma = (lista, campo, cond=()=>true) => (lista||[]).filter(cond).reduce((s,r)=>s+(Number(r[campo])||0), 0);
   const facturado = suma(sitsTodos, 'cobro_familia');
@@ -345,7 +345,10 @@ function resumenFinancieroMes(sitsTodos, gastosNegocio){
     // (05/10/2026). Facturado y resultado sí lo cuentan, porque son del mes.
     porPagar: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha <= hoy),
     porPagarFuturo: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha > hoy),
-    resultado: facturado - costoNinieras - gastos,
+    // Gastos extra que absorbe Parents Break (13/10/2026): no se le cobran a nadie y se le
+    // reintegran a la niñera, así que bajan la ganancia del mes.
+    absorbidos: Number(gastosAbsorbidos)||0,
+    resultado: facturado - costoNinieras - gastos - (Number(gastosAbsorbidos)||0),
   };
 }
 async function cargarFinanzas(){
@@ -414,7 +417,9 @@ async function cargarFinanzas(){
   // registrado en el mes), así siempre se cumple facturado = cobrado + por cobrar. El margen por
   // familia/zona/tipo sigue esperando a que termine la semana de los fijos (renderMargen).
   finSitsTodosDelMes = sitsRaw || [];
-  const res = resumenFinancieroMes(finSitsTodosDelMes, (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos);
+  const absorbidos = await sumarGastosAbsorbidos(finSitsTodosDelMes.map(r=>r.id));
+  if(!summary.isConnected) return; // se cambió de módulo mientras se leía
+  const res = resumenFinancieroMes(finSitsTodosDelMes, (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos, absorbidos);
   const egresosNinieras = res.costoNinieras;
   const egresosGenerales = res.gastos;
   const egresos = egresosNinieras + egresosGenerales;
@@ -427,7 +432,7 @@ async function cargarFinanzas(){
     <div class="summarycard fin-resultado" style="grid-column:1/-1;border-left:3px solid ${res.resultado>=0?'var(--good)':'var(--bad)'};">
       <div class="statlabel">Resultado de ${monthLabel(finMes)}</div>
       <div class="statnum" id="fin-resultado" style="font-size:21px;margin-top:3px;color:${res.resultado>=0?'var(--good)':'var(--bad)'};">${fmt(res.resultado)}</div>
-      <div class="helper" style="margin:4px 0 0;">Facturado ${fmt(res.facturado)} − pagos a niñeras ${fmt(res.costoNinieras)} − gastos del negocio ${fmt(res.gastos)}. Se calcula sobre lo facturado: un cobro sin marcar no lo cambia.</div>
+      <div class="helper" style="margin:4px 0 0;">Facturado ${fmt(res.facturado)} − pagos a niñeras ${fmt(res.costoNinieras)} − gastos del negocio ${fmt(res.gastos)}${res.absorbidos ? ` − gastos extra que absorbe Parents Break ${fmt(res.absorbidos)}` : ''}. Se calcula sobre lo facturado: un cobro sin marcar no lo cambia.</div>
     </div>
     ${previstosMes.length ? `<div class="summarycard fin-previsto" style="grid-column:1/-1;">
       <div class="statlabel">Previsto de acá a fin de mes (fijos que todavía no pasaron)</div>
@@ -798,7 +803,8 @@ async function calcularPendientesAgrupados(){
     const r = sitsGastos.find(x=>x.id===gx.sitting_id);
     if(!r) return;
     const item = { id: gx.id, concepto: gx.concepto, monto: Number(gx.monto)||0 };
-    if(!gx.cobrado){
+    // Lo que absorbe Parents Break no se le cobra a la familia (13/10/2026): solo se reintegra.
+    if(!gx.cobrado && !gx.absorbe_pb){
       const frec = r.familia_id ? (famFrecPorId[r.familia_id]||'mensual') : (famFrecPorNombre[normaliza(r.familia_nombre)]||'mensual');
       const bucket = bucketKeyFecha(r.fecha, frec);
       const key = (r.familia_id||normaliza(r.familia_nombre))+'|'+bucket;
@@ -821,6 +827,18 @@ async function calcularPendientesAgrupados(){
 /* ---- Gastos extra (08/10/2026) ----
    Sin la tabla (base sin migrar) no hay gastos y todo sigue como antes. */
 let gastosExtraDisponible = true;
+// Suma de los gastos extra que absorbe Parents Break de esos registros. Sin la columna (base
+// sin migrar) da 0.
+async function sumarGastosAbsorbidos(ids){
+  if(!gastosExtraDisponible || !ids.length) return 0;
+  let total = 0;
+  for(let i=0; i<ids.length; i+=100){
+    const { data, error } = await sb.from('gastos_extra').select('monto').eq('absorbe_pb', true).in('sitting_id', ids.slice(i, i+100));
+    if(error) return 0;
+    total += (data||[]).reduce((t,g)=>t+(Number(g.monto)||0),0);
+  }
+  return total;
+}
 function esFaltaTabla(error){ return !!error && (error.code==='PGRST205' || error.code==='42P01'); }
 async function cargarGastosExtraPendientes(){
   if(!gastosExtraDisponible) return { gastos:[], sits:[] };
@@ -838,11 +856,13 @@ async function cargarGastosExtraPendientes(){
 function lineasGastosHtml(gastos, prefijo){
   return (gastos||[]).map(g=>`<div class="helper fin-gasto-linea" style="margin:2px 0 0;">${prefijo}: <b>$${Number(g.monto).toLocaleString('es-UY')}</b> · ${escaparHtml(g.concepto)}</div>`).join('');
 }
-// "Servicios: $X" (lo que es sitting/traslado) cuando el total incluye saldo o gastos.
+// "Servicios $X + gastos $Y = $Z" cuando el total incluye gastos (13/10/2026), o
+// "Servicios: $X" cuando solo hay saldo.
 function lineaServiciosHtml(g){
   if(!g.ajustes?.length && !g.gastos?.length) return '';
   const gastos = (g.gastos||[]).reduce((t,x)=>t+x.monto,0);
-  return `<div class="helper" style="margin:2px 0 0;">Servicios: $${(g.total - gastos).toLocaleString('es-UY')}</div>`;
+  const conGastos = textoTotalConGastos('Servicios', g.total - gastos, gastos);
+  return `<div class="helper fin-total-gastos" style="margin:2px 0 0;">${conGastos ? escaparHtml(conGastos) : `Servicios: $${(g.total - gastos).toLocaleString('es-UY')}`}</div>`;
 }
 async function cargarPorCobrarPorPagar(){
   const { gruposCobrar, gruposPagar } = await calcularPendientesAgrupados();

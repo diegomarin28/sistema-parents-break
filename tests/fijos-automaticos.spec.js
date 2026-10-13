@@ -408,7 +408,7 @@ test.describe('precio fijo de un traslado fijo', () => {
     await expect(page.locator('#vig-pago-traslado')).toHaveValue('559');
     await page.fill('#vig-pago-traslado', '');
     await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
-    await expect(page.locator('#vig-warn')).toContainText('o dejá los dos vacíos');
+    await expect(page.locator('#vig-warn')).toContainText('necesita lo que se cobra y lo que se paga');
     await page.fill('#vig-cobro-traslado', '960');
     await page.fill('#vig-pago-traslado', '560');
     await page.locator('#editmodal button', { hasText: 'Guardar' }).click();

@@ -282,16 +282,20 @@ async function generarVistaPreviaHistorialPDF(){
       exphistGastos.push(...(gs||[]));
     }
   }
+  // Lo que absorbe Parents Break no se le cobra a la familia: no va en su PDF (13/10/2026).
+  exphistGastos = exphistGastos.filter(g=>!g.absorbe_pb);
   const fechaDeSit = id => items.find(r=>r.id===id)?.fecha || '';
   exphistGastos.forEach(g=>{ g._fecha = fechaDeSit(g.sitting_id); });
   exphistGastos.sort((a,b)=>a._fecha.localeCompare(b._fecha));
-  const totalGastosFamilia = exphistGastos.filter(g=>g.pagado_por==='ninera').reduce((t,g)=>t+(Number(g.monto)||0),0);
+  const totalGastosFamilia = exphistGastos.filter(gastoACargoFamilia).reduce((t,g)=>t+(Number(g.monto)||0),0);
   const gastosHtml = exphistGastos.length ? `
     <div class="helper" style="margin:12px 0 4px;">Gastos extra${totalGastosFamilia ? ` a cargo de la familia: <b>$${totalGastosFamilia.toLocaleString('es-UY')}</b>` : ''} (el ticket va en el PDF)</div>
     <div class="tablewrap"><table class="asigtable" id="exphist-gastos"><thead><tr><th>Fecha</th><th>Concepto</th><th>Monto</th><th>Lo pagó</th></tr></thead>
     <tbody>${exphistGastos.map(g=>`<tr><td>${g._fecha ? new Date(g._fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</td><td>${escaparHtml(g.concepto)}</td><td>$${Number(g.monto).toLocaleString('es-UY')}</td><td>${g.pagado_por==='familia'?'La familia (a su favor)':'La niñera (se cobra)'}</td></tr>`).join('')}</tbody></table></div>` : '';
   const totalCobro = items.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
   const saldoPend = Math.round(exphistAjustes.reduce((t,a)=>t+pendienteAjuste(a),0)*100)/100;
+  exphistTotal = totalAPagarHistorial(items, exphistGastos, saldoPend);
+  exphistCuenta = await leerCuentaCobro();
   const ajustesHtml = exphistAjustes.length ? `
     <div class="helper" style="margin:12px 0 4px;">Saldo${saldoPend ? ` pendiente: <b>${textoMontoAjuste(saldoPend)}</b>` : ''}</div>
     <div class="tablewrap"><table class="asigtable" id="exphist-ajustes"><thead><tr><th>Fecha</th><th>Motivo</th><th>Monto</th><th>Estado</th></tr></thead>
@@ -312,8 +316,35 @@ async function generarVistaPreviaHistorialPDF(){
     </table></div>
     ${gastosHtml}
     ${ajustesHtml}
-    <button class="btn primary" style="width:100%;margin-top:12px;" onclick="descargarHistorialPDF(${argJs(desde)},${argJs(hasta)})">Descargar PDF</button>
+    <div class="exphist-total" style="margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--accent-soft, rgba(117,124,187,.12));">
+      ${exphistTotal.lineas.map(l=>`<div class="helper" style="margin:0;">${escaparHtml(l)}</div>`).join('')}
+      <div style="font-weight:700;margin-top:4px;" id="exphist-total-pagar">Total a pagar: ${plataFin(exphistTotal.total)}</div>
+    </div>
+    <div class="field" style="margin-top:10px;"><label>Cuenta para transferir (sale en el PDF)</label><input type="text" id="exphist-cuenta" value="${escaparHtml(exphistCuenta)}" placeholder="Banco, número de cuenta y titular"></div>
+    <button class="btn primary" style="width:100%;margin-top:12px;" onclick="conGuardado(this, ()=>descargarHistorialPDF(${argJs(desde)},${argJs(hasta)}))">Descargar PDF</button>
   `;
+}
+// Total a pagar del PDF de la familia: lo que todavía no se cobró de los registros y de los
+// gastos a su cargo, más el saldo pendiente (negativo = a favor de la familia).
+let exphistTotal = { total:0, lineas:[] }, exphistCuenta = '';
+function totalAPagarHistorial(items, gastos, saldoPend){
+  const f = n => '$'+Math.round(n).toLocaleString('es-UY');
+  const servicios = items.filter(r=>!r.cobrado).reduce((t,r)=>t+(Number(r.cobro_familia)||0),0);
+  const yaPagado = items.filter(r=>r.cobrado).reduce((t,r)=>t+(Number(r.cobro_familia)||0),0);
+  const gastosFam = (gastos||[]).filter(g=>gastoACargoFamilia(g) && !g.cobrado).reduce((t,g)=>t+(Number(g.monto)||0),0);
+  const lineas = [`Servicios: ${f(servicios)}`];
+  if(gastosFam) lineas.push(`Gastos extra: ${f(gastosFam)}`);
+  if(saldoPend) lineas.push(`Saldo ${saldoPend<0 ? 'a favor de la familia' : 'pendiente de la familia'}: ${saldoPend<0?'−':'+'}${f(Math.abs(saldoPend))}`);
+  if(yaPagado) lineas.push(`Ya pagado de este período (no se suma): ${f(yaPagado)}`);
+  return { total: Math.max(0, servicios + gastosFam + saldoPend), lineas };
+}
+async function leerCuentaCobro(){
+  const { data } = await sb.from('app_config').select('valor').eq('id', 'cuenta_cobro').maybeSingle();
+  return (data?.valor?.texto || '').toString();
+}
+async function guardarCuentaCobro(texto){
+  const ok = await sbGuardar(sb.from('app_config').upsert({ id:'cuenta_cobro', valor:{ texto }, actualizado_at: new Date().toISOString() }), 'la cuenta para transferir');
+  if(ok) exphistCuenta = texto;
 }
 async function descargarHistorialPDF(desde, hasta){
   if(!exphistItemsPreview.length) return;
@@ -328,8 +359,10 @@ async function descargarHistorialPDF(desde, hasta){
   doc.text('Parents’ Break — Historial de sittings y traslados', 14, 16);
   doc.setFontSize(10);
   doc.text(`Del ${fmtFecha(desde)} al ${fmtFecha(hasta)} · Familia: ${famLabel}`, 14, 23);
-  const totalCobro = exphistItemsPreview.reduce((s,r)=>s+(Number(r.cobro_familia)||0),0);
-  doc.text(`${exphistItemsPreview.length} registro(s) · Total cobrado: $${totalCobro.toLocaleString('es-UY')}`, 14, 29);
+  doc.text(`${exphistItemsPreview.length} registro(s)`, 14, 29);
+  // La cuenta para transferir se guarda para la próxima (app_config 'cuenta_cobro').
+  const cuenta = (document.getElementById('exphist-cuenta')?.value || '').trim();
+  if(cuenta !== exphistCuenta) await guardarCuentaCobro(cuenta);
   doc.autoTable({
     startY: 35,
     head: [['Fecha','Niñera','Familia','Horario','Horas','Cobro','Detalle']],
@@ -348,7 +381,7 @@ async function descargarHistorialPDF(desde, hasta){
   });
   if(exphistGastos.length){
     const y = (doc.lastAutoTable?.finalY || 35) + 10;
-    const totalGastosFamilia = exphistGastos.filter(g=>g.pagado_por==='ninera').reduce((t,g)=>t+(Number(g.monto)||0),0);
+    const totalGastosFamilia = exphistGastos.filter(gastoACargoFamilia).reduce((t,g)=>t+(Number(g.monto)||0),0);
     doc.setFontSize(11);
     doc.text(`Gastos extra${totalGastosFamilia ? ` a cargo de la familia: $${totalGastosFamilia.toLocaleString('es-UY')}` : ''}`, 14, y);
     doc.autoTable({
@@ -371,6 +404,17 @@ async function descargarHistorialPDF(desde, hasta){
       styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
       headStyles:{fillColor:[117,124,187]},
     });
+  }
+  // Un único "Total a pagar" (13/10/2026): registros + gastos a cargo de la familia + saldo, y
+  // la cuenta para transferir. Antes eran tres números sueltos y decía "Total cobrado".
+  {
+    let y = (doc.lastAutoTable?.finalY || 35) + 12;
+    if(y > 175){ doc.addPage(); y = 20; }
+    doc.setFontSize(10);
+    exphistTotal.lineas.forEach(l=>{ doc.text(l, 14, y); y += 6; });
+    doc.setFontSize(13);
+    doc.text(`Total a pagar: $${Math.round(exphistTotal.total).toLocaleString('es-UY')}`, 14, y + 2);
+    if(cuenta){ doc.setFontSize(10); doc.text(`Transferir a: ${cuenta}`, 14, y + 10); }
   }
   // Los tickets, uno por página (el bucket es privado: link firmado que vence enseguida).
   for(const g of exphistGastos){
@@ -621,7 +665,7 @@ async function abrirModalSitForm(id=null){
   sitOrigenAuto = !r;
   sitOrigenCoord = null; sitDestinoCoord = null;
   abrirModal(sitFormHTML());
-  pintarGastosExtraForm(id);
+  pintarGastosExtraForm(id, r);
   setTimeout(()=>{
     const campos = document.getElementById('sit-camposTipo');
     if(campos) campos.innerHTML = sitCamposTipoHTML();
@@ -1487,16 +1531,21 @@ async function guardarSitting(){
     if(!dias.length){
       toast('Registro guardado, pero elegí al menos un día para la asignación fija.', 'bad');
     } else {
-      const choqueFijo = await chequearFijoNuevoContraTodo(nineraNombre, dias, registro.hora_inicio, registro.hora_fin);
-      const seguirFijo = await avisarSiDobleReserva(choqueFijo, nineraNombre, 'Crear igual');
-      if(!seguirFijo){
-        toast('Registro guardado, la asignación fija no se creó.');
-      } else {
-      const { error: errAsig } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p), {
+      const nuevoFijo = {
         familia_id: registro.familia_id, ninera_nombre: nineraNombre, ninera_id: registro.ninera_id || null,
         dias, hora_inicio: registro.hora_inicio, hora_fin: registro.hora_fin,
         tipo: registro.tipo || 'sitting', vigente_desde: registro.fecha || todayISO(),
-      });
+        // Un traslado fijo lleva su precio: el de este registro (sin los gastos extra).
+        ...(registro.tipo==='traslado' ? { cobro_traslado: registro.cobro_familia || null, pago_traslado: registro.pago_ninera || null } : {}),
+      };
+      const problema = problemaFijoNuevo(nuevoFijo);
+      const choqueFijo = problema ? null : await chequearFijoNuevoContraTodo(nineraNombre, dias, registro.hora_inicio, registro.hora_fin);
+      const seguirFijo = !problema && (await avisarSiFijoDuplicado(nuevoFijo)) && (await avisarSiDobleReserva(choqueFijo, nineraNombre, 'Crear igual'));
+      if(problema) toast('Registro guardado, pero la asignación fija no se creó: '+problema, 'bad');
+      else if(!seguirFijo){
+        toast('Registro guardado, la asignación fija no se creó.');
+      } else {
+      const { error: errAsig } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p), nuevoFijo);
       if(errAsig) toast('El registro se guardó, pero la asignación fija falló: '+errAsig.message, 'bad');
       else { await sincronizarPrevistosFijos(); toast(falloGastos ? 'La asignación fija se creó.' : 'Registro guardado y asignación fija creada.'); }
       }
@@ -1514,7 +1563,7 @@ async function guardarSitting(){
      en Por cobrar / Por pagar, no en el facturado ni en el margen).
    - La familia: queda como saldo a favor de la familia (ajustes_saldo).
    Los tickets van al bucket privado "comprobantes": se ven con un link que vence. */
-async function pintarGastosExtraForm(sitId){
+async function pintarGastosExtraForm(sitId, registro=null){
   const box = document.getElementById('sit-gastos-box');
   if(!box) return;
   let existentes = [];
@@ -1528,20 +1577,96 @@ async function pintarGastosExtraForm(sitId){
     box.innerHTML = errBox(error); return;
   }
   if(sitId) existentes = data||[];
+  sitGastosExistentes = existentes;
+  // El total del registro con sus gastos, a la vista (13/10/2026).
+  if(sitId && !registro){
+    const { data: reg } = await sb.from('sittings_traslados').select('tipo,cobro_familia').eq('id', sitId).maybeSingle();
+    registro = reg;
+  }
   if(!document.getElementById('sit-gastos-box')) return;
-  const quien = g => g.pagado_por==='familia' ? 'lo pagó la familia (saldo a su favor)' : 'lo pagó la niñera';
-  const estado = g => g.pagado_por==='familia' ? '' : ` · ${g.cobrado?'cobrado':'sin cobrar'} · ${g.reintegrado?'reintegrado':'sin reintegrar'}`;
+  const aCargo = existentes.filter(gastoACargoFamilia).reduce((t,g)=>t+(Number(g.monto)||0),0);
+  const totalTxt = registro ? textoTotalConGastos(registro.tipo==='traslado' ? 'Traslado' : 'Sitting', registro.cobro_familia, aCargo) : '';
+  const quien = g => g.pagado_por==='familia' ? 'lo pagó la familia (saldo a su favor)' : g.absorbe_pb ? 'lo pagó la niñera · lo absorbe Parents Break (no se cobra)' : 'lo pagó la niñera';
+  const estado = g => g.pagado_por==='familia' ? '' : g.absorbe_pb ? ` · ${g.reintegrado?'reintegrado':'sin reintegrar'}` : ` · ${g.cobrado?'cobrado':'sin cobrar'} · ${g.reintegrado?'reintegrado':'sin reintegrar'}`;
   box.innerHTML = `
     <div class="card-section-title" style="margin:0 0 4px;">Gastos extra</div>
-    <div class="helper" style="margin:0 0 6px;">Lo que se compró para el niño (comida, Uber...). No es ganancia: se cobra o se descuenta tal cual.</div>
-    <div id="sit-gastos-existentes">${existentes.map(g=>`<div class="agendarow gasto-existente" style="border-bottom:1px solid var(--line);">
+    <div class="helper" style="margin:0 0 6px;">Lo que se compró para el niño (comida, Uber...). No va en el precio del sitting o traslado: se suma aparte, con su ticket.</div>
+    ${totalTxt ? `<div class="sit-total-gastos" style="margin:0 0 8px;padding:8px 10px;border-radius:10px;background:var(--accent-soft, rgba(117,124,187,.12));font-size:13.5px;">A cobrarle a la familia: <b>${escaparHtml(totalTxt)}</b></div>` : ''}
+    <div id="sit-gastos-existentes">${existentes.map(g=>`<div class="agendarow gasto-existente" data-gasto="${escaparHtml(g.id)}" style="border-bottom:1px solid var(--line);flex-wrap:wrap;">
       <div><div>${escaparHtml(g.concepto)} · <b>$${Number(g.monto).toLocaleString('es-UY')}</b></div><div class="helper" style="margin:2px 0 0;">${quien(g)}${estado(g)}</div></div>
       <div style="display:flex;gap:6px;">
         <button type="button" class="smallbtn" onclick="verComprobanteGasto(${argJs(g.comprobante)})">Ver ticket</button>
+        <button type="button" class="smallbtn" onclick="editarGastoExtra(${argJs(g.id)}, ${argJs(sitId)})">Editar</button>
         ${!g.cobrado && !g.reintegrado ? `<button type="button" class="smallbtn danger" onclick="conGuardado(this, ()=>quitarGastoExtra(${argJs(g.id)}, ${argJs(sitId)}))">Quitar</button>` : ''}
       </div></div>`).join('')}</div>
     <div id="sit-gastos-nuevos"></div>
     <button type="button" class="smallbtn" id="sit-gasto-agregar" onclick="agregarFilaGastoExtra()">+ Agregar gasto extra</button>`;
+}
+// Editar un gasto ya cargado (13/10/2026): concepto, monto y foto del ticket. El monto no se
+// cambia si ya se cobró o se reintegró, ni si su saldo a favor ya se usó en un cobro.
+let sitGastosExistentes = [];
+function editarGastoExtra(gastoId, sitId){
+  const g = sitGastosExistentes.find(x=>x.id===gastoId);
+  const fila = document.querySelector(`.gasto-existente[data-gasto="${CSS.escape(gastoId)}"]`);
+  if(!g || !fila) return;
+  const montoFijo = g.cobrado || g.reintegrado;
+  fila.innerHTML = `<div class="gasto-edicion" style="width:100%;">
+    <div class="grid2">
+      <div class="field"><label>Concepto</label><input type="text" class="gasto-ed-concepto" value="${escaparHtml(g.concepto)}"></div>
+      <div class="field"><label>Monto</label><div class="moneyfield"><input type="number" class="gasto-ed-monto" min="0" step="0.01" value="${escaparHtml(g.monto)}" ${montoFijo?'disabled':''}></div></div>
+    </div>
+    ${montoFijo ? '<div class="helper" style="margin:-4px 0 6px;">Ya se cobró o se reintegró: el monto no se cambia.</div>' : ''}
+    <div class="field"><label>Reemplazar la foto del ticket (opcional)</label><input type="file" class="gasto-ed-foto" accept="image/*"></div>
+    <div id="gasto-ed-warn"></div>
+    <div style="display:flex;gap:6px;">
+      <button type="button" class="smallbtn" onclick="pintarGastosExtraForm(${argJs(sitId)})">Cancelar</button>
+      <button type="button" class="smallbtn" onclick="conGuardado(this, ()=>guardarEdicionGastoExtra(${argJs(gastoId)}, ${argJs(sitId)}))">Guardar gasto</button>
+    </div></div>`;
+}
+async function guardarEdicionGastoExtra(gastoId, sitId){
+  const fila = document.querySelector(`.gasto-existente[data-gasto="${CSS.escape(gastoId)}"]`);
+  const warn = fila?.querySelector('#gasto-ed-warn');
+  const g = sitGastosExistentes.find(x=>x.id===gastoId);
+  if(!fila || !g) return;
+  const concepto = fila.querySelector('.gasto-ed-concepto').value.trim();
+  const montoEl = fila.querySelector('.gasto-ed-monto');
+  const monto = Number(montoEl.value);
+  const archivo = fila.querySelector('.gasto-ed-foto').files?.[0] || null;
+  if(!concepto){ warn.innerHTML = '<div class="warnbox">Falta el concepto.</div>'; return; }
+  const cambios = { concepto };
+  const cambiaMonto = !montoEl.disabled && monto !== Number(g.monto);
+  if(cambiaMonto){
+    if(!(monto > 0)){ warn.innerHTML = '<div class="warnbox">El monto tiene que ser mayor a cero.</div>'; return; }
+    if(g.ajuste_id){
+      const { data: aj } = await sb.from('ajustes_saldo').select('aplicado').eq('id', g.ajuste_id).maybeSingle();
+      if(aj && Number(aj.aplicado)){ warn.innerHTML = '<div class="warnbox">El saldo a favor de este gasto ya se usó en un cobro: el monto no se cambia.</div>'; return; }
+    }
+    cambios.monto = monto;
+  }
+  let rutaNueva = null;
+  if(archivo){
+    const ext = (archivo.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'') || 'jpg';
+    rutaNueva = `${sitId}/${crypto.randomUUID()}.${ext}`;
+    const { error: eUp } = await sb.storage.from('comprobantes').upload(rutaNueva, archivo, { upsert:false });
+    if(eUp){ warn.innerHTML = errBox(eUp); return; }
+    cambios.comprobante = rutaNueva;
+  }
+  const { error } = await sb.from('gastos_extra').update(cambios).eq('id', gastoId);
+  if(error){
+    if(rutaNueva) await sb.storage.from('comprobantes').remove([rutaNueva]);
+    warn.innerHTML = errBox(error); return;
+  }
+  const avisos = [];
+  if(cambiaMonto && g.ajuste_id){
+    const { error: eAj } = await sb.from('ajustes_saldo').update({ monto: -monto }).eq('id', g.ajuste_id);
+    if(eAj) avisos.push('el saldo a favor no se actualizó ('+eAj.message+')');
+  }
+  if(rutaNueva && g.comprobante){
+    const { error: eRm } = await sb.storage.from('comprobantes').remove([g.comprobante]);
+    if(eRm) avisos.push('el ticket viejo no se pudo borrar');
+  }
+  toast(avisos.length ? 'Gasto guardado, pero '+avisos.join(' y ')+'.' : 'Gasto guardado.', avisos.length ? 'bad' : undefined);
+  pintarGastosExtraForm(sitId);
 }
 // Las filas nuevas se agregan al DOM (no se vuelve a dibujar): así no se pierde la foto elegida.
 function agregarFilaGastoExtra(){
@@ -1559,6 +1684,7 @@ function agregarFilaGastoExtra(){
       <div class="field"><label>Lo pagó</label><select class="gasto-pagado-por">
         <option value="ninera">La niñera (se le cobra a la familia y se le devuelve)</option>
         <option value="familia">La familia (queda a su favor)</option>
+        <option value="absorbe">La niñera, y lo absorbe Parents Break (no se cobra a la familia)</option>
       </select></div>
       <div class="field"><label>Foto del ticket</label><input type="file" class="gasto-foto" accept="image/*"></div>
     </div>
@@ -1570,13 +1696,15 @@ function leerGastosExtraNuevos(){
   for(const fila of document.querySelectorAll('#sit-gastos-nuevos .gasto-nuevo')){
     const concepto = fila.querySelector('.gasto-concepto').value.trim();
     const monto = Number(fila.querySelector('.gasto-monto').value);
-    const pagado_por = fila.querySelector('.gasto-pagado-por').value;
+    const elegido = fila.querySelector('.gasto-pagado-por').value;
+    const pagado_por = elegido==='absorbe' ? 'ninera' : elegido;
+    const absorbe_pb = elegido==='absorbe';
     const archivo = fila.querySelector('.gasto-foto').files?.[0] || null;
     if(!concepto && !fila.querySelector('.gasto-monto').value && !archivo) continue; // fila vacía
     if(!concepto) return { error: 'Falta el concepto de un gasto extra.' };
     if(!(monto > 0)) return { error: `El gasto "${concepto}" necesita un monto mayor a cero.` };
     if(!archivo) return { error: `Falta la foto del ticket de "${concepto}".` };
-    lista.push({ concepto, monto, pagado_por, archivo });
+    lista.push({ concepto, monto, pagado_por, absorbe_pb, archivo });
   }
   return { lista };
 }
@@ -1606,7 +1734,12 @@ async function guardarGastosExtra(sitId, lista, registro){
     const { error: eG } = await sb.from('gastos_extra').insert({
       sitting_id: sitId, concepto: g.concepto, monto: g.monto, pagado_por: g.pagado_por, comprobante: ruta,
       ajuste_id: ajusteId, creado_por: registradoPorUsuario() || null,
+      ...(g.absorbe_pb ? { absorbe_pb: true } : {}), // solo si hace falta: la base sin migrar no tiene la columna
     });
+    if(eG && g.absorbe_pb && /absorbe_pb/.test(eG.message||'')){
+      await sb.storage.from('comprobantes').remove([ruta]);
+      return fallo(i, `"${g.concepto}" no se guardó: la base todavía no tiene "lo absorbe Parents Break" (falta la migración, avisale a Diego).`);
+    }
     if(eG){
       if(ajusteId) await sb.from('ajustes_saldo').delete().eq('id', ajusteId);
       await sb.storage.from('comprobantes').remove([ruta]);
@@ -1710,6 +1843,7 @@ async function cargarSitLista(){
   const { data, error } = await sinPrevistos(sb.from('sittings_traslados').select('*')).gte('fecha', desde).lt('fecha', hasta).order('fecha', {ascending:false});
   if(error){ wrap.innerHTML = errBox(error); return; }
   sitItems = data || [];
+  sitGastosFamiliaPorRegistro = await cargarGastosFamiliaPorRegistro(sitItems.map(r=>r.id));
   sitListaMostrar = 15; // se resetea cada vez que se recarga el mes, para no arrastrar un "mostrar todo" al cambiar de mes
   const cobrado = sitItems.reduce((s,r)=>s+(Number(r.cobro_familia)||0), 0);
   const pagado = sitItems.reduce((s,r)=>s+(Number(r.pago_ninera)||0), 0);
@@ -1719,6 +1853,27 @@ async function cargarSitLista(){
     <div class="summarycard" style="border-left:3px solid var(--good);"><div class="statlabel">Margen</div><div class="statnum" style="font-size:19px;margin-top:3px;color:var(--good);">${plataFin(cobrado-pagado)}</div></div>
   `;
   renderSitListaTabla();
+}
+// Gastos extra a cargo de la familia por registro (13/10/2026): la lista muestra
+// "$1.018 + gastos $427 = $1.445" para que se vea que la comida va aparte del precio.
+let sitGastosFamiliaPorRegistro = {};
+async function cargarGastosFamiliaPorRegistro(ids){
+  const porId = {};
+  if(!ids.length || (typeof gastosExtraDisponible!=='undefined' && !gastosExtraDisponible)) return porId;
+  for(let i=0; i<ids.length; i+=100){
+    const { data, error } = await sb.from('gastos_extra').select('sitting_id,monto,pagado_por,absorbe_pb').in('sitting_id', ids.slice(i, i+100));
+    if(error){
+      if(/absorbe_pb/.test(error.message||'')){ // base sin la columna: se lee sin ella
+        const r2 = await sb.from('gastos_extra').select('sitting_id,monto,pagado_por').in('sitting_id', ids.slice(i, i+100));
+        (r2.data||[]).filter(gastoACargoFamilia).forEach(g=>{ porId[g.sitting_id] = (porId[g.sitting_id]||0) + (Number(g.monto)||0); });
+        continue;
+      }
+      if(esFaltaTabla(error)) gastosExtraDisponible = false;
+      break;
+    }
+    (data||[]).filter(gastoACargoFamilia).forEach(g=>{ porId[g.sitting_id] = (porId[g.sitting_id]||0) + (Number(g.monto)||0); });
+  }
+  return porId;
 }
 // Solo pinta la tabla desde sitItems (ya en memoria) — la usan tanto cargarSitLista() como el
 // botón "Mostrar más", que no necesita volver a pedirle nada a la base.
@@ -1734,7 +1889,7 @@ function renderSitListaTabla(){
     <tbody>${itemsMostrados.map(r=>{
       const margen = (Number(r.cobro_familia)||0) - (Number(r.pago_ninera)||0);
       const fechaFmt = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'}) : '—';
-      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${escaparHtml(r.ninera_nombre)}</td><td>${plataFin(r.cobro_familia)}</td><td>${plataFin(r.pago_ninera)}</td><td class="${margen>=0?'margenpos':'margenneg'}">${plataFin(margen)}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm(${argJs(r.id)})">Editar</button><button class="smallbtn" onclick="abrirModalIncidente(${argJs({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha})})">Incidente</button><button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarSitting(${argJs(r.id)}))">Eliminar</button></div></td></tr>`;
+      return `<tr><td>${fechaFmt}</td><td><span class="badge ${r.tipo==='sitting'?'brand':'warn'}" style="font-size:10px;padding:2px 8px;">${r.tipo==='sitting'?'Sitting':'Traslado'}</span></td><td>${escaparHtml(r.familia_nombre)}${r.cancelado?' <span class="badge warn" style="font-size:9.5px;padding:2px 6px;">Cancelado</span>':''}</td><td>${escaparHtml(r.ninera_nombre)}</td><td>${plataFin(r.cobro_familia)}${sitGastosFamiliaPorRegistro[r.id] ? `<div class="helper sit-total-fila" style="margin:2px 0 0;white-space:nowrap;">+ gastos ${plataFin(sitGastosFamiliaPorRegistro[r.id])} = ${plataFin((Number(r.cobro_familia)||0)+sitGastosFamiliaPorRegistro[r.id])}</div>` : ''}</td><td>${plataFin(r.pago_ninera)}</td><td class="${margen>=0?'margenpos':'margenneg'}">${plataFin(margen)}</td><td><div class="tablecell-btns"><button class="smallbtn" onclick="abrirModalSitForm(${argJs(r.id)})">Editar</button><button class="smallbtn" onclick="abrirModalIncidente(${argJs({sitting_id:r.id, ninera_id:r.ninera_id, ninera_nombre:r.ninera_nombre, familia_id:r.familia_id, familia_nombre:r.familia_nombre, fecha:r.fecha})})">Incidente</button><button class="smallbtn danger" onclick="conGuardado(this, ()=>eliminarSitting(${argJs(r.id)}))">Eliminar</button></div></td></tr>`;
     }).join('')}</tbody></table></div>
     ${hayMas ? `<button class="smallbtn" onclick="sitListaMostrar+=15;renderSitListaTabla();" style="margin-top:10px;">Mostrar más</button>` : ''}
   `;

@@ -361,20 +361,25 @@ async function loadDashboardData(){
    notaba porque los días aparecían en "Sin registrar". Dos señales: un previsto de hoy o de
    antes que sigue sin confirmar (la corrida confirma los de hoy), o un día de un fijo de la
    próxima semana sin su fila (ni la automática ni una cargada a mano). Se mira desde las 04:00
-   de Montevideo, con los fijos automáticos prendidos. "Cargarlos ahora" corre la misma carga. */
+   de Montevideo, con los fijos automáticos prendidos. "Cargarlos ahora" corre la misma carga.
+   13/10/2026: usa la misma regla que generar_previstos_fijos (desde mañana, solo fijos con hora
+   de inicio). Un fijo sin hora de inicio contaba como "sin cargar", la carga nunca lo genera y
+   el aviso quedaba prendido para siempre: ahora se avisa que a ese fijo le falta el horario. */
 function horaActualMontevideo(){
   return Number(new Intl.DateTimeFormat('en-GB', {hour:'2-digit', hourCycle:'h23', timeZone:ZONA_NEGOCIO}).format(new Date()));
 }
+// Misma regla que generar_previstos_fijos: días como lista y hora de inicio cargada.
+function fijoSeGeneraSolo(a){ return Array.isArray(a.dias) && a.dias.length > 0 && !!a.hora_inicio; }
 async function revisarCorridaFijos(){
   const box = document.getElementById('dash-corrida');
   await esperarConfigFijos();
   if(!box) return;
   if(!fijosAutomaticosActivos || horaActualMontevideo() < 4){ box.innerHTML = ''; return; }
-  const hoy = todayISO(), hasta = sumarDiasISO(hoy, 6);
+  const hoy = todayISO(), desde = sumarDiasISO(hoy, 1), hasta = sumarDiasISO(hoy, 6);
   const [{data:sinConfirmar, error:e1}, {data:asigs, error:e2}, {data:filas, error:e3}, pausas] = await Promise.all([
     sb.from('sittings_traslados').select('id').eq('estado', 'previsto').lte('fecha', hoy).limit(1),
-    sb.from('asignaciones').select('*'),
-    sb.from('sittings_traslados').select('asignacion_id,fecha,familia_id,ninera_nombre').gte('fecha', hoy).lte('fecha', hasta),
+    sb.from('asignaciones').select('*, familias(nombre)'),
+    sb.from('sittings_traslados').select('asignacion_id,fecha,familia_id,ninera_nombre').gte('fecha', desde).lte('fecha', hasta),
     cargarPausasFijos(),
   ]);
   if(!document.getElementById('dash-corrida')) return;
@@ -382,21 +387,29 @@ async function revisarCorridaFijos(){
   const porAsig = new Set((filas||[]).filter(r=>r.asignacion_id).map(r=>r.asignacion_id+'|'+r.fecha));
   const aMano = new Set((filas||[]).filter(r=>!r.asignacion_id).map(r=>r.fecha+'|'+r.familia_id+'|'+normaliza(r.ninera_nombre||'')));
   let faltan = 0;
-  rangoFechas(hoy, hasta).forEach(fecha=>{
+  const sinHorario = new Map(); // fijos vigentes esta semana que la carga no puede generar
+  rangoFechas(desde, hasta).forEach(fecha=>{
     const dia = diaSemanaDeISO(fecha);
     (asigs||[]).forEach(a=>{
       if(!Array.isArray(a.dias) || !a.dias.includes(dia) || !asignacionVigenteEn(a, fecha) || fijoPausadoEn(pausas, a.id, fecha)) return;
       if(porAsig.has(a.id+'|'+fecha) || aMano.has(fecha+'|'+a.familia_id+'|'+normaliza(a.ninera_nombre||''))) return;
+      if(!fijoSeGeneraSolo(a)){ sinHorario.set(a.id, a); return; }
       faltan++;
     });
   });
   const viejos = (sinConfirmar||[]).length > 0;
-  if(!faltan && !viejos){ box.innerHTML = ''; return; }
-  const que = [faltan ? `${faltan} ${faltan===1?'día':'días'} de fijos de esta semana sin cargar` : '', viejos ? 'días de hoy o anteriores sin confirmar' : ''].filter(Boolean).join(' y ');
-  box.innerHTML = `<div class="warnbox corrida-aviso" style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <div style="flex:1;min-width:200px;"><b>La carga automática de los fijos de esta noche no anduvo.</b> Hay ${que}. Avisale a Diego.</div>
-    <button class="smallbtn" onclick="conGuardado(this, ()=>cargarFijosAhora())">Cargarlos ahora</button>
-  </div>`;
+  const avisos = [];
+  if(faltan || viejos){
+    const que = [faltan ? `${faltan} ${faltan===1?'día':'días'} de fijos de esta semana sin cargar` : '', viejos ? 'días de hoy o anteriores sin confirmar' : ''].filter(Boolean).join(' y ');
+    avisos.push(`<div class="warnbox corrida-aviso" style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;"><b>La carga automática de los fijos de esta noche no anduvo.</b> Hay ${que}. Avisale a Diego.</div>
+      <button class="smallbtn" onclick="conGuardado(this, ()=>cargarFijosAhora())">Cargarlos ahora</button>
+    </div>`);
+  }
+  [...sinHorario.values()].forEach(a=>{
+    avisos.push(`<div class="warnbox fijo-sin-horario" style="margin-bottom:12px;">Al fijo de <b>${escaparHtml(a.ninera_nombre||'(sin niñera)')}</b> con ${escaparHtml(a.familias?.nombre||'(familia)')} le falta el horario: no se carga solo en la Agenda. Completalo en la Agenda (Editar horarios futuros).</div>`);
+  });
+  box.innerHTML = avisos.join('');
 }
 async function cargarFijosAhora(){
   const ok = await sincronizarPrevistosFijos();
