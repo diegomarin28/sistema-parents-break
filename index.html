@@ -163,7 +163,13 @@ textarea{resize:vertical;min-height:54px;}
 .btn.danger:hover{background:#9C4448;}
 .pantallacarga{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:var(--bg);padding:24px;text-align:center;z-index:50;}
 .pantallacarga-logo{width:min(220px,60vw);height:auto;animation:fadeIn 400ms ease both;}
-.pantallacarga-spinner{width:22px;height:22px;border-width:3px;}
+/* Símbolo de carga (15/10/2026): late suave mientras carga. Definido por la altura. */
+.pantallacarga-simbolo{height:min(140px,22vh);width:auto;}
+.simbolo-latido{animation:latido 1.6s ease-in-out infinite;}
+@keyframes latido{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.07);opacity:.82;}}
+@media (prefers-reduced-motion: reduce){ .simbolo-latido{animation:none;} }
+.carga-modulo{position:fixed;transform:translate(-50%,-50%);z-index:40;pointer-events:none;}
+.carga-modulo img{height:40px;width:auto;display:block;}
 .pantallacarga-msg{font-size:14px;color:var(--ink-soft);max-width:340px;line-height:1.5;}
 .pantallacarga-msg b{color:var(--ink);display:block;font-size:16px;margin-bottom:4px;}
 .pantallacarga .btn{margin-top:4px;}
@@ -469,8 +475,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
   <!-- Pantalla de carga: se ve desde el primer instante hasta que el JS pinta el login o la app
        (que reemplazan todo el contenido de #app). Ver mostrarPantallaCarga() en core.js. -->
   <div class="pantallacarga" id="pantalla-carga" role="status" aria-live="polite">
-    <img src="logo.png" alt="Parents’ Break" class="pantallacarga-logo">
-    <span class="spinner dark pantallacarga-spinner"></span>
+    <img src="logo-simbolo.png" alt="Parents’ Break" class="pantallacarga-simbolo simbolo-latido">
     <div class="pantallacarga-msg" id="pantallacarga-msg">Cargando…</div>
   </div>
 </div>

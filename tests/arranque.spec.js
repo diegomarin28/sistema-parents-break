@@ -2,17 +2,17 @@
 // sesión o se entra; mensaje claro con "Reintentar" si no carga supabase-js o falla el arranque.
 // supabase-js se sirve desde el repo (vendor/), ya no desde jsdelivr.
 const { test, expect } = require('@playwright/test');
-const { abrirApp, verificarLimpio } = require('./support/app');
+const { abrirApp, verificarLimpio, esperarQuieta } = require('./support/app');
 
 const carga = page => page.locator('#pantalla-carga');
 
-test('mientras carga se ve el logo con la ruedita, y después el login', async ({ page }) => {
+test('mientras carga se ve el símbolo latiendo, y después el login', async ({ page }) => {
   // Se demora la librería para poder ver la pantalla de carga antes de que arranque el JS.
   await page.route(/vendor\/supabase-js/, async r => { await new Promise(ok => setTimeout(ok, 1200)); await r.continue(); });
   const abriendo = abrirApp(page, { sesion: false });
   await expect(carga(page)).toBeVisible();
-  await expect(carga(page).locator('img[src="logo.png"]')).toBeVisible();
-  await expect(carga(page).locator('.spinner')).toHaveCount(1);
+  await expect(carga(page).locator('img[src="logo-simbolo.png"]')).toBeVisible();
+  await expect(carga(page).locator('.spinner')).toHaveCount(0); // sin ruedita: el símbolo late (15/10/2026)
   await expect(carga(page)).toContainText('Cargando');
   const e = await abriendo;
   await expect(page.locator('#login-mail')).toBeVisible();
@@ -86,5 +86,49 @@ test('si tarda mucho, avisa que está tardando y ofrece reintentar', async ({ pa
   await page.clock.fastForward(13000);
   await expect(carga(page)).toContainText('Está tardando más de lo normal');
   await expect(page.locator('#pantallacarga-reintentar')).toBeVisible();
+  verificarLimpio(e);
+});
+
+// Pantallas de carga con el símbolo (15/10/2026).
+test('entre el login y Hoy queda la pantalla de carga hasta que Hoy tiene sus datos', async ({ page }) => {
+  const e = await abrirApp(page);
+  e.demoraLecturas = 1500;
+  await page.evaluate(() => { renderApp(); });
+  const entrada = page.locator('#pantalla-entrada');
+  await expect(entrada).toBeVisible();
+  await expect(entrada.locator('img[src="logo-simbolo.png"]')).toBeVisible();
+  await expect(entrada).toHaveCount(0, { timeout: 8000 });
+  await expect(page.locator('#statrow .statnum').first()).not.toHaveText('—');
+  verificarLimpio(e);
+});
+
+test('al cambiar de sección: el símbolo chico solo si tarda más de 300 ms', async ({ page }) => {
+  const e = await abrirApp(page);
+  await page.evaluate(() => {
+    window.__vioCarga = false;
+    new MutationObserver(() => { if (document.getElementById('carga-modulo')) window.__vioCarga = true; })
+      .observe(document.body, { childList: true });
+  });
+  await page.evaluate(() => setModulo('finanzas'));
+  await esperarQuieta(page);
+  expect(await page.evaluate(() => window.__vioCarga)).toBe(false); // rápido: no se ve nada
+  e.demoraLecturas = 1500;
+  const yendo = page.evaluate(() => setModulo(null));
+  const ind = page.locator('#carga-modulo');
+  await expect(ind).toBeVisible();
+  await expect(ind.locator('img')).toHaveCSS('height', '40px');
+  await expect(page.locator('#sidebar')).toBeVisible();
+  await yendo;
+  await expect(ind).toHaveCount(0);
+  verificarLimpio(e);
+});
+
+test('sin animación con "reducir movimiento"', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const e = await abrirApp(page);
+  await page.evaluate(() => mostrarPantallaCarga('Cargando…'));
+  await expect(page.locator('#pantalla-carga img')).toHaveCSS('animation-name', 'none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(page.locator('#pantalla-carga img')).toHaveCSS('animation-name', 'latido');
   verificarLimpio(e);
 });

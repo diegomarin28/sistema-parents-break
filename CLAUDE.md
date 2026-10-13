@@ -86,7 +86,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/guardados.spec.js`: doble toque, base que falla o sin conexión, cerrar el modal a mitad
   del guardado, terminar un fijo desde una fecha.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
-- `tests/arranque.spec.js`: pantalla de carga, error si no carga supabase-js, "Entrando…".
+- `tests/arranque.spec.js`: pantalla de carga (símbolo latiendo), error si no carga supabase-js,
+  "Entrando…", carga entre el login y Hoy, símbolo chico al cambiar de sección (> 300 ms).
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
 - `tests/entrevista.spec.js`: bloques del formulario en la entrevista y datos corregidos en la
   ficha de la niñera.

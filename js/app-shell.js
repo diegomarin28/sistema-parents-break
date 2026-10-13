@@ -77,7 +77,7 @@ function renderApp(){
     moduloActivo = irParam;
   }
   if(!zonaGruposCache) cargarZonaGrupos(); // las zonas se usan en casi todas las pantallas: se piden una sola vez al entrar
-  renderModulo();
+  cubrirHastaQueCargue(renderModulo());
   cargarNotificaciones();
   suscribirNotifRealtime();
 }
@@ -88,7 +88,7 @@ function toggleSidebarMobile(force){
   sb.classList.toggle('open', abrir);
   bd.classList.toggle('show', abrir);
 }
-function setModulo(k){ moduloActivo=k; const p = renderModulo(); toggleSidebarMobile(false); return p; }
+function setModulo(k){ moduloActivo=k; const p = renderModulo(); toggleSidebarMobile(false); indicarCargaModulo(p); return p; }
 function renderSidebar(){
   const activeTop = (moduloActivo===null || moduloActivo==='hoy') ? 'hoy' : (MODULOS.some(m=>m.key===moduloActivo) ? moduloActivo : null);
   document.getElementById('sidebar').innerHTML = `
@@ -181,7 +181,9 @@ async function renderDashboard(cont){
       <div id="agenda" class="agendabox"><div class="empty">Cargando…</div></div>
     </div>
   `;
-  loadDashboardData();
+  // Se devuelve la carga para que la pantalla de entrada y el indicador de sección sepan
+  // cuándo Hoy ya tiene sus datos (15/10/2026).
+  return loadDashboardData();
 }
 async function loadDashboardData(){
   await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
