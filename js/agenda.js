@@ -1710,7 +1710,7 @@ const RT_TABLAS_POR_MODULO = {
   ninieras: ['ninieras','candidatas','resenas_ninieras','sittings_traslados','juguetes'],
   familias: ['familias','asignaciones','sittings_traslados','resenas_ninieras','ninieras'],
   sittings: ['sittings_traslados','familias','ninieras','resenas_ninieras','tarifas_traslado_config'],
-  finanzas: ['sittings_traslados','gastos_generales','gastos_fijos','familias','ninieras','asignaciones','app_config','intermediaciones_enrique','intermediaciones_eventos','intermediaciones_eventos_ninieras'],
+  finanzas: ['sittings_traslados','gastos_generales','gastos_extra','ajustes_saldo','gastos_fijos','familias','ninieras','asignaciones','app_config','intermediaciones_enrique','intermediaciones_eventos','intermediaciones_eventos_ninieras'],
   marketing: ['fechas_marketing'],
   legal: ['contratos','ninieras','familias'],
   juguetes: ['juguetes','juguetes_movimientos','ninieras'],

@@ -106,6 +106,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   cobrado, en la ficha, en el PDF y con la base sin la tabla.
 - `tests/gastos-extra.spec.js`: gastos extra con ticket en el formulario, en Por cobrar / Por
   pagar (cobrar y reintegrar), saldo a favor si lo pagó la familia, PDF y base sin la tabla.
+- `tests/revisar-meses.spec.js`: Finanzas → Revisar meses (sospechas de la app y del histórico,
+  Revisado, editar sittings, gastos extra, gastos generales y saldos, historial, base sin migrar).
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -194,6 +196,12 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - Fijos (13/10/2026): no se crean sin hora de inicio (no se generan solos) ni, si son de
   traslado, sin `cobro_traslado` y `pago_traslado` (`problemaFijoNuevo`, core.js); al crear uno
   se avisa si ya hay uno vigente igual (`avisarSiFijoDuplicado`).
+- Revisar meses (15/10/2026): Finanzas tiene la vista "Revisar meses" para corregir cualquier mes
+  (incluido `fuente='historico'`) con los modales de siempre. Las sospechas salen de
+  `sospechasDelMes()` (finanzas.js); en el histórico solo cuentan pago >= cobro (con los dos montos)
+  y la misma línea repetida. "Revisado" es `sittings_traslados.revisado_at`. Los cambios de gastos
+  generales, gastos extra y saldos quedan en `finanzas_historial` (trigger), como los de sittings
+  en `sittings_historial`.
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 

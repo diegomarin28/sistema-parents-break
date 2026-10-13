@@ -12,7 +12,13 @@ async function renderFinanzas(cont){
       </div>
       <button class="btn primary" onclick="abrirModalNuevoGasto()">+ Registrar gasto</button>
     </div>
+    <div class="fin-vistas" style="display:flex;gap:6px;margin:0 0 12px;">
+      <button class="smallbtn" id="fin-vista-resumen" onclick="cambiarVistaFinanzas('resumen')">Resumen</button>
+      <button class="smallbtn" id="fin-vista-revisar" onclick="cambiarVistaFinanzas('revisar')">Revisar meses <span id="fin-revisar-cuenta"></span></button>
+    </div>
     <div class="summary4" id="fin-summary"></div>
+    <div class="card" id="fin-revisar" style="display:none;"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
+    <div id="fin-vista-resumen-wrap">
     <div class="card" id="fin-balance-wrap">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
         <div><h2 style="margin:0;">Balance de varios meses</h2><div class="helper" style="margin:2px 0 0;">Lo facturado y los costos de cada mes (pagos a niñeras y gastos), para ver la tendencia y no solo la foto de un mes.</div></div>
@@ -68,7 +74,9 @@ async function renderFinanzas(cont){
       <div id="fin-fijos-list" style="margin-top:10px;"></div>
     </div>
     <div class="card" id="fin-movs"></div>
+    </div>
   `;
+  cambiarVistaFinanzas(finVista, false);
   cargarFinanzas();
   cargarBalanceMultiMes(6);
   cargarPorCobrarPorPagar();
@@ -188,7 +196,9 @@ function editarGastoGeneral(id){
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="conGuardado(this, ()=>guardarEdicionGasto(${argJs(id)}))">Guardar</button>
-    </div>`);
+    </div>
+    <div id="fin-hist-box" style="margin-top:12px;"></div>`);
+  verHistorialFinanzas('gastos_generales', id);
 }
 async function guardarEdicionGasto(id){
   const cambios = {
@@ -202,7 +212,7 @@ async function guardarEdicionGasto(id){
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   cerrarModal();
   toast('Cambios guardados.');
-  cargarFinanzas();
+  refrescarFinanzasCompleto();
 }
 let finGastosItems = [];
 let finFijosItems = [];
@@ -369,6 +379,7 @@ async function cargarFinanzas(){
   // evita escribir sobre una pantalla que ya no está (mismo caso que "Hoy").
   if(!document.getElementById('fin-movs')) return;
   if(e1 || e2 || e3){ movsBox.innerHTML = errBox(e1||e2||e3); return; }
+  cargarRevisarMes(sitsRaw, gastos, asigs);
   // Fijos automáticos (06/10/2026): lo previsto (días que todavía no llegaron) no entra en
   // ninguna cifra del mes; se muestra aparte, como referencia.
   const previstosMes = (sitsRaw||[]).filter(esPrevisto);
@@ -1433,4 +1444,306 @@ async function cargarJuguetesDeNinera(nombre){
     <div style="margin-top:14px;background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--ink);cursor:pointer;" onclick="(async()=>{ await setModulo('juguetes'); const s=document.getElementById('jug-filt-ninera'); if(s){ s.value=${argJs(nombre)}; filtrarJuguetes(); } })();">
       ${data.length} juguete${data.length===1?'':'s'} en su casa: ${escaparHtml(data.map(j=>j.nombre).join(', '))}
     </div>`;
+}
+
+/* ================= REVISAR MESES (15/10/2026) =================
+   Pedido de Pau y Delfi: revisar a mano los ingresos y gastos de cualquier mes pasado, incluido el
+   histórico migrado de los Docs (fuente='historico'), y corregir lo que esté mal sin pasar por el
+   SQL Editor. Se edita con los modales de siempre; los sittings quedan en sittings_historial y
+   los gastos y saldos en finanzas_historial (los dos los escribe un trigger en la base).
+   Arriba van las filas sospechosas con su motivo. "Revisado" usa sittings_traslados.revisado_at
+   (la misma marca que pone Hoy al revisar un automático): la fila deja de figurar como sospechosa.
+   El histórico se marca distinto: la migración guardó el cobro y el pago en líneas separadas,
+   sin vínculo ni horario, así que ahí solo cuentan pago >= cobro (en filas con los dos) y la
+   misma línea repetida (decisión de Diego, 15/10/2026). */
+let finVista = 'resumen';
+let finRevisarFiltro = 'todas';
+let finRevisarDatos = null; // { sits, sospechas, gastosExtra, gastosGen, ajustes }
+let finRevisarSecuencia = 0;
+function cambiarVistaFinanzas(vista, recargar=true){
+  finVista = vista==='revisar' ? 'revisar' : 'resumen';
+  const resumen = document.getElementById('fin-vista-resumen-wrap');
+  const revisar = document.getElementById('fin-revisar');
+  if(!resumen || !revisar) return;
+  resumen.style.display = finVista==='resumen' ? '' : 'none';
+  revisar.style.display = finVista==='revisar' ? '' : 'none';
+  ['resumen','revisar'].forEach(v=>{
+    const b = document.getElementById('fin-vista-'+v);
+    if(!b) return;
+    const activo = v===finVista;
+    b.style.background = activo ? '#666EAE' : '';
+    b.style.color = activo ? '#fff' : '';
+    b.style.borderColor = activo ? '#666EAE' : '';
+  });
+  if(recargar && finVista==='revisar') pintarRevisarMes();
+}
+function claveNombreFin(id, nombre){ return id || ('n:'+normaliza(String(nombre||'').trim())); }
+function horasRegistroFin(r){
+  if(r.tipo!=='sitting' || !r.hora_inicio || !r.hora_fin) return 0;
+  const [hi, mi] = r.hora_inicio.split(':').map(Number);
+  const [hf, mf] = r.hora_fin.split(':').map(Number);
+  let fin = hf*60+mf;
+  if(r.termina_dia_siguiente) fin += 24*60;
+  const min = fin - (hi*60+mi);
+  return min > 0 ? min/60 : 0;
+}
+/* Motivos por los que conviene revisar cada registro del mes: { id: ['motivo', ...] }.
+   ctx: { asigPorId, famPorId, hoy }. Los revisados y los cancelados no se marcan. */
+function sospechasDelMes(sits, ctx){
+  const out = {};
+  const agregar = (id, m)=>{ (out[id] = out[id] || []).push(m); };
+  const fmt = n => '$'+Math.round(Number(n)||0).toLocaleString('es-UY');
+  const vivos = sits.filter(r=>!r.cancelado);
+  // Duplicados: en la app, mismo día, familia y niñera; en el histórico, la misma línea
+  // (mismo lado y monto, misma fecha y nombres).
+  const grupos = {};
+  vivos.forEach(r=>{
+    const k = r.fuente==='historico'
+      ? ['h', r.fecha, normaliza(String(r.familia_nombre||'').trim()), normaliza(String(r.ninera_nombre||'').trim()), Number(r.cobro_familia)||0, Number(r.pago_ninera)||0].join('|')
+      : ['a', r.fecha, claveNombreFin(r.familia_id, r.familia_nombre), claveNombreFin(r.ninera_id, r.ninera_nombre)].join('|');
+    (grupos[k] = grupos[k] || []).push(r);
+  });
+  Object.values(grupos).forEach(g=>{
+    if(g.length>1) g.forEach(r=>agregar(r.id, `Posible duplicado: hay ${g.length} registros iguales ese día`));
+  });
+  vivos.forEach(r=>{
+    const cobro = Number(r.cobro_familia)||0, pago = Number(r.pago_ninera)||0;
+    if(r.fuente==='historico'){
+      if(cobro>0 && pago>0 && pago>=cobro) agregar(r.id, `Pago a la niñera (${fmt(pago)}) mayor o igual al cobro (${fmt(cobro)})`);
+      return;
+    }
+    if(!cobro || !pago) agregar(r.id, !cobro && !pago ? 'Cobro y pago en $0 sin estar cancelado' : (!cobro ? 'Cobro en $0 sin estar cancelado' : 'Pago a la niñera en $0 sin estar cancelado'));
+    if(cobro>0 && pago>=cobro) agregar(r.id, `Pago a la niñera (${fmt(pago)}) mayor o igual al cobro (${fmt(cobro)})`);
+    else if(cobro>0 && pago>0 && (cobro-pago)/cobro < 0.10) agregar(r.id, `Margen ${Math.round((cobro-pago)/cobro*100)}% (menos del 10%)`);
+    if(!r.familia_id && !r.ninera_id) agregar(r.id, 'Sin familia ni niñera vinculadas');
+    else if(!r.familia_id) agregar(r.id, 'Sin familia vinculada');
+    else if(!r.ninera_id) agregar(r.id, 'Sin niñera vinculada');
+    if(r.tipo==='sitting' && !r.hora_inicio) agregar(r.id, 'Sitting sin horario');
+    // Precio muy distinto (más de 30%) al de su fijo o a la tarifa de la familia.
+    const asig = r.asignacion_id ? ctx.asigPorId[r.asignacion_id] : null;
+    const fam = r.familia_id ? ctx.famPorId[r.familia_id] : null;
+    let esperado = 0, deDonde = '';
+    if(r.tipo==='traslado' && Number(asig?.cobro_traslado)>0){ esperado = Number(asig.cobro_traslado); deDonde = 'el fijo'; }
+    else if(r.tipo==='sitting'){
+      const horas = horasRegistroFin(r);
+      const tarifa = Number(asig?.cobro_hora) || Number(fam?.cobro_hora) || 0;
+      if(horas && tarifa){ esperado = Math.round(horas*tarifa); deDonde = Number(asig?.cobro_hora) ? 'el fijo' : 'la tarifa de la familia'; }
+    }
+    if(esperado && cobro>0 && Math.abs(cobro-esperado) > esperado*0.30) agregar(r.id, `Cobro ${fmt(cobro)}; con ${deDonde} daría ${fmt(esperado)}`);
+    if(r.pagado && !r.cobrado && r.fecha < sumarDiasISO(ctx.hoy, -30)) agregar(r.id, 'Pagado a la niñera y sin cobrar hace más de 30 días');
+  });
+  sits.forEach(r=>{ if(r.revisado_at || r.cancelado) delete out[r.id]; });
+  return out;
+}
+async function cargarRevisarMes(sitsRaw, gastosGen, asigs){
+  const sec = ++finRevisarSecuencia;
+  const mes = finMes;
+  const desde = `${mes}-01`, hasta = shiftMes(mes, 1)+'-01';
+  const sits = (sitsRaw||[]).filter(r=>!esPrevisto(r));
+  const ids = sits.map(r=>r.id);
+  const [{data:fams}, {data:ajustes, error:eAj}] = await Promise.all([
+    sb.from('familias').select('id,nombre,cobro_hora'),
+    sb.from('ajustes_saldo').select('*').gte('fecha', desde).lt('fecha', hasta),
+  ]);
+  let gastosExtra = [];
+  for(let i=0; i<ids.length; i+=100){
+    const { data, error } = await sb.from('gastos_extra').select('*').in('sitting_id', ids.slice(i, i+100));
+    if(error) break; // base sin la tabla: la sección queda vacía
+    gastosExtra = gastosExtra.concat(data||[]);
+  }
+  if(sec !== finRevisarSecuencia || !document.getElementById('fin-revisar')) return; // llegó otra carga o se cambió de módulo
+  const asigPorId = {}; (asigs||[]).forEach(a=>{ asigPorId[a.id] = a; });
+  const famPorId = {}; (fams||[]).forEach(f=>{ famPorId[f.id] = f; });
+  const sospechas = sospechasDelMes(sits, { asigPorId, famPorId, hoy: todayISO() });
+  finRevisarDatos = { mes, sits, sospechas, gastosExtra, gastosGen: gastosGen||[], ajustes: eAj ? [] : (ajustes||[]) };
+  const n = Object.keys(sospechas).length;
+  const cuenta = document.getElementById('fin-revisar-cuenta');
+  if(cuenta) cuenta.innerHTML = n ? `<span class="badge warn" style="font-size:10.5px;padding:2px 7px;">${n}</span>` : '';
+  pintarRevisarMes();
+}
+function filaRevisarSitHtml(r, motivos){
+  const fmt = n => '$'+Math.round(Number(n)||0).toLocaleString('es-UY');
+  const fechaFmt = new Date(r.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'});
+  const fuente = r.fuente==='historico' ? '<span class="badge" style="font-size:10px;padding:2px 7px;">Histórico</span>' : '<span class="badge brand" style="font-size:10px;padding:2px 7px;">App</span>';
+  return `<div class="agendarow fin-rev-fila${motivos?' fin-rev-sospecha':''}" data-id="${escaparHtml(r.id)}" style="border-bottom:1px solid var(--line);align-items:flex-start;">
+    <div>
+      <div>${fechaFmt} · ${escaparHtml(r.familia_nombre||'(sin familia)')} · ${escaparHtml(r.ninera_nombre||'(sin niñera)')} · ${r.tipo==='traslado'?'traslado':'sitting'} ${fuente}${r.cancelado?' <span class="badge warn" style="font-size:10px;padding:2px 7px;">Cancelado</span>':''}${r.revisado_at?' <span class="badge good" style="font-size:10px;padding:2px 7px;">Revisado</span>':''}</div>
+      ${motivos ? `<div class="fin-rev-motivo" style="font-size:12.5px;color:var(--bad);margin-top:2px;">${motivos.map(escaparHtml).join(' · ')}</div>` : ''}
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;">${fmt(r.cobro_familia)} / ${fmt(r.pago_ninera)}</span>
+      <button class="smallbtn" onclick="editarMovimientoSitting(${argJs(r.id)})">Editar</button>
+      ${motivos ? `<button class="smallbtn fin-rev-ok" onclick="conGuardado(this, ()=>guardarRevisadoFinanzas(${argJs(r.id)}))">Revisado</button>` : ''}
+    </div>
+  </div>`;
+}
+function cambiarFiltroRevisar(f){ finRevisarFiltro = f; pintarRevisarMes(); }
+function pintarRevisarMes(){
+  const box = document.getElementById('fin-revisar');
+  const d = finRevisarDatos;
+  if(!box || !d || d.mes !== finMes) return;
+  const fmt = n => '$'+Math.round(Number(n)||0).toLocaleString('es-UY');
+  const fechaCorta = f => f ? new Date(f+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit'}) : '—';
+  const n = Object.keys(d.sospechas).length;
+  const filtros = [['todas','Todas'],['revisar','Para revisar'],['sits','Sittings'],['extra','Gastos extra'],['generales','Gastos generales'],['saldos','Saldos']];
+  const ver = k => finRevisarFiltro==='todas' || finRevisarFiltro===k;
+  const ordenFecha = (a,b)=> (a.fecha||'').localeCompare(b.fecha||'');
+  const sospechosas = d.sits.filter(r=>d.sospechas[r.id]).sort(ordenFecha);
+  const resto = d.sits.filter(r=>!d.sospechas[r.id]).sort(ordenFecha);
+  const fechaSit = {}; d.sits.forEach(r=>{ fechaSit[r.id] = r; });
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;">Revisar ${monthLabel(finMes)}</h2>
+      <span id="fin-rev-total" class="badge ${n?'warn':'good'}">${n ? `${n} para revisar` : 'Nada para revisar'}</span>
+    </div>
+    <div class="helper">Cada cambio queda en el historial y las cifras de arriba se recalculan solas. "Revisado" saca la fila de la lista de sospechosas.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px;">${filtros.map(([k,t])=>`<button class="smallbtn fin-rev-filtro" data-filtro="${k}" onclick="cambiarFiltroRevisar(${argJs(k)})" style="${k===finRevisarFiltro?'background:#666EAE;color:#fff;border-color:#666EAE;':''}">${t}</button>`).join('')}</div>`;
+  if(ver('revisar') || ver('sits')){
+    html += `<div class="card-section-title">Para revisar</div><div id="fin-rev-sospechosas">${sospechosas.length ? sospechosas.map(r=>filaRevisarSitHtml(r, d.sospechas[r.id])).join('') : '<div class="empty">Nada para revisar en este mes.</div>'}</div>`;
+  }
+  if(ver('sits')){
+    html += `<div class="card-section-title" style="margin-top:14px;">Resto del mes (cobro / pago)</div><div id="fin-rev-resto">${resto.length ? resto.map(r=>filaRevisarSitHtml(r, null)).join('') : '<div class="empty">No hay más sittings ni traslados en este mes.</div>'}</div>`;
+  }
+  if(ver('extra')){
+    html += `<div class="card-section-title" style="margin-top:14px;">Gastos extra</div><div id="fin-rev-extra">${d.gastosExtra.length ? d.gastosExtra.map(g=>{
+      const r = fechaSit[g.sitting_id] || {};
+      const quien = g.absorbe_pb ? 'lo absorbe Parents Break' : (g.pagado_por==='familia' ? 'lo pagó la familia' : 'lo pagó la niñera');
+      return `<div class="agendarow" style="border-bottom:1px solid var(--line);">
+        <div>${fechaCorta(r.fecha)} · ${escaparHtml(g.concepto)} <span class="helper" style="margin:0;">(${escaparHtml(r.familia_nombre||'')} · ${quien})</span></div>
+        <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'IBM Plex Mono',monospace;font-size:13px;">${fmt(g.monto)}</span>
+        <button class="smallbtn" onclick="editarGastoExtraFinanzas(${argJs(g.id)})">Editar</button></div>
+      </div>`;
+    }).join('') : '<div class="empty">No hay gastos extra en este mes.</div>'}</div>`;
+  }
+  if(ver('generales')){
+    const gg = d.gastosGen.slice().sort(ordenFecha);
+    html += `<div class="card-section-title" style="margin-top:14px;">Gastos generales</div><div id="fin-rev-generales">${gg.length ? gg.map(g=>`<div class="agendarow" style="border-bottom:1px solid var(--line);">
+        <div>${fechaCorta(g.fecha)} · ${escaparHtml(g.concepto)}</div>
+        <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'IBM Plex Mono',monospace;font-size:13px;">${fmt(g.monto)}</span>
+        <button class="smallbtn" onclick="editarGastoGeneral(${argJs(g.id)})">Editar</button></div>
+      </div>`).join('') : '<div class="empty">No hay gastos generales en este mes.</div>'}</div>`;
+  }
+  if(ver('saldos')){
+    const aj = d.ajustes.slice().sort(ordenFecha);
+    html += `<div class="card-section-title" style="margin-top:14px;">Saldos a favor</div><div id="fin-rev-saldos">${aj.length ? aj.map(a=>`<div class="agendarow" style="border-bottom:1px solid var(--line);">
+        <div>${fechaCorta(a.fecha)} · ${escaparHtml(a.nombre)} (${a.sujeto==='familia'?'familia':'niñera'}) · ${escaparHtml(a.motivo)}</div>
+        <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'IBM Plex Mono',monospace;font-size:13px;">${textoMontoAjuste(a.monto)}</span>
+        <button class="smallbtn" onclick="editarAjusteFinanzas(${argJs(a.id)})">Editar</button></div>
+      </div>`).join('') : '<div class="empty">No hay saldos a favor cargados en este mes.</div>'}</div>`;
+  }
+  box.innerHTML = html;
+}
+async function guardarRevisadoFinanzas(id){
+  const ok = await sbGuardar(sb.from('sittings_traslados').update({ revisado_at: new Date().toISOString() }).eq('id', id), 'la marca de revisado');
+  if(!ok) return;
+  toast('Marcado como revisado.');
+  refrescarFinanzasCompleto();
+}
+function editarGastoExtraFinanzas(id){
+  const g = finRevisarDatos?.gastosExtra.find(x=>x.id===id);
+  if(!g) return;
+  const montoFijo = g.cobrado || g.reintegrado;
+  abrirModal(`
+    <h2 style="margin:0 0 18px;">Editar gasto extra</h2>
+    <div class="grid2">
+      <div class="field"><label>Concepto</label><input type="text" id="fin-gx-concepto" value="${escaparHtml(g.concepto)}"></div>
+      <div class="field"><label>Monto</label><input type="number" id="fin-gx-monto" min="0" step="0.01" value="${escaparHtml(g.monto)}" ${montoFijo?'disabled':''}></div>
+    </div>
+    ${montoFijo ? '<div class="helper">Ya se cobró o se reintegró: el monto no se cambia.</div>' : ''}
+    <div class="field"><label>Reemplazar la foto del ticket (opcional)</label><input type="file" id="fin-gx-foto" accept="image/*"></div>
+    ${g.comprobante ? `<button type="button" class="smallbtn" onclick="verComprobanteGasto(${argJs(g.comprobante)})">Ver ticket</button>` : ''}
+    <div id="fin-gx-warn"></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarGastoExtraFinanzas(${argJs(id)}))">Guardar</button>
+    </div>
+    <div id="fin-hist-box" style="margin-top:12px;"></div>`);
+  verHistorialFinanzas('gastos_extra', id);
+}
+async function guardarGastoExtraFinanzas(id){
+  const g = finRevisarDatos?.gastosExtra.find(x=>x.id===id);
+  if(!g) return;
+  const montoEl = document.getElementById('fin-gx-monto');
+  const res = await aplicarEdicionGastoExtra(g, {
+    concepto: document.getElementById('fin-gx-concepto').value.trim(),
+    monto: montoEl.disabled ? null : Number(montoEl.value),
+    archivo: document.getElementById('fin-gx-foto').files?.[0] || null,
+  });
+  if(res.error){ const w = document.getElementById('fin-gx-warn'); if(w) w.innerHTML = res.error; return; }
+  cerrarModal();
+  toast(res.avisos.length ? 'Gasto guardado, pero '+res.avisos.join(' y ')+'.' : 'Gasto guardado.', res.avisos.length ? 'bad' : undefined);
+  refrescarFinanzasCompleto();
+}
+/* Saldo a favor: fecha, motivo y monto. Lo ya usado en un cobro o pago (aplicado) pone un piso
+   al monto y no deja darlo vuelta; el de un gasto extra pagado por la familia se cambia desde el
+   gasto, para que los dos no queden distintos. */
+function editarAjusteFinanzas(id){
+  const a = finRevisarDatos?.ajustes.find(x=>x.id===id);
+  if(!a) return;
+  const aplicado = Number(a.aplicado)||0;
+  abrirModal(`
+    <h2 style="margin:0 0 4px;">Editar saldo a favor</h2>
+    <div class="helper" style="margin-bottom:14px;">${escaparHtml(a.nombre)} (${a.sujeto==='familia'?'familia':'niñera'}). Positivo suma a lo que se le cobra o paga; negativo descuenta.</div>
+    <div class="grid3">
+      <div class="field"><label>Fecha</label><input type="date" id="fin-aj-fecha" value="${escaparHtml(a.fecha)}"></div>
+      <div class="field"><label>Motivo</label><input type="text" id="fin-aj-motivo" value="${escaparHtml(a.motivo)}"></div>
+      <div class="field"><label>Monto</label><input type="number" id="fin-aj-monto" step="0.01" value="${escaparHtml(a.monto)}"></div>
+    </div>
+    ${aplicado ? `<div class="helper">Ya se usaron ${plataFin(aplicado)}: el monto no puede quedar por debajo de eso ni cambiar de signo.</div>` : ''}
+    <div id="fin-aj-warn"></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarAjusteFinanzas(${argJs(id)}))">Guardar</button>
+    </div>
+    <div id="fin-hist-box" style="margin-top:12px;"></div>`);
+  verHistorialFinanzas('ajustes_saldo', id);
+}
+async function guardarAjusteFinanzas(id){
+  const a = finRevisarDatos?.ajustes.find(x=>x.id===id);
+  if(!a) return;
+  const warn = document.getElementById('fin-aj-warn');
+  const aviso = t => { if(warn) warn.innerHTML = `<div class="warnbox">${t}</div>`; };
+  const fecha = document.getElementById('fin-aj-fecha').value;
+  const motivo = document.getElementById('fin-aj-motivo').value.trim();
+  const montoTxt = document.getElementById('fin-aj-monto').value;
+  const monto = Number(montoTxt);
+  if(!fecha || !motivo) return aviso('Faltan la fecha o el motivo.');
+  if(montoTxt==='' || !isFinite(monto) || monto===0) return aviso('El monto tiene que ser un número distinto de cero.');
+  const aplicado = Number(a.aplicado)||0;
+  const cambiaMonto = monto !== Number(a.monto);
+  if(cambiaMonto){
+    if(aplicado && (Math.sign(monto)!==Math.sign(Number(a.monto)) || Math.abs(monto) < aplicado)) return aviso(`Ya se usaron ${plataFin(aplicado)} de este saldo: el monto no puede quedar por debajo ni cambiar de signo.`);
+    const { data: gx, error: eG } = await sb.from('gastos_extra').select('id').eq('ajuste_id', id).limit(1);
+    if(!eG && gx && gx.length) return aviso('Este saldo sale de un gasto extra que pagó la familia: cambiá el monto desde el gasto.');
+  }
+  const ok = await sbGuardar(sb.from('ajustes_saldo').update({ fecha, motivo, monto }).eq('id', id), 'el saldo a favor');
+  if(!ok) return;
+  cerrarModal();
+  toast('Cambios guardados.');
+  refrescarFinanzasCompleto();
+}
+/* Historial de gastos generales, gastos extra y saldos a favor (finanzas_historial, lo escribe
+   un trigger). Si la migración todavía no corrió, se avisa y el resto funciona igual. */
+const HIST_CAMPOS_FIN = { fecha:'Fecha', concepto:'Concepto', monto:'Monto', notas:'Notas', motivo:'Motivo', comprobante:'Ticket', cobrado:'Cobrado', reintegrado:'Reintegrado', aplicado:'Usado', pagado_por:'Lo pagó', absorbe_pb:'Lo absorbe Parents Break' };
+async function verHistorialFinanzas(tabla, id){
+  const box = document.getElementById('fin-hist-box');
+  if(!box) return;
+  const { data, error } = await sb.from('finanzas_historial').select('*').eq('tabla', tabla).eq('fila_id', id).order('cuando', {ascending:false});
+  if(!document.getElementById('fin-hist-box')) return;
+  if(error){
+    box.innerHTML = `<div class="helper">${esFaltaTabla(error) ? 'El historial de cambios de gastos y saldos todavía no está activado en la base.' : 'No se pudo cargar el historial: '+escaparHtml(error.message)}</div>`;
+    return;
+  }
+  if(!data || !data.length){ box.innerHTML = '<div class="helper">Sin cambios registrados desde que se activó el historial.</div>'; return; }
+  box.innerHTML = '<div class="card-section-title">Historial de cambios</div>' + data.map(h=>{
+    const cuando = new Date(h.cuando).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+    let detalle = '';
+    if(h.accion==='alta') detalle = 'Lo cargó.';
+    else if(h.accion==='baja') detalle = 'Lo borró.';
+    else detalle = Object.entries(h.cambios||{}).filter(([k])=>HIST_CAMPOS_FIN[k])
+      .map(([k,c])=>`${HIST_CAMPOS_FIN[k]}: ${valorHistorial(c.antes)} → ${valorHistorial(c.despues)}`).join('<br>') || 'Cambios internos.';
+    return `<div class="agendarow fin-hist-fila" style="border-bottom:1px solid var(--line);align-items:flex-start;">
+      <div><div style="font-weight:600;">${escaparHtml(h.usuario||'(sin usuario)')}</div><div class="helper" style="margin:2px 0 0;">${cuando}</div></div>
+      <div style="font-size:13px;text-align:right;">${detalle}</div>
+    </div>`;
+  }).join('');
 }
