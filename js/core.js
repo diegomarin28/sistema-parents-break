@@ -9,16 +9,15 @@ const sb = (typeof supabase !== 'undefined' && typeof supabase.createClient === 
   : null;
 
 /* ---- Pantalla de carga y error de arranque (05/10/2026, E4) ----
-   Mientras arranca, se busca la sesión o se entra, se ve el logo con una ruedita (el HTML
-   inicial ya la trae en index.html). Si algo sale mal antes de poder pintar la app, se
+   Mientras arranca, se busca la sesión o se entra, se ve el símbolo latiendo (el HTML
+   inicial ya lo trae en index.html; desde el 15/10/2026 sin ruedita). Si algo sale mal antes de poder pintar la app, se
    explica qué pasó con un botón para reintentar, en vez de una pantalla en blanco. */
 function mostrarPantallaCarga(mensaje='Cargando…'){
   const app = document.getElementById('app');
   if(!app) return;
   if(!document.getElementById('pantalla-carga')){
     app.innerHTML = `<div class="pantallacarga" id="pantalla-carga" role="status" aria-live="polite">
-      <img src="logo.png" alt="Parents’ Break" class="pantallacarga-logo">
-      <span class="spinner dark pantallacarga-spinner"></span>
+      <img src="logo-simbolo.png" alt="Parents’ Break" class="pantallacarga-simbolo simbolo-latido">
       <div class="pantallacarga-msg" id="pantallacarga-msg"></div>
     </div>`;
   }
@@ -34,6 +33,49 @@ function mostrarErrorArranque(titulo, detalle){
     <div class="pantallacarga-msg"><b>${escaparHtml(titulo)}</b>${escaparHtml(detalle)}</div>
     <button class="btn primary" onclick="location.reload()">Reintentar</button>
   </div>`;
+}
+/* Entre el login (o el arranque) y Hoy (15/10/2026): la app ya pintada queda tapada por la
+   misma pantalla de carga hasta que la primera pantalla tiene sus datos, en vez de verse vacía.
+   Va fuera de #app (con otro id) para no confundir a boot(), y se saca sola a los 10 s como
+   máximo: nunca deja la app bloqueada. */
+function cubrirHastaQueCargue(promesa){
+  if(!promesa || typeof promesa.then!=='function') return;
+  document.getElementById('pantalla-entrada')?.remove();
+  const capa = document.createElement('div');
+  capa.className = 'pantallacarga'; capa.id = 'pantalla-entrada';
+  capa.setAttribute('role', 'status'); capa.setAttribute('aria-live', 'polite');
+  capa.innerHTML = `<img src="logo-simbolo.png" alt="Parents’ Break" class="pantallacarga-simbolo simbolo-latido">
+    <div class="pantallacarga-msg">Cargando…</div>`;
+  document.body.appendChild(capa);
+  let listo = false;
+  const sacar = ()=>{ if(listo) return; listo = true; clearTimeout(tope); capa.remove(); };
+  const tope = setTimeout(sacar, 10000);
+  promesa.then(sacar, sacar);
+}
+/* Al cambiar de sección (15/10/2026): el símbolo chico latiendo en el centro del área de
+   contenido, solo si la carga tarda más de 300 ms (si carga antes no se ve nada, sin
+   parpadeos). La barra lateral no se toca. */
+let cargaModuloSec = 0;
+function indicarCargaModulo(promesa){
+  const sec = ++cargaModuloSec;
+  document.getElementById('carga-modulo')?.remove();
+  if(!promesa || typeof promesa.then!=='function') return;
+  let listo = false;
+  const timer = setTimeout(()=>{
+    const cont = document.getElementById('modcontent');
+    if(listo || sec!==cargaModuloSec || !cont) return;
+    const r = cont.getBoundingClientRect();
+    const arriba = Math.max(r.top, 0), abajo = Math.min(r.bottom, window.innerHeight);
+    const ind = document.createElement('div');
+    ind.className = 'carga-modulo'; ind.id = 'carga-modulo';
+    ind.setAttribute('role', 'status'); ind.setAttribute('aria-label', 'Cargando');
+    ind.style.left = (r.left + r.width/2) + 'px';
+    ind.style.top = (arriba + Math.max(abajo-arriba, 0)/2) + 'px';
+    ind.innerHTML = '<img src="logo-simbolo.png" alt="" class="simbolo-latido">';
+    document.body.appendChild(ind);
+  }, 300);
+  const fin = ()=>{ listo = true; clearTimeout(timer); if(sec===cargaModuloSec) document.getElementById('carga-modulo')?.remove(); };
+  promesa.then(fin, fin);
 }
 // Si la carga tarda mucho (mala señal), se avisa debajo del logo sin cortar nada.
 let avisoCargaLentaTimer = null;

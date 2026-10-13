@@ -77,10 +77,11 @@ async function renderFinanzas(cont){
     </div>
   `;
   cambiarVistaFinanzas(finVista, false);
-  cargarFinanzas();
+  const carga = cargarFinanzas();
   cargarBalanceMultiMes(6);
   cargarPorCobrarPorPagar();
   cargarAvisoExtracto();
+  return carga; // para el indicador de carga de la sección (15/10/2026)
 }
 async function cargarAvisoExtracto(){
   const box = document.getElementById('fin-extracto-aviso');
