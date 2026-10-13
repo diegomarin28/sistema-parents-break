@@ -16,6 +16,8 @@ a las familias y niñeras.
   insert/update en esa tabla (por id, con OK de Diego).
 - PWA: `manifest.json` + `sw.js`. El service worker solo maneja push y notificationclick: NO
   hay modo offline (no tiene listener de fetch). Agregar offline es un pendiente aparte.
+  En iPhone, la pantalla de inicio de la app instalada son las `splash/*.png` (una por tamaño
+  de pantalla, `apple-touch-startup-image`); si cambia el logo, `node scripts/splash-ios.js`.
 - Estructura de la base (sin datos): `supabase/schema.sql`. Si un PR cambia la estructura,
   actualizarlo en el mismo PR.
 
