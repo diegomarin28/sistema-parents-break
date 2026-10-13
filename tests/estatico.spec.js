@@ -103,3 +103,18 @@ test.describe('estático', () => {
     expect(html).toContain("location.replace('https://parentsbreak.pages.dev/temporada' + location.search)");
   });
 });
+
+// Pantallas de inicio del iPhone (15/10/2026): cada <link> apunta a un PNG que existe y que
+// mide exactamente lo que dice su media query (si no coincide, iOS lo ignora y muestra blanco).
+test('pantallas de inicio del iPhone: archivos presentes y del tamaño justo', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const raiz = path.join(__dirname, '..');
+  const html = fs.readFileSync(path.join(raiz, 'index.html'), 'utf8');
+  const links = [...html.matchAll(/<link rel="apple-touch-startup-image" href="([^"]+)" media="\(device-width: (\d+)px\) and \(device-height: (\d+)px\) and \(-webkit-device-pixel-ratio: (\d)\) and \(orientation: portrait\)">/g)];
+  expect(links.length).toBe(13);
+  for (const [, href, w, h, r] of links) {
+    const png = fs.readFileSync(path.join(raiz, href));
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)], href).toEqual([w * r, h * r]);
+  }
+});
