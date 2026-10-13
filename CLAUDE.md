@@ -116,6 +116,16 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - Más adelante: tests de integración contra un proyecto de Supabase gratis aparte (nunca
   producción).
 
+## Edge Functions
+- El código está en `supabase/functions/<nombre>/` desde el 06/10/2026. Todas con
+  verify_jwt = false. Se publican con el OK de Diego y el repo tiene que quedar igual a lo
+  publicado.
+- Los webhooks de formularios piden `x-webhook-secret` (WEBHOOK_SECRET), enviar-push-urgentes
+  pide `x-cron-secret` (app_secrets 'cron_push_secret', lo manda el cron) y whatsapp-webhook
+  verifica la firma de Meta (WHATSAPP_APP_SECRET).
+- Para revisarlas: `npx deno@2 check` desde una carpeta fuera del repo (el package.json de la
+  raíz confunde a Deno).
+
 ## Convenciones
 - UI y comentarios en español rioplatense (voseo). Los comentarios explican el porqué y
   fechan los incidentes reales; mantener ese estilo.
@@ -190,6 +200,13 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   guardados con éxito falso, confirmación al marcar pagado, pantalla de carga, alta de
   niñera solo con nombre, bloques del formulario en la entrevista, diseño de fijos
   automáticos.
-- Las Edge Functions (candidatas-webhook, resenas-webhook, carsitting-webhook,
-  carsitting-recordatorio, whatsapp-webhook, enviar-push-urgentes, temporada-ninera) no
-  están versionadas en el repo.
+- Cambio de banco (06/10/2026): Parents Break pasa de Itaú a Mercado Pago esta semana y el
+  extracto de Itaú ya no llega. Cuando haya un extracto de Mercado Pago, se arma su lector en
+  `LECTORES_EXTRACTO` (finanzas.js). Los avisos de "Falta subir el extracto de Itaú" (campanita
+  y enviar-push-urgentes) hay que adaptarlos entonces.
+- WhatsApp (06/10/2026): whatsapp-webhook ya publicado exige la firma de Meta y hoy rechaza
+  todo. Cuando arranquemos con WhatsApp, cargar `WHATSAPP_APP_SECRET` (App Secret de la app de
+  Meta) en Supabase > Edge Functions > Secrets.
+- `temporada-ninera` (S3): no pide el link con token y acepta nombre + celular nuevo. Se
+  endurece en noviembre, cuando termine la temporada (el formulario está en uso todo octubre).
+  Tiene además un error de tipos (TS18046) que ya traía la versión publicada.

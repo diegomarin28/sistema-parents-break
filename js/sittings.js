@@ -3,7 +3,8 @@ let sitFamilias = [];
 let sitNinieras = [];
 let sitItems = [];
 let sitTipo = 'sitting';
-let sitPrefill = null; // {familiaNombre, nineraNombre, fecha, horaInicio, horaFin, notas} — precarga el form de sitting desde Agenda o desde "Pendiente" en Hoy
+let sitPrefill = null; // {familiaNombre, nineraNombre, fecha, horaInicio, horaFin, tipo, asignacionId, cobro, pago, notas} — precarga el form desde "Sin registrar" en Hoy
+let sitAsignacionId = null; // fijo del que sale el registro nuevo (vino con sitPrefill): se guarda en asignacion_id
 let sitEsRegistroConocido = false; // true si se está editando uno ya guardado, o si vino con sitPrefill (un fijo/pendiente ya sabido) — controla si tiene sentido mostrar "Este día no hubo servicio"
 let sitPagoModoHora = false; // true = el campo de pago a niñera se tipea por hora (y se calcula el total solo), false = se tipea el total directo
 let sitEditId = null;
@@ -613,7 +614,8 @@ async function abrirModalSitForm(id=null){
   sitEditId = id;
   sitEsRegistroConocido = !!r || !!sitPrefill; // nuevo en blanco -> no corresponde "no hubo servicio"
   sitPagoModoHora = false;
-  sitTipo = r ? r.tipo : 'sitting';
+  sitAsignacionId = (!r && sitPrefill?.asignacionId) || null;
+  sitTipo = r ? r.tipo : (sitPrefill?.tipo==='traslado' ? 'traslado' : 'sitting');
   sitFamiliaSel = r ? (sitFamilias.find(f=>f.id===r.familia_id) || findFamilia(r.familia_nombre)) : null;
   sitNineraSel = r ? (sitNinieras.find(n=>n.id===r.ninera_id) || findNinera(r.ninera_nombre)) : null;
   sitOrigenAuto = !r;
@@ -658,10 +660,23 @@ async function abrirModalSitForm(id=null){
         document.getElementById('sit-ninera').value = sitPrefill.nineraNombre;
         sitNineraSel = findNinera(sitPrefill.nineraNombre);
       }
-      if(sitPrefill.horaInicio) setHoraSelect('sit-horaini', sitPrefill.horaInicio);
-      if(sitPrefill.horaFin) setHoraSelect('sit-horafin', sitPrefill.horaFin);
+      if(sitTipo==='traslado'){
+        if(sitPrefill.horaInicio) setHoraSelect('sit-hora', sitPrefill.horaInicio);
+      } else {
+        if(sitPrefill.horaInicio) setHoraSelect('sit-horaini', sitPrefill.horaInicio);
+        if(sitPrefill.horaFin) setHoraSelect('sit-horafin', sitPrefill.horaFin);
+      }
       if(sitPrefill.notas) document.getElementById('sit-notas').value = sitPrefill.notas;
       onSitFamiliaInput(); // ya calcula cobro/pago solo si la familia tiene tarifa y el horario está cargado
+      // Traslado de un fijo: su precio, como en la Agenda. Queda marcado como puesto a mano
+      // para que los km no lo cambien por el precio sugerido.
+      if(sitTipo==='traslado' && sitPrefill.cobro!=null && sitPrefill.pago!=null){
+        const cobroEl = document.getElementById('sit-cobro'), pagoEl = document.getElementById('sit-pago');
+        cobroEl.value = Number(sitPrefill.cobro)||0; cobroEl.dataset.tocadoManual = '1';
+        pagoEl.value = Number(sitPrefill.pago)||0; pagoEl.dataset.tocadoManual = '1';
+        const box = document.getElementById('sit-precio-sugerido-box');
+        if(box) box.innerHTML = '<div class="helper" style="margin:0;">Precio del fijo.</div>';
+      }
       sitPrefill = null;
     }
     calcSitMargen();
@@ -1442,7 +1457,7 @@ async function guardarSitting(){
     }
   }
   if(!sitEditId && registro.hora_inicio && !yaAvisadoDuplicado){
-    const choque = await chequearDobleReservaDB(nineraNombre, fecha, registro.hora_inicio, registro.hora_fin);
+    const choque = await chequearDobleReservaDB(nineraNombre, fecha, registro.hora_inicio, registro.hora_fin, {familiaId: registro.familia_id, asignacionId: sitAsignacionId});
     if(!(await avisarSiDobleReserva(choque, nineraNombre, 'Guardar igual'))) return;
   }
   if(!sitEditId && registro.hora_inicio && !yaAvisadoDuplicado){
@@ -1454,6 +1469,7 @@ async function guardarSitting(){
     ({ error } = await sb.from('sittings_traslados').update(registro).eq('id', sitEditId));
   } else {
     let creado;
+    if(sitAsignacionId) registro.asignacion_id = sitAsignacionId; // día de un fijo cargado desde "Sin registrar"
     ({ data: creado, error } = await sb.from('sittings_traslados').insert(registro).select('id').single());
     sitGuardadoId = creado?.id || null;
   }
@@ -1488,7 +1504,7 @@ async function guardarSitting(){
   } else if(!falloGastos){
     toast(sitEditId ? 'Registro actualizado.' : 'Registro guardado.');
   }
-  sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
+  sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting'; sitAsignacionId = null;
   cerrarModal();
   cargarSitLista();
 }
