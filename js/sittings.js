@@ -1628,33 +1628,44 @@ async function guardarEdicionGastoExtra(gastoId, sitId){
   const warn = fila?.querySelector('#gasto-ed-warn');
   const g = sitGastosExistentes.find(x=>x.id===gastoId);
   if(!fila || !g) return;
-  const concepto = fila.querySelector('.gasto-ed-concepto').value.trim();
   const montoEl = fila.querySelector('.gasto-ed-monto');
-  const monto = Number(montoEl.value);
-  const archivo = fila.querySelector('.gasto-ed-foto').files?.[0] || null;
-  if(!concepto){ warn.innerHTML = '<div class="warnbox">Falta el concepto.</div>'; return; }
+  const res = await aplicarEdicionGastoExtra(g, {
+    concepto: fila.querySelector('.gasto-ed-concepto').value.trim(),
+    monto: montoEl.disabled ? null : Number(montoEl.value),
+    archivo: fila.querySelector('.gasto-ed-foto').files?.[0] || null,
+  });
+  if(res.error){ warn.innerHTML = res.error; return; }
+  toast(res.avisos.length ? 'Gasto guardado, pero '+res.avisos.join(' y ')+'.' : 'Gasto guardado.', res.avisos.length ? 'bad' : undefined);
+  pintarGastosExtraForm(sitId);
+}
+/* Guarda la edición de un gasto extra (concepto, monto y foto). La usan el formulario del
+   sitting y "Revisar meses" en Finanzas (15/10/2026). monto=null: no se cambia. Devuelve
+   { error: html para mostrar } o { avisos: [lo secundario que falló] }. */
+async function aplicarEdicionGastoExtra(g, { concepto, monto, archivo }){
+  if(!concepto) return { error:'<div class="warnbox">Falta el concepto.</div>' };
   const cambios = { concepto };
-  const cambiaMonto = !montoEl.disabled && monto !== Number(g.monto);
+  const cambiaMonto = monto!==null && monto !== Number(g.monto);
   if(cambiaMonto){
-    if(!(monto > 0)){ warn.innerHTML = '<div class="warnbox">El monto tiene que ser mayor a cero.</div>'; return; }
+    if(g.cobrado || g.reintegrado) return { error:'<div class="warnbox">Ya se cobró o se reintegró: el monto no se cambia.</div>' };
+    if(!(monto > 0)) return { error:'<div class="warnbox">El monto tiene que ser mayor a cero.</div>' };
     if(g.ajuste_id){
       const { data: aj } = await sb.from('ajustes_saldo').select('aplicado').eq('id', g.ajuste_id).maybeSingle();
-      if(aj && Number(aj.aplicado)){ warn.innerHTML = '<div class="warnbox">El saldo a favor de este gasto ya se usó en un cobro: el monto no se cambia.</div>'; return; }
+      if(aj && Number(aj.aplicado)) return { error:'<div class="warnbox">El saldo a favor de este gasto ya se usó en un cobro: el monto no se cambia.</div>' };
     }
     cambios.monto = monto;
   }
   let rutaNueva = null;
   if(archivo){
     const ext = (archivo.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'') || 'jpg';
-    rutaNueva = `${sitId}/${crypto.randomUUID()}.${ext}`;
+    rutaNueva = `${g.sitting_id}/${crypto.randomUUID()}.${ext}`;
     const { error: eUp } = await sb.storage.from('comprobantes').upload(rutaNueva, archivo, { upsert:false });
-    if(eUp){ warn.innerHTML = errBox(eUp); return; }
+    if(eUp) return { error: errBox(eUp) };
     cambios.comprobante = rutaNueva;
   }
-  const { error } = await sb.from('gastos_extra').update(cambios).eq('id', gastoId);
+  const { error } = await sb.from('gastos_extra').update(cambios).eq('id', g.id);
   if(error){
     if(rutaNueva) await sb.storage.from('comprobantes').remove([rutaNueva]);
-    warn.innerHTML = errBox(error); return;
+    return { error: errBox(error) };
   }
   const avisos = [];
   if(cambiaMonto && g.ajuste_id){
@@ -1665,8 +1676,7 @@ async function guardarEdicionGastoExtra(gastoId, sitId){
     const { error: eRm } = await sb.storage.from('comprobantes').remove([g.comprobante]);
     if(eRm) avisos.push('el ticket viejo no se pudo borrar');
   }
-  toast(avisos.length ? 'Gasto guardado, pero '+avisos.join(' y ')+'.' : 'Gasto guardado.', avisos.length ? 'bad' : undefined);
-  pintarGastosExtraForm(sitId);
+  return { avisos };
 }
 // Las filas nuevas se agregan al DOM (no se vuelve a dibujar): así no se pierde la foto elegida.
 function agregarFilaGastoExtra(){

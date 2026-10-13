@@ -563,6 +563,21 @@ create table public.sittings_historial (
   constraint sittings_historial_accion_check CHECK ((accion = ANY (ARRAY['alta'::text, 'cambio'::text, 'baja'::text])))
 );
 
+-- Historial de cambios de gastos generales, saldos a favor y gastos extra (15/10/2026, lo
+-- escribe registrar_historial_finanzas).
+create table public.finanzas_historial (
+  id bigint generated always as identity primary key,
+  tabla text not null,
+  fila_id uuid not null,
+  accion text not null,
+  usuario text,
+  cuando timestamp with time zone default now() not null,
+  cambios jsonb,
+  fila jsonb,
+  constraint finanzas_historial_tabla_check CHECK ((tabla = ANY (ARRAY['gastos_generales'::text, 'ajustes_saldo'::text, 'gastos_extra'::text]))),
+  constraint finanzas_historial_accion_check CHECK ((accion = ANY (ARRAY['alta'::text, 'cambio'::text, 'baja'::text])))
+);
+
 create table public.solicitud_ninieras (
   id uuid default gen_random_uuid() not null,
   solicitud_id uuid not null,
@@ -704,6 +719,7 @@ CREATE INDEX idx_sittings_ninera_nombre ON public.sittings_traslados USING btree
 CREATE INDEX idx_sittings_pendiente_cobro ON public.sittings_traslados USING btree (familia_id) WHERE (cobrado = false);
 CREATE INDEX idx_sittings_pendiente_pago ON public.sittings_traslados USING btree (ninera_id) WHERE (pagado = false);
 CREATE INDEX idx_sittings_historial_sitting ON public.sittings_historial USING btree (sitting_id, cuando DESC);
+CREATE INDEX idx_finanzas_historial_fila ON public.finanzas_historial USING btree (tabla, fila_id, cuando DESC);
 CREATE INDEX idx_solicitud_ninieras_ninera_id ON public.solicitud_ninieras USING btree (ninera_id);
 CREATE INDEX idx_solicitud_ninieras_solicitud_id ON public.solicitud_ninieras USING btree (solicitud_id);
 CREATE INDEX idx_solicitudes_familia_id ON public.solicitudes USING btree (familia_id);
@@ -745,6 +761,7 @@ alter table public.respaldo_asignaciones_20261005 enable row level security;
 alter table public.respaldo_zona_grupos_20260930 enable row level security;
 alter table public.respaldo_zonas_20260930 enable row level security;
 alter table public.sittings_historial enable row level security;
+alter table public.finanzas_historial enable row level security;
 alter table public.sittings_traslados enable row level security;
 alter table public.asignaciones_pausas enable row level security;
 alter table public.ajustes_saldo enable row level security;
@@ -863,6 +880,8 @@ create policy resenas_ninieras_authenticated_all on public.resenas_ninieras as p
   using (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada))
   with check (( SELECT public.es_usuaria_autorizada() AS es_usuaria_autorizada));
 create policy sittings_historial_leer on public.sittings_historial as permissive for select to authenticated
+  using ((select public.es_usuaria_autorizada()));
+create policy finanzas_historial_leer on public.finanzas_historial as permissive for select to authenticated
   using ((select public.es_usuaria_autorizada()));
 create policy solo_autenticados_todo on public.asignaciones_pausas as permissive for all to public
   using ((select public.es_usuaria_autorizada())) with check ((select public.es_usuaria_autorizada()));
@@ -1043,6 +1062,62 @@ revoke execute on function public.registrar_historial_sitting() from public, ano
 create trigger sittings_historial_trg
   after insert or update or delete on public.sittings_traslados
   for each row execute function public.registrar_historial_sitting();
+
+-- Historial de gastos generales, saldos a favor y gastos extra (15/10/2026).
+-- Misma lógica que registrar_historial_sitting: el mail sale del token de la sesión.
+create or replace function public.registrar_historial_finanzas()
+ returns trigger
+ language plpgsql
+ security definer
+ set search_path to 'public'
+as $function$
+declare
+  usr text;
+  diff jsonb := '{}'::jsonb;
+  k text;
+  viejo jsonb;
+  nuevo jsonb;
+begin
+  begin
+    usr := nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email';
+  exception when others then
+    usr := null;
+  end;
+  usr := coalesce(usr, current_user);
+
+  if tg_op = 'INSERT' then
+    insert into public.finanzas_historial (tabla, fila_id, accion, usuario, fila) values (tg_table_name, new.id, 'alta', usr, to_jsonb(new));
+    return new;
+  elsif tg_op = 'DELETE' then
+    insert into public.finanzas_historial (tabla, fila_id, accion, usuario, fila) values (tg_table_name, old.id, 'baja', usr, to_jsonb(old));
+    return old;
+  else
+    viejo := to_jsonb(old);
+    nuevo := to_jsonb(new);
+    for k in select jsonb_object_keys(nuevo) loop
+      if (viejo -> k) is distinct from (nuevo -> k) then
+        diff := diff || jsonb_build_object(k, jsonb_build_object('antes', viejo -> k, 'despues', nuevo -> k));
+      end if;
+    end loop;
+    if diff <> '{}'::jsonb then
+      insert into public.finanzas_historial (tabla, fila_id, accion, usuario, cambios) values (tg_table_name, new.id, 'cambio', usr, diff);
+    end if;
+    return new;
+  end if;
+end;
+$function$;
+revoke execute on function public.registrar_historial_finanzas() from public, anon, authenticated;
+
+create trigger gastos_generales_historial_trg
+  after insert or update or delete on public.gastos_generales
+  for each row execute function public.registrar_historial_finanzas();
+create trigger ajustes_saldo_historial_trg
+  after insert or update or delete on public.ajustes_saldo
+  for each row execute function public.registrar_historial_finanzas();
+create trigger gastos_extra_historial_trg
+  after insert or update or delete on public.gastos_extra
+  for each row execute function public.registrar_historial_finanzas();
+
 
 -- Fijos automáticos (06/10/2026). El proceso. Lo corre pg_cron todos los días a las 03:00 de Montevideo (lo programa
 --    _ACTIVAR) y la app lo llama después de cada cambio en un fijo, para que la ventana
