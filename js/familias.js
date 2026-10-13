@@ -335,6 +335,10 @@ function verFamilia(id){
       <div class="field"><label>Tipo</label><select id="asig-tipo-${f.id}"><option value="sitting">Sitting</option><option value="traslado">Traslado</option></select></div>
       <div class="field"><label>Desde</label><input type="date" id="asig-desde-${f.id}" value="${hoyFam}"></div>
     </div>
+    <div class="grid2">
+      <div class="field"><label>Cobro por traslado (solo traslados)</label><div class="moneyfield"><input type="number" id="asig-cobro-${f.id}"></div></div>
+      <div class="field"><label>Pago a la niñera por traslado</label><div class="moneyfield"><input type="number" id="asig-pago-${f.id}"></div></div>
+    </div>
     <div class="field"><label>Días</label>
       <div class="dayrow" id="asig-dias-${f.id}">
         ${['L','M','X','J','V','S','D'].map(d=>`<button type="button" class="daybtn" onclick="this.classList.toggle('selected')">${d}</button>`).join('')}
@@ -425,15 +429,19 @@ async function addAsignacion(famId){
   // Mismos controles que al crear un fijo desde Sittings o la Agenda (05/10/2026): antes se
   // podía guardar sin días (un fijo que nunca aparece), con la hora de fin antes que la de
   // inicio, y sin el aviso de que la niñera ya tiene otro fijo en ese horario.
-  if(!dias.length){ toast('Elegí al menos un día.','bad'); return; }
   const hi = leerHora('asig-horaini-'+famId), hf = leerHora('asig-horafin-'+famId);
+  const tipoNuevo = document.getElementById('asig-tipo-'+famId)?.value || 'sitting';
+  const precio = tipoNuevo==='traslado' ? { cobro_traslado: Number(document.getElementById('asig-cobro-'+famId)?.value)||null, pago_traslado: Number(document.getElementById('asig-pago-'+famId)?.value)||null } : {};
+  const problema = problemaFijoNuevo({ dias, hora_inicio: hi, tipo: tipoNuevo, ...precio });
+  if(problema){ toast(problema,'bad'); return; }
   if(hi && hf && hf <= hi){ toast('La hora de fin tiene que ser después de la de inicio.','bad'); return; }
+  if(!(await avisarSiFijoDuplicado({ familia_id: famId, ninera_nombre: nombre, dias, vigente_desde: document.getElementById('asig-desde-'+famId)?.value || todayISO() }))) return;
   const choque = await chequearFijoNuevoContraTodo(nombre, dias, hi||null, hf||null);
   if(!(await avisarSiDobleReserva(choque, nombre, 'Asignar igual'))) return;
   const ninera = (ninierasItems||[]).find(n=>normaliza(n.nombre)===normaliza(nombre));
   const asig = { familia_id:famId, ninera_nombre:nombre, ninera_id: ninera?.id || null, dias,
     hora_inicio:leerHora('asig-horaini-'+famId)||null, hora_fin:leerHora('asig-horafin-'+famId)||null,
-    tipo: document.getElementById('asig-tipo-'+famId)?.value || 'sitting',
+    tipo: tipoNuevo, ...precio,
     vigente_desde: document.getElementById('asig-desde-'+famId)?.value || todayISO() };
   const { error } = await escribirAsignacion(p=>sb.from('asignaciones').insert(p), asig);
   if(error){ toast('No se pudo agregar: '+error.message,'bad'); return; }

@@ -186,7 +186,14 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - Gastos extra (08/10/2026): `gastos_extra`, ticket obligatorio en el bucket PRIVADO
   `comprobantes` (se abre con `createSignedUrl`, nunca URL pública). Si lo pagó la niñera va
   aparte en Por cobrar / Por pagar (`cobrado` / `reintegrado`); si lo pagó la familia genera
-  un ajuste de saldo a favor. Nunca suma al facturado ni al margen.
+  un ajuste de saldo a favor. Nunca suma al facturado ni al margen. Con `absorbe_pb`
+  (14/10/2026) lo absorbe Parents Break: no se cobra a la familia ni va a su PDF, se reintegra
+  a la niñera y resta del resultado del mes. Los gastos van SIEMPRE aparte del precio: la app
+  muestra "Traslado $X + gastos $Y = $Z" (`textoTotalConGastos`, core.js) y el PDF un único
+  "Total a pagar" con la cuenta para transferir (app_config 'cuenta_cobro').
+- Fijos (13/10/2026): no se crean sin hora de inicio (no se generan solos) ni, si son de
+  traslado, sin `cobro_traslado` y `pago_traslado` (`problemaFijoNuevo`, core.js); al crear uno
+  se avisa si ya hay uno vigente igual (`avisarSiFijoDuplicado`).
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 

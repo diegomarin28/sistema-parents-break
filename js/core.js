@@ -1258,6 +1258,40 @@ function sinColumnasVigencia(payload){
   const limpiar = o => { const c = {...o}; COLUMNAS_VIGENCIA.forEach(k=>delete c[k]); return c; };
   return Array.isArray(payload) ? payload.map(limpiar) : limpiar(payload);
 }
+/* Gastos extra a cargo de la familia (13/10/2026): los que pagó la niñera y no absorbe
+   Parents Break. Los que pagó la familia van como saldo a su favor; los que absorbe Parents
+   Break no se le cobran a nadie (se le reintegran a la niñera y bajan el resultado del mes). */
+function gastoACargoFamilia(g){ return !!g && g.pagado_por==='ninera' && !g.absorbe_pb; }
+// "Traslado $1.018 + gastos $427 = $1.445". Delfi no veía que la comida se sumaba aparte, la
+// metió en el precio y quedó cobrada dos veces (13/10/2026). Sin gastos devuelve ''.
+function textoTotalConGastos(etiqueta, base, gastos){
+  const g = Number(gastos)||0;
+  if(!g) return '';
+  const b = Number(base)||0, f = n => '$'+Math.round(n).toLocaleString('es-UY');
+  return `${etiqueta} ${f(b)} + gastos ${f(g)} = ${f(b+g)}`;
+}
+/* Controles al crear un fijo (13/10/2026). Un fijo de traslado sin precio hizo que el
+   precargado tomara un traslado con la comida sumada y lo copiara a todo el mes, y un fijo
+   sin hora de inicio no se carga solo (generar_previstos_fijos lo saltea) y dejaba el aviso
+   de Hoy prendido para siempre. Devuelve el problema en texto, o null si está bien. */
+function problemaFijoNuevo(f){
+  if(!Array.isArray(f.dias) || !f.dias.length) return 'Elegí al menos un día.';
+  if(!f.hora_inicio) return 'Falta la hora de inicio: sin horario el fijo no se carga solo en la Agenda.';
+  if(f.tipo==='traslado' && !(Number(f.cobro_traslado)>0 && Number(f.pago_traslado)>0)) return 'Un traslado fijo necesita lo que se cobra y lo que se paga a la niñera por cada traslado.';
+  return null;
+}
+// Antes de crear un fijo: si ya hay uno vigente de la misma niñera con la misma familia algún
+// día igual (fijo duplicado de Paula, 13/10/2026), se pregunta. true = seguir.
+async function avisarSiFijoDuplicado(f){
+  if(!f.familia_id) return true;
+  const { data } = await sb.from('asignaciones').select('*').eq('familia_id', f.familia_id);
+  const desde = f.vigente_desde || todayISO();
+  const igual = (data||[]).find(a=>!asignacionTerminada(a, desde) && normaliza(a.ninera_nombre||'')===normaliza(f.ninera_nombre||'')
+    && Array.isArray(a.dias) && a.dias.some(d=>(f.dias||[]).includes(d)));
+  if(!igual) return true;
+  const dias = (igual.dias||[]).map(d=>DIAS_CORTO[d]||d).join(' ');
+  return confirmarAccion(`Ya hay un fijo vigente de ${f.ninera_nombre} con esta familia (${dias}${igual.hora_inicio ? ' · '+horaTxt(igual.hora_inicio) : ''}). Si es el mismo, cancelá y editá el que está. ¿Crear otro igual?`, 'Crear otro');
+}
 async function escribirAsignacion(consulta, payload){
   const intento = asignacionesSinVigencia ? sinColumnasVigencia(payload) : payload;
   let res = await consulta(intento);

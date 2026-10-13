@@ -118,7 +118,7 @@ test.describe('Por cobrar y Por pagar', () => {
     await irAModulo(page, 'finanzas');
     const pagar = page.locator('#fin-porpagar-wrap .agendarow', { hasText: 'Ana Ficticia' });
     await expect(pagar).toContainText('Reintegro de gasto: $300 · Almuerzo para la niña');
-    await expect(pagar).toContainText('Servicios: $750');
+    await expect(pagar).toContainText('Servicios $750 + gastos $300 = $1.050');
     await expect(pagar).toContainText('$1.050');
     const cobrar = page.locator('#fin-porcobrar-wrap .agendarow', { hasText: 'Familia Prueba Uno' });
     await expect(cobrar).toContainText('Gasto extra: $300 · Almuerzo para la niña');
