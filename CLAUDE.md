@@ -4,6 +4,23 @@ Sistema real de Parents Break (cuidado infantil y traslados, Montevideo). Lo usa
 días sus dueñas, Paulina y Delfina. Desarrollador: Diego. Cualquier bug llega a producción y
 a las familias y niñeras.
 
+Antes de empezar cualquier tarea leé "Para qué es esto", "Cómo trabajamos", "Worktrees",
+"Datos sensibles" y "Calidad": valen para todas las sesiones y todos los worktrees.
+
+## Para qué es esto
+El objetivo es facilitarles la vida a Paulina y Delfina y automatizar todo lo posible. El
+sistema empezó como una herramienta para registrar; lo que buscamos ahora es que diga qué
+hacer, que haga solo lo repetitivo y que les saque trabajo manual antes de que pase el
+sitting. La pregunta guía: si una de ellas se va tres semanas, ¿el negocio sigue con el
+sistema o se para?
+- En cada tarea, preferí la versión que les ahorra pasos: que se precargue, que se calcule
+  sola, que avise a tiempo, que se haga en un toque desde el celular.
+- Si ves algo que se podría automatizar o un paso manual que sobra, proponelo en una línea
+  al final del reporte. No lo construyas sin el OK de Diego.
+- Lo que sale hacia familias o niñeras (mensajes, cobros, recordatorios) pasa por una
+  confirmación de ellas, salvo que decidan lo contrario para ese caso puntual.
+- Lo usan sobre todo desde el iPhone: pensá cada pantalla primero para el celular.
+
 ## Stack
 - HTML/CSS/JS vanilla, sin build ni framework. GitHub Pages publica desde `main`.
 - `index.html` = head + CSS + `<div id="app">` (con la pantalla de carga inicial) + scripts.
@@ -34,8 +51,9 @@ marketing → postulantes → ninieras → familias → sittings → intermediac
   `core.js` desde el 05/10/2026.
 
 ## Reglas fijas
-1. Nunca hacer commit directo a `main`. Cada tarea va en una rama nueva con su Pull Request.
-   Diego aprueba el merge.
+1. Nunca hacer commit directo a `main`. Cada tarea va en su propio worktree, con una rama
+   nueva y su Pull Request (ver "Worktrees"). Cuándo mergeás vos y cuándo espera el OK de
+   Diego está en "Cómo trabajamos".
 2. No afirmar que algo funciona sin probarlo: `node --check` de cada archivo tocado y, cuando
    aplique, prueba en navegador headless con evidencia (capturas o salida de tests).
 3. No agregar emojis nuevos en el código (textos, títulos, mensajes, carteles). Los que ya
@@ -47,6 +65,83 @@ marketing → postulantes → ninieras → familias → sittings → intermediac
 7. `temporada.html` está EN USO (formulario de disponibilidad de verano que se manda a las
    niñeras cada octubre): no tocarlo ni romperlo. La página real la sirve Cloudflare, que es
    configuración externa: no auditarla.
+
+## Cómo trabajamos
+- Quién decide: Paulina y Delfina son las dueñas y deciden lo de producto (qué se cobra, cómo
+  se ve, qué va primero). Diego desarrolla, les responde a ellas y es quien habla con vos.
+  A veces te pega mensajes armados en otro chat: tratalos igual que si los escribiera él.
+- Diego estudia ingeniería y tiene buen criterio, pero no es desarrollador profesional:
+  cuando él tenga que hacer algo fuera del código (GitHub, panel de Supabase, Cloudflare,
+  instalar algo), dale los pasos numerados y en simple.
+- Reporte al terminar una tarea: máximo 10 líneas. Qué hiciste, qué falló o quedó
+  pendiente, y qué tiene que decidir o hacer Diego. Sin repetir el diff ni contar cada paso.
+  Si el cambio se ve en la app, cerrá el reporte con 1 a 3 líneas para mandarles a Paulina y
+  Delfina por WhatsApp: qué cambió y dónde, sin palabras técnicas. Recordales actualizar
+  (Cmd+Shift+R en la compu, cerrar y abrir la app en el celular).
+- Preguntas: todas juntas y una sola vez, cada una con opciones y tu recomendación primero.
+  Si la respuesta no cambia lo que vas a hacer, no preguntes: elegí lo razonable y avisalo.
+- Si encontrás un bug o una mejora fuera de la tarea, anotalo en el reporte y no lo
+  arregles en el mismo PR, salvo que sea chico y del mismo archivo y tema.
+- Pruebas: en tu entorno corré los tests de lo que tocaste (`npx playwright test
+  tests/<archivo>.spec.js`) y `npm run test:static`. El resto lo corre el CI en el PR.
+- No releas archivos grandes enteros (sittings.js, finanzas.js, agenda.js, core.js): buscá
+  la función con grep y leé ese tramo.
+- Merge del PR: siempre con "merge commit" (no "squash" ni "rebase and merge"):
+  - Lo mergeás vos cuando el CI queda en verde, si el PR solo cambia código, tests o docs.
+  - Espera el OK explícito de Diego si lleva una migración, escribe datos en producción,
+    publica o cambia una Edge Function, o toca secretos o permisos (RLS, storage).
+- Las confirmaciones del conector de Supabase (DELETE, migraciones con DROP) le aparecen a
+  Diego en pantalla y vencen en ~60 segundos: avisale justo antes de lanzarlas para que esté
+  mirando. Si se cancela o vence, no reintentes en loop: pasale el SQL exacto para que lo
+  corra él en el SQL Editor, y después verificá el resultado con una consulta de lectura.
+
+## Worktrees
+Diego trabaja con varios worktrees del mismo repo, a veces con otra sesión tuya trabajando en
+paralelo en otro worktree. La regla es: **un worktree = una tarea = una rama = un PR**.
+- Al empezar: confirmá en qué rama estás (`git status`) y que salga del `main` actualizado
+  (`git fetch origin` y, si está atrás, `git rebase origin/main` antes de tocar nada). Si el
+  worktree está en `main`, creá la rama de la tarea antes del primer cambio.
+- Nombre de la rama: `claude/<tarea-corta>` en minúsculas y con guiones (por ejemplo
+  `claude/gastos-total`). Es la convención de todos los PRs anteriores.
+- No uses una rama ya mergeada para una tarea nueva, aunque el worktree siga abierto: rama
+  nueva desde `origin/main`.
+- Trabajá solo dentro de tu worktree. No edites, borres ni hagas checkout en las carpetas de
+  otros worktrees.
+- Archivos compartidos: antes de cambiar `core.js`, `sittings.js`, `finanzas.js`,
+  `agenda.js`, `index.html`, `supabase/schema.sql` o este `CLAUDE.md`, mirá si hay otro PR
+  abierto que los toque (`gh pr list` y `gh pr diff <n> --name-only`; si no tenés `gh`,
+  `git fetch origin` y `git diff --name-only origin/main...origin/<rama>` para cada rama
+  abierta). Si lo hay, avisale a Diego antes de seguir: dos tareas en paralelo sobre el
+  mismo archivo terminan en conflicto.
+- Migraciones en paralelo: el nombre lleva la fecha y una descripción única, así dos worktrees
+  no generan el mismo archivo. Si al rebasar choca `schema.sql`, resolvelo vos dejando los dos
+  cambios, y volvé a probar la migración.
+- Antes de mergear, rebasá tu rama sobre `origin/main` si `main` avanzó, y esperá el CI de
+  nuevo. Nunca `push --force` a `main`; en tu propia rama, solo `--force-with-lease`.
+- Sesión larga: si la conversación se alarga o Diego abre un chat nuevo en el mismo worktree,
+  el estado de la tarea tiene que estar en la descripción del PR (qué está hecho, qué falta,
+  decisiones tomadas), no solo en la conversación. Actualizala cada vez que cerrás un tramo.
+- Al terminar (PR mergeado): decile a Diego que ese worktree ya se puede borrar.
+- Si aprendés algo que vale para todas las tareas (una regla, una trampa del código), sumalo
+  a este archivo en el mismo PR, en la sección que corresponda y en pocas líneas.
+
+## Datos sensibles
+El repo es público: lo que entra al repo lo puede leer cualquiera.
+- Nunca van al repo (código, tests, comentarios, commits, descripción del PR, este archivo):
+  claves, tokens, secretos de webhook, cadenas de conexión, números de cuenta, mails,
+  teléfonos, ni nombres o montos reales de familias, niñeras o candidatas.
+- Dónde viven los secretos: Supabase (Edge Functions > Secrets, y la tabla `app_secrets`),
+  los secrets de GitHub Actions del repo de backups, y datos de la empresa en `app_config`
+  (por ejemplo la cuenta para transferir del PDF, 'cuenta_cobro'). El código los lee de ahí.
+- Si para una tarea necesitás un dato sensible (un secreto, una cuenta, un dato personal
+  real), frená y pedíselo a Diego diciendo cuál y para qué. Él decide cómo dártelo: lo carga
+  él donde corresponde, o te lo pasa para que lo guardes directo en la base o en un secreto.
+  Nunca lo escribas en un archivo del repo, ni de forma temporal.
+- Archivos locales con datos reales (extractos, exportaciones, `.env`): solo en una carpeta
+  fuera del repo o en una ignorada por `.gitignore`. Antes de cada commit revisá `git status`
+  y `git diff --cached`.
+- En tus reportes a Diego podés nombrar familias y niñeras (el chat no es público), pero si
+  una herramienta te muestra un secreto, no lo copies al reporte.
 
 ## Base de producción
 - **Esto es producción.** En la base real nunca se escriben datos de prueba: los tests corren
@@ -120,6 +215,35 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - El CI corre todo en cada PR (`.github/workflows/tests.yml`).
 - Más adelante: tests de integración contra un proyecto de Supabase gratis aparte (nunca
   producción).
+
+## Calidad: cada cambio, bien hecho y probado
+Antes de abrir el PR, cada tarea tiene que cumplir esto. Si algo no se pudo, decilo en el
+reporte.
+- Tests: todo cambio de comportamiento lleva su test en `tests/` (contra el simulador). No
+  alcanza con el caso feliz: probá también los fallos (la base devuelve error, sin conexión,
+  doble toque, datos vacíos o raros, base sin la migración nueva, celular de 390px) y que el
+  usuario vea un aviso claro y no un éxito falso.
+- Bug arreglado: primero un test que lo reproduce y falla, después el arreglo.
+- Consultas a la base, lo más livianas posible:
+  - pedí solo las columnas que usás (nada de `select('*')` en tablas grandes) y filtrá en
+    la base (fecha, familia, estado), no en el navegador;
+  - nunca una consulta por fila dentro de un loop: traé todo junto (`.in(...)`) o con un
+    join, y las consultas independientes en paralelo (`Promise.all`);
+  - si una consulta nueva filtra u ordena por una columna sin índice en una tabla que crece
+    (sittings_traslados, sittings_historial, candidatas, gastos_extra), proponé el índice en
+    una migración;
+  - en políticas RLS y funciones, `(select ...)` para que no se evalúe fila por fila;
+  - si cambiaste estructura o consultas pesadas, mirá los avisos de rendimiento y seguridad
+    de Supabase (advisors) y contá en el reporte si apareció algo nuevo.
+- Velocidad: que la pantalla muestre algo enseguida y no espere datos que no necesita. Si una
+  vista tarda más de un segundo con datos reales, investigá por qué antes de dar la tarea por
+  terminada.
+- Antes del PR, releé tu propio diff completo como si fueras otra persona revisándolo: la
+  solución más simple que resuelve el problema, sin código duplicado (si ya existe una
+  función en core.js que lo hace, usala), sin restos de pruebas, con nombres claros y
+  comentarios que expliquen el porqué.
+- Si encontrás una forma claramente mejor de hacer lo que se pidió, proponela en una línea
+  antes de construir la otra.
 
 ## Edge Functions
 - El código está en `supabase/functions/<nombre>/` desde el 06/10/2026. Todas con
@@ -208,23 +332,141 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 
-## Pendientes conocidos
+## Pendientes
+Esta lista es la fuente de verdad de lo que falta en el sistema, para todas las sesiones y
+worktrees.
+- Cuando aparece algo pendiente (lo pide Diego, queda a medias en una tarea, encontrás un bug
+  que no arreglás ahora), sumalo acá en el mismo PR: una o dos líneas, con fecha y lo mínimo
+  para retomarlo.
+- Cuando se hace, borralo en el PR que lo resuelve. No se marca como "hecho" ni se acumula: si
+  dejó una regla que vale a futuro, esa regla va a "Convenciones".
+- Antes de arrancar una tarea, mirá si toca algo de esta lista.
+- Acá van solo pendientes del sistema. Los operativos con datos reales (cobros de una familia,
+  casos para revisar con nombres) no van al repo: los maneja Diego aparte.
+
+### Proyecto grande: apps y flujo de pedidos (19/10/2026, visión, sin fecha)
+Es la dirección a largo plazo del sistema. No se construye de una: primero una propuesta
+por etapas (qué se hace primero, costos, riesgos, qué cambia en la base y en la seguridad),
+y Diego decide.
+- Dos apps en el App Store (Diego ya tiene la cuenta de Apple Developer: no suma costo):
+  - Admin: el mismo sistema de hoy, para las tres administradoras, empaquetado como app. No
+    se rehace: se reutiliza este código (por ejemplo con Capacitor). Ojo: Apple rechaza apps
+    que son solo una web envuelta; sumar lo nativo que aporte (push, cámara para tickets,
+    Face ID). Con la migración, aprovechar para mejorarla: que se vea más profesional, mejores
+    métricas, componentes reutilizables en vez de repetidos, rehacer las consultas que sobran
+    o son lentas, y simplificar las tareas que hoy llevan más pasos de los necesarios.
+  - Niñeras (lo nuevo): cada una con su usuario y sus registros. Aceptan o rechazan los
+    sittings ahí; marcan cuándo llegaron y cuándo se fueron, si se quedaron más tiempo, si
+    pagaron algo extra (con la foto del ticket) y si pasó algo (incidente); hacen los
+    reportes que haya que hacer y una reseña final del sitting. Ven lo que se les debe y lo
+    que ya cobraron. Tiene un chat con las admin (para lo que no entra en un botón), así no
+    hace falta WhatsApp.
+- Seguridad: hoy RLS solo deja entrar a `usuarias_autorizadas` (las admin). Las niñeras
+  necesitan cuentas propias que vean y escriban solo lo suyo. Es el cambio más delicado de
+  todo el proyecto.
+- Las horas reales que marca la niñera (llegada y salida) alimentan el cálculo de cobro y
+  pago que ya existe; las admin confirman antes de que cuente.
+- Pagos a niñeras: siguen siendo manuales (decisión del 19/10/2026: el pago automático
+  queda descartado, no proponerlo de nuevo). Lo que sí: que el sistema arme el lote de pagos
+  de la semana (quién, cuánto y a qué cuenta, listo para copiar) y quede marcado como pagado
+  al confirmar.
+- Control automático de cobros: que el sistema sepa solo qué madres pagaron y si pagaron lo
+  correcto, cruzando los movimientos de la cuenta con lo que cada familia debe, y avise lo
+  que no cierra (no pagó, pagó de menos o de más, pagó dos veces). Hoy existe la
+  conciliación subiendo el extracto a mano (está en pausa). Con Itaú se sigue subiendo el
+  extracto una vez por mes; si se pasan a Mercado Pago, verificar su API de reportes para
+  traer los movimientos solos, sin subir nada.
+- Flujo de pedidos con WhatsApp Business:
+  - Con las madres se sigue por WhatsApp. Con las niñeras la idea es sacar los mensajes:
+    todo pasa por su app (con notificaciones push, que son gratis), y por teléfono solo si
+    es algo urgente.
+  - Lo ideal: un agente (Claude Haiku) lee el mensaje de la madre, entiende el pedido (día,
+    horario, cantidad de chicos, zona) y arma el "ticket". Las admin eligen a qué niñeras
+    mandarlo (con sugerencias según zona, temporada, fijos y disponibilidad). El precio sale
+    según la familia y la niñera, y la que acepta queda asignada. Nada sale hacia una madre
+    o una niñera sin que una admin lo confirme.
+  - El agente no se "entrena" como un modelo propio: trabaja con instrucciones, los datos del
+    sistema y ejemplos. Para sugerir qué niñeras mandar a cada familia usa el historial
+    (quién fue antes y cómo le fue, reseñas, zona, disponibilidad, rechazos) y aprende de lo
+    que eligen las admin: cada elección queda guardada y se usa como ejemplo.
+  - Si una niñera escribe al WhatsApp en vez de usar la app, el agente la reconoce por su
+    número y lo pasa al chat de su app, en vez de tratarlo como un pedido.
+- Entrevistas a niñeras nuevas, más simples: agendarla desde la app y que se cree sola la
+  reunión de Google Meet con el link para la candidata; que de la entrevista salgan los
+  apuntes solos, ordenados según las preguntas que ya tiene la pantalla de Entrevista (ficha
+  y competencias), y que la admin solo revise y corrija. Antes de construir: verificar si
+  la transcripción de Meet está disponible en el plan de Google que usan o si hace falta
+  grabar el audio y transcribirlo aparte (y cuánto cuesta), y pedirle a la candidata permiso
+  para grabar.
+- Alta de familias online: un link donde la familia nueva carga sola sus datos, los chicos
+  (edades, alergias, lo que haya que saber), la dirección y cómo prefiere que la contacten.
+  Entra al sistema como "familia nueva para revisar" y una admin la aprueba.
+- Reseñas automáticas de las madres: después de cada sitting (o una vez por semana a las
+  que tienen fijos) se le pide a la madre una reseña corta de la niñera. Alimenta la ficha y
+  la sugerencia de niñeras del agente, y las que la madre autorice pueden ir a la web.
+- Resumen automático a las madres: cuánto les costó el servicio, con el detalle en PDF (el
+  que ya existe, con gastos y tickets). Si fue puntual, después del sitting; si tienen varios
+  o fijos, uno por mes. Lo confirma una admin antes de que salga (por WhatsApp o mail). No
+  hace falta factura electrónica: alcanza con un PDF claro y detallado.
+  - API de WhatsApp (Meta, octubre de 2026): recibir mensajes es gratis; desde el 01/10/2026
+    las respuestas tienen 1.000 gratis por mes por número y después se cobran, igual que las
+    plantillas. Con Coexistence se sigue usando la app de WhatsApp Business en el celular con
+    el mismo número, pero los grupos no pasan a la API, se pierden las listas de difusión de
+    la app y puede desvincular dispositivos vinculados. Verificar todo esto con la
+    documentación de Meta antes de conectar el número real.
+
+### Esperando una decisión de Paulina y Delfina
+- Qué mejora va primero (13/10/2026): (a) "Cobros atrasados" en Hoy, con recordatorio por
+  WhatsApp, o (b) una sección "Cómo se hace" dentro de la app (guía de uso; incluir cómo
+  activar Face ID / Touch ID: una passkey por dispositivo, en Safari).
+- Nombres en pantalla (13/10/2026): en Sittings, "Cobrado/Pagado en [mes]" pasaría a
+  "Facturado en [mes]" y "A pagar a niñeras en [mes]". Revisar antes cómo quedó después del
+  #37.
+- Niñeras que dicen que no: ¿un contador visible o el aviso de baja actividad (cada 10
+  rechazos, falta decidir si por mail o en la app)? Espera a WhatsApp.
+
+### WhatsApp y automatización de mensajes
+- Línea de WhatsApp Business + API de Meta (Coexistence): bloqueado. Es la base del flujo de
+  pedidos del proyecto grande. Antes de construir, evaluar opciones (la API oficial, un agente
+  que lea y redacte, o plantillas que ellas mandan con un toque), con costos y riesgos.
+- Dependen de WhatsApp: cumpleaños de la niñera a las 9:00, mensaje a la familia poco
+  activa (cada 4 semanas, 5% de descuento; falta el texto), recordatorio de cobros atrasados.
+- whatsapp-webhook ya publicado exige la firma de Meta y hoy rechaza todo. Cuando arranquemos,
+  cargar `WHATSAPP_APP_SECRET` (App Secret de la app de Meta) en Supabase > Edge Functions >
+  Secrets.
+
+### Seguridad
+- `carsitting-recordatorio`: no se endureció con las demás Edge Functions (06/10/2026) y
+  cualquiera con el link puede llamarla. Hoy devuelve siempre la lista vacía, porque los
+  mails de carsitting están apagados. Endurecerla (pedir `x-webhook-secret`) antes de
+  reactivar esos mails; mientras tanto no tocarla sin que Diego lo pida.
+- `temporada-ninera` (S3): no pide el link con token y acepta nombre + celular nuevo. Se
+  endurece en noviembre, cuando termine la temporada (el formulario está en uso todo octubre).
+  Tiene además un error de tipos (TS18046) que ya traía la versión publicada.
+
+### Plata y bancos
+- Cambio de banco: está decidido pasar de Itaú a Mercado Pago, pero por ahora se sigue con
+  Itaú (13/10/2026). El día del cambio: (1) lector de Mercado Pago en `LECTORES_EXTRACTO`
+  (finanzas.js); (2) adaptar los avisos de "Falta subir el extracto de Itaú" (campanita y
+  enviar-push-urgentes); (3) cambiar la cuenta para transferir del PDF (app_config
+  'cuenta_cobro', se edita desde la vista previa del PDF; el dato no va al repo).
 - Conciliación con el extracto + saldo a favor (B10, 06/10/2026), para cuando se retome la
   conciliación (está en pausa): hoy busca el total sin descontar el saldo a favor (un pago
   neto no aparece o queda como dudoso) y al marcar cobrado/pagado desde ahí no anota el saldo
   como usado (`registrarAplicacionAjustes`), así que se volvería a descontar. Mientras tanto,
   con saldo a favor se marca desde Por cobrar / Por pagar.
-- Plan de PRs acordado el 04/10/2026: fix E1/E2, fechas (todayISO), escape de HTML,
-  guardados con éxito falso, confirmación al marcar pagado, pantalla de carga, alta de
-  niñera solo con nombre, bloques del formulario en la entrevista, diseño de fijos
-  automáticos.
-- Cambio de banco (06/10/2026): Parents Break pasa de Itaú a Mercado Pago esta semana y el
-  extracto de Itaú ya no llega. Cuando haya un extracto de Mercado Pago, se arma su lector en
-  `LECTORES_EXTRACTO` (finanzas.js). Los avisos de "Falta subir el extracto de Itaú" (campanita
-  y enviar-push-urgentes) hay que adaptarlos entonces.
-- WhatsApp (06/10/2026): whatsapp-webhook ya publicado exige la firma de Meta y hoy rechaza
-  todo. Cuando arranquemos con WhatsApp, cargar `WHATSAPP_APP_SECRET` (App Secret de la app de
-  Meta) en Supabase > Edge Functions > Secrets.
-- `temporada-ninera` (S3): no pide el link con token y acepta nombre + celular nuevo. Se
-  endurece en noviembre, cuando termine la temporada (el formulario está en uso todo octubre).
-  Tiene además un error de tipos (TS18046) que ya traía la versión publicada.
+- Probar la conciliación de punta a punta con el extracto de un mes ya cerrado.
+
+### Funciones nuevas pedidas
+- Niñeras de Argentina: una sección igual a la de Uruguay que traiga las respuestas de su
+  propio formulario (ya existe) con el mismo flujo de postulantes.
+- Car sitting: queda como está por ahora. Los mails automáticos están apagados hasta
+  reescribir el texto del mail.
+- Web pública: sumar reseñas de padres e historias de influencers y sacar "Somos Paulina y
+  Delfina". Confirmar con Diego dónde vive la web antes de tocar nada.
+- Autoguardado de borrador en la Entrevista (red de seguridad si se cierra la pestaña o se
+  queda sin batería): ofrecido, sin respuesta.
+- Modo offline (hoy no hay): pendiente aparte, sin fecha.
+
+### Cierre
+- Auditoría final módulo por módulo en el celular, antes de dar el sistema por terminado.
