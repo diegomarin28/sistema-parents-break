@@ -1,3 +1,8 @@
 node_modules
 test-results/
 playwright-report/
+
+# Secretos y datos reales: nunca al repo (ver "Datos sensibles" en CLAUDE.md)
+.env
+.env.*
+local/
