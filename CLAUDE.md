@@ -215,6 +215,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   pagar (cobrar y reintegrar), saldo a favor si lo pagó la familia, PDF y base sin la tabla.
 - `tests/revisar-meses.spec.js`: Finanzas → Revisar meses (sospechas de la app y del histórico,
   Revisado, editar sittings, gastos extra, gastos generales y saldos, historial, base sin migrar).
+- `tests/intermediaciones.spec.js`: colocación de Enrique con una persona externa (sin
+  `ninera_id`) o con una niñera de la lista, errores, doble toque, historial y ficha.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -338,6 +340,9 @@ reporte.
   y la misma línea repetida. "Revisado" es `sittings_traslados.revisado_at`. Los cambios de gastos
   generales, gastos extra y saldos quedan en `finanzas_historial` (trigger), como los de sittings
   en `sittings_historial`.
+- Colocaciones de Enrique (19/10/2026): `intermediaciones_enrique.ninera_id` puede venir vacío
+  (persona externa, empleada de Enrique): se guarda solo `ninera_nombre`, no se crea niñera ni
+  entra a `intermediaciones_enrique_pool`. Lo que lea esa tabla no puede suponer `ninera_id`.
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
 
@@ -370,9 +375,6 @@ descartado (19/10/2026): no proponerlo de nuevo.
   aceptaron, el horario de fin se redondea hacia arriba para el cobro (por ejemplo, si se fue
   17:45 se cobra hasta las 18:00); el pago a la niñera se sigue calculando con la hora real.
   Falta definir la regla exacta del redondeo y el texto del documento antes de construir.
-- Intermediaciones, colocación de Enrique (19/10/2026): hoy exige elegir una niñera ya
-  cargada, pero a veces la persona es empleada de Enrique y no es niñera nuestra. Permitir
-  escribir el nombre de una persona externa sin darla de alta como niñera.
 - Finanzas, Por pagar (19/10/2026): a las niñeras fijas su semana les aparece recién cuando
   cierra (sábado o domingo), y eso hace pensar que faltan pagos. Mostrar también la semana en
   curso, separada y marcada como "todavía no cierra".

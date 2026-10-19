@@ -95,7 +95,7 @@ function filaInterHistorial(it){
       <span class="badge brand">Enrique</span>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:700;color:var(--ink);">${escaparHtml(it.ninera_nombre)}</div>
-        <div class="helper" style="margin:0;">${fechaFmt} · entrada única</div>
+        <div class="helper" style="margin:0;">${fechaFmt} · entrada única${it.ninera_id ? '' : ' · persona externa'}</div>
       </div>
       <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink);">$${Number(it.monto||0).toLocaleString('es-UY')}</div>
     </div>`;
@@ -118,9 +118,10 @@ function renderInterFormEnrique(){
   body.innerHTML = `
     <div class="card">
       <div class="field" style="position:relative;">
-        <label>Niñera</label>
-        <input type="text" id="inter-enrique-ninera" autocomplete="off" placeholder="Buscar niñera…">
+        <label>Niñera o persona externa</label>
+        <input type="text" id="inter-enrique-ninera" autocomplete="off" placeholder="Buscar niñera o escribir el nombre…">
         <div id="inter-enrique-ninera-dropdown" class="autocomplete-dropdown" style="display:none;"></div>
+        <div id="inter-enrique-externa"></div>
       </div>
       <div class="grid2">
         <div class="field"><label>Fecha</label><input type="date" id="inter-enrique-fecha" value="${todayISO()}"></div>
@@ -132,27 +133,53 @@ function renderInterFormEnrique(){
     </div>
   `;
   interEnriqueSel = null;
-  attachAutocomplete('inter-enrique-ninera', 'inter-enrique-ninera-dropdown', ()=>interNinieras, (o)=>{ interEnriqueSel = o; });
+  attachAutocomplete('inter-enrique-ninera', 'inter-enrique-ninera-dropdown', ()=>interNinieras, (o)=>{ interEnriqueSel = o; avisoInterEnriqueExterna(); });
+  document.getElementById('inter-enrique-ninera').addEventListener('input', avisoInterEnriqueExterna);
+}
+// A veces la persona colocada es empleada de Enrique y no es niñera nuestra (19/10/2026):
+// se guarda solo con el nombre (ninera_id vacío), sin darla de alta como niñera.
+// Si escribió el nombre exacto de una niñera de la lista sin tocarla, es ella.
+function personaInterEnrique(){
+  const nombre = (document.getElementById('inter-enrique-ninera')?.value || '').trim();
+  if(interEnriqueSel) return { ninera: interEnriqueSel, nombre: interEnriqueSel.nombre };
+  const exacta = nombre ? interNinieras.find(n=>normaliza((n.nombre||'').trim())===normaliza(nombre)) : null;
+  return exacta ? { ninera: exacta, nombre: exacta.nombre } : { ninera: null, nombre };
+}
+function avisoInterEnriqueExterna(){
+  const el = document.getElementById('inter-enrique-externa');
+  if(!el) return;
+  const { ninera, nombre } = personaInterEnrique();
+  if(!nombre || ninera){ el.innerHTML = ''; return; }
+  const q = normaliza(nombre);
+  const hayParecidas = interNinieras.some(n=>normaliza(n.nombre).includes(q));
+  el.innerHTML = `<div class="helper">No es una niñera de la lista: se guarda como persona externa, sin darla de alta como niñera.${hayParecidas ? ' Si es una de las niñeras de la lista, elegila ahí.' : ''}</div>`;
 }
 async function guardarIntermediacionEnrique(){
   const warn = document.getElementById('inter-enrique-warn');
-  if(!interEnriqueSel){ warn.innerHTML = '<div class="warnbox">Elegí una niñera de la lista (tiene que ser una niñera ya cargada).</div>'; return; }
+  const { ninera, nombre } = personaInterEnrique();
+  if(!nombre){ warn.innerHTML = '<div class="warnbox">Elegí una niñera de la lista o escribí el nombre de la persona.</div>'; return; }
   const fecha = document.getElementById('inter-enrique-fecha').value;
   if(!fecha){ warn.innerHTML = '<div class="warnbox">Falta la fecha.</div>'; return; }
   const monto = Number(document.getElementById('inter-enrique-monto').value)||0;
   const { error } = await sb.from('intermediaciones_enrique').insert({
-    ninera_id: interEnriqueSel.id,
-    ninera_nombre: interEnriqueSel.nombre,
+    ninera_id: ninera ? ninera.id : null,
+    ninera_nombre: nombre,
     fecha, monto,
     comentarios: document.getElementById('inter-enrique-comentarios').value.trim() || null,
     registrado_por: registradoPorUsuario(),
   });
   if(error){ warn.innerHTML = errBox(error); return; }
+  if(!ninera){
+    toast('Colocación registrada (persona externa, no se suma a Niñeras).');
+    interTab = 'historial';
+    renderModulo();
+    return;
+  }
   // Colocada por Enrique: sale de la lista general de Niñeras (ya no se le asignan sittings)
   // y queda registrada en el pool propio de Intermediaciones como "activa".
-  const { error: e2 } = await sb.from('ninieras').update({activa:false}).eq('id', interEnriqueSel.id);
+  const { error: e2 } = await sb.from('ninieras').update({activa:false}).eq('id', ninera.id);
   const { error: e3 } = await sb.from('intermediaciones_enrique_pool').upsert(
-    {ninera_id: interEnriqueSel.id, ninera_nombre: interEnriqueSel.nombre, estado:'activa', updated_at:new Date().toISOString()},
+    {ninera_id: ninera.id, ninera_nombre: ninera.nombre, estado:'activa', updated_at:new Date().toISOString()},
     {onConflict:'ninera_id'}
   );
   // La colocación ya quedó guardada; si falló alguno de los dos pasos siguientes se avisa
@@ -172,7 +199,7 @@ async function abrirModalInterEnriqueDetalle(id){
   const fechaFmt = new Date(it.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'long',year:'numeric'});
   abrirModal(`
     <h2>${escaparHtml(it.ninera_nombre)}</h2>
-    <div class="helper">Colocación vía Agencia Enrique · ${fechaFmt}</div>
+    <div class="helper">Colocación vía Agencia Enrique · ${fechaFmt}${it.ninera_id ? '' : ' · persona externa (no es niñera de Parents Break)'}</div>
     <div class="fichadl" style="margin-top:14px;"><div><b>Monto cobrado</b>$${Number(it.monto||0).toLocaleString('es-UY')}</div>${it.comentarios?`<div><b>Comentarios</b>${escaparHtml(it.comentarios)}</div>`:''}</div>
     <button class="btn danger" style="width:100%;margin-top:16px;" onclick="conGuardado(this, ()=>eliminarIntermediacionEnrique(${argJs(it.id)}))">Eliminar registro</button>
   `);
