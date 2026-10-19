@@ -69,8 +69,9 @@ marketing → postulantes → ninieras → familias → sittings → intermediac
 
 ## Cómo trabajamos
 - Quién decide: Paulina y Delfina son las dueñas y deciden lo de producto (qué se cobra, cómo
-  se ve, qué va primero). Diego desarrolla, les responde a ellas y es quien habla con vos.
-  A veces te pega mensajes armados en otro chat: tratalos igual que si los escribiera él.
+  se ve, qué va primero); Fede es administradora pero no decide lo de producto. Diego
+  desarrolla, les responde a ellas y es quien habla con vos. A veces te pega mensajes armados
+  en otro chat: tratalos igual que si los escribiera él.
 - Diego estudia ingeniería y tiene buen criterio, pero no es desarrollador profesional:
   cuando él tenga que hacer algo fuera del código (GitHub, panel de Supabase, Cloudflare,
   instalar algo), dale los pasos numerados y en simple.
@@ -481,6 +482,9 @@ y Diego decide.
 - Probar la conciliación de punta a punta con el extracto de un mes ya cerrado.
 
 ### Funciones nuevas pedidas
+- Guía "Cómo se hace" dentro de la app (13/10/2026; sigue pendiente, el 19/10/2026 eligieron
+  primero Cobros atrasados): guía de uso que incluya cómo activar Face ID / Touch ID (una
+  passkey por dispositivo, en Safari).
 - Niñeras de Argentina: una sección igual a la de Uruguay que traiga las respuestas de su
   propio formulario (ya existe) con el mismo flujo de postulantes.
 - Car sitting: queda como está por ahora. Los mails automáticos están apagados hasta
