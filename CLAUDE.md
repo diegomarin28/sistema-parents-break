@@ -2,7 +2,8 @@
 
 Sistema real de Parents Break (cuidado infantil y traslados, Montevideo). Lo usan todos los
 días sus dueñas, Paulina y Delfina. Desarrollador: Diego. Cualquier bug llega a producción y
-a las familias y niñeras.
+a las familias y niñeras. Son tres administradoras: Paulina, Delfina y Fede (socia, con cuenta
+propia; además hace sittings como niñera).
 
 Antes de empezar cualquier tarea leé "Para qué es esto", "Cómo trabajamos", "Worktrees",
 "Datos sensibles" y "Calidad": valen para todas las sesiones y todos los worktrees.
@@ -61,7 +62,7 @@ marketing → postulantes → ninieras → familias → sittings → intermediac
    ✕, ✓ y ★ están permitidos. `tests/estatico.spec.js` controla la lista.
 4. No convertir los scripts a módulos ni cambiar el orden de carga sin consultar.
 5. Si una decisión es de producto o de diseño, preguntar antes de elegir.
-6. Nunca usar las cuentas reales de Paulina o Delfina, tampoco en tests.
+6. Nunca usar las cuentas reales de Paulina, Delfina o Fede, tampoco en tests.
 7. `temporada.html` está EN USO (formulario de disponibilidad de verano que se manda a las
    niñeras cada octubre): no tocarlo ni romperlo. La página real la sirve Cloudflare, que es
    configuración externa: no auditarla.
@@ -186,6 +187,13 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/arranque.spec.js`: pantalla de carga (símbolo latiendo), error si no carga supabase-js,
   "Entrando…", carga entre el login y Hoy, símbolo chico al cambiar de sección (> 300 ms).
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
+- `tests/escape.spec.js`: todos los campos de texto con datos tramposos (comillas, HTML, URLs
+  `javascript:`) en cada módulo y ficha; nada se ejecuta y los handlers siguen válidos.
+- `tests/gastos-total.spec.js`: "Traslado $X + gastos $Y = $Z" en el registro y en Sittings,
+  editar un gasto cargado, gasto que absorbe Parents Break, fijos que no se crean incompletos
+  ni repetidos, y precio de un día de traslado fijo.
+- `tests/mejoras-hoy.spec.js`: en Hoy, aviso si la carga de fijos de las 03:00 no anduvo y
+  "Datos que faltan"; fotos más livianas al subirlas.
 - `tests/entrevista.spec.js`: bloques del formulario en la entrevista y datos corregidos en la
   ficha de la niñera.
 - `tests/entrevista-en-curso.spec.js`: guardar la entrevista a medias, retomarla desde
@@ -349,12 +357,13 @@ Es la dirección a largo plazo del sistema. No se construye de una: primero una 
 por etapas (qué se hace primero, costos, riesgos, qué cambia en la base y en la seguridad),
 y Diego decide.
 - Dos apps en el App Store (Diego ya tiene la cuenta de Apple Developer: no suma costo):
-  - Admin: el mismo sistema de hoy, para las tres administradoras, empaquetado como app. No
-    se rehace: se reutiliza este código (por ejemplo con Capacitor). Ojo: Apple rechaza apps
-    que son solo una web envuelta; sumar lo nativo que aporte (push, cámara para tickets,
-    Face ID). Con la migración, aprovechar para mejorarla: que se vea más profesional, mejores
-    métricas, componentes reutilizables en vez de repetidos, rehacer las consultas que sobran
-    o son lentas, y simplificar las tareas que hoy llevan más pasos de los necesarios.
+  - Admin: el mismo sistema de hoy, para las tres administradoras (Paulina, Delfina y Fede),
+    empaquetado como app. No se rehace: se reutiliza este código (por ejemplo con
+    Capacitor). Ojo: Apple rechaza apps que son solo una web envuelta; sumar lo nativo que
+    aporte (push, cámara para tickets, Face ID). Con la migración, aprovechar para mejorarla:
+    que se vea más profesional, mejores métricas, componentes reutilizables en vez de
+    repetidos, rehacer las consultas que sobran o son lentas, y simplificar las tareas que hoy
+    llevan más pasos de los necesarios.
   - Niñeras (lo nuevo): cada una con su usuario y sus registros. Aceptan o rechazan los
     sittings ahí; marcan cuándo llegaron y cuándo se fueron, si se quedaron más tiempo, si
     pagaron algo extra (con la foto del ticket) y si pasó algo (incidente); hacen los
@@ -363,7 +372,7 @@ y Diego decide.
     hace falta WhatsApp.
 - Seguridad: hoy RLS solo deja entrar a `usuarias_autorizadas` (las admin). Las niñeras
   necesitan cuentas propias que vean y escriban solo lo suyo. Es el cambio más delicado de
-  todo el proyecto.
+  todo el proyecto. Ojo: Fede es admin y también hace sittings como niñera.
 - Las horas reales que marca la niñera (llegada y salida) alimentan el cálculo de cobro y
   pago que ya existe; las admin confirman antes de que cuente.
 - Pagos a niñeras: siguen siendo manuales (decisión del 19/10/2026: el pago automático
@@ -391,6 +400,12 @@ y Diego decide.
     que eligen las admin: cada elección queda guardada y se usa como ejemplo.
   - Si una niñera escribe al WhatsApp en vez de usar la app, el agente la reconoce por su
     número y lo pasa al chat de su app, en vez de tratarlo como un pedido.
+  - API de WhatsApp (Meta, octubre de 2026): recibir mensajes es gratis; desde el 01/10/2026
+    las respuestas tienen 1.000 gratis por mes por número y después se cobran, igual que las
+    plantillas. Con Coexistence se sigue usando la app de WhatsApp Business en el celular con
+    el mismo número, pero los grupos no pasan a la API, se pierden las listas de difusión de
+    la app y puede desvincular dispositivos vinculados. Verificar todo esto con la
+    documentación de Meta antes de conectar el número real.
 - Entrevistas a niñeras nuevas, más simples: agendarla desde la app y que se cree sola la
   reunión de Google Meet con el link para la candidata; que de la entrevista salgan los
   apuntes solos, ordenados según las preguntas que ya tiene la pantalla de Entrevista (ficha
@@ -408,20 +423,26 @@ y Diego decide.
   que ya existe, con gastos y tickets). Si fue puntual, después del sitting; si tienen varios
   o fijos, uno por mes. Lo confirma una admin antes de que salga (por WhatsApp o mail). No
   hace falta factura electrónica: alcanza con un PDF claro y detallado.
-  - API de WhatsApp (Meta, octubre de 2026): recibir mensajes es gratis; desde el 01/10/2026
-    las respuestas tienen 1.000 gratis por mes por número y después se cobran, igual que las
-    plantillas. Con Coexistence se sigue usando la app de WhatsApp Business en el celular con
-    el mismo número, pero los grupos no pasan a la API, se pierden las listas de difusión de
-    la app y puede desvincular dispositivos vinculados. Verificar todo esto con la
-    documentación de Meta antes de conectar el número real.
+
+### Próximas tareas (pedidas por Paulina y Delfina)
+- Cobros atrasados en Hoy (la primera mejora que eligieron, 19/10/2026): lista de familias que
+  deben, con días de atraso y monto, y un botón que abra WhatsApp con el recordatorio ya
+  escrito para esa madre (link de WhatsApp con el texto, sin la API). Lo manda la admin.
+- Términos y condiciones para familias nuevas (19/10/2026): un documento de términos y
+  condiciones que se les manda a las madres nuevas, y en la ficha de la familia queda
+  registrado que lo aceptó, con la fecha (por ahora lo marca la admin; más adelante, que la
+  madre lo acepte desde un link). A las familias de siempre no se les aplica. Para las que
+  aceptaron, el horario de fin se redondea hacia arriba para el cobro (por ejemplo, si se fue
+  17:45 se cobra hasta las 18:00); el pago a la niñera se sigue calculando con la hora real.
+  Falta definir la regla exacta del redondeo y el texto del documento antes de construir.
+- Intermediaciones, colocación de Enrique (19/10/2026): hoy exige elegir una niñera ya
+  cargada, pero a veces la persona es empleada de Enrique y no es niñera nuestra. Permitir
+  escribir el nombre de una persona externa sin darla de alta como niñera.
+- Finanzas, Por pagar (19/10/2026): a las niñeras fijas su semana les aparece recién cuando
+  cierra (sábado o domingo), y eso hace pensar que faltan pagos. Mostrar también la semana en
+  curso, separada y marcada como "todavía no cierra".
 
 ### Esperando una decisión de Paulina y Delfina
-- Qué mejora va primero (13/10/2026): (a) "Cobros atrasados" en Hoy, con recordatorio por
-  WhatsApp, o (b) una sección "Cómo se hace" dentro de la app (guía de uso; incluir cómo
-  activar Face ID / Touch ID: una passkey por dispositivo, en Safari).
-- Nombres en pantalla (13/10/2026): en Sittings, "Cobrado/Pagado en [mes]" pasaría a
-  "Facturado en [mes]" y "A pagar a niñeras en [mes]". Revisar antes cómo quedó después del
-  #37.
 - Niñeras que dicen que no: ¿un contador visible o el aviso de baja actividad (cada 10
   rechazos, falta decidir si por mail o en la app)? Espera a WhatsApp.
 
@@ -430,16 +451,18 @@ y Diego decide.
   pedidos del proyecto grande. Antes de construir, evaluar opciones (la API oficial, un agente
   que lea y redacte, o plantillas que ellas mandan con un toque), con costos y riesgos.
 - Dependen de WhatsApp: cumpleaños de la niñera a las 9:00, mensaje a la familia poco
-  activa (cada 4 semanas, 5% de descuento; falta el texto), recordatorio de cobros atrasados.
+  activa (cada 4 semanas, 5% de descuento; falta el texto). El recordatorio de cobros
+  atrasados ya no espera a la API: va con el link de WhatsApp (ver "Próximas tareas").
 - whatsapp-webhook ya publicado exige la firma de Meta y hoy rechaza todo. Cuando arranquemos,
   cargar `WHATSAPP_APP_SECRET` (App Secret de la app de Meta) en Supabase > Edge Functions >
   Secrets.
 
 ### Seguridad
-- `carsitting-recordatorio`: no se endureció con las demás Edge Functions (06/10/2026) y
-  cualquiera con el link puede llamarla. Hoy devuelve siempre la lista vacía, porque los
-  mails de carsitting están apagados. Endurecerla (pedir `x-webhook-secret`) antes de
-  reactivar esos mails; mientras tanto no tocarla sin que Diego lo pida.
+- `carsitting-recordatorio`: pausada desde el 13/09/2026 (mails de carsitting apagados).
+  Lo publicado no pide secreto, pero devuelve siempre la lista vacía y no lee la base, así
+  que hoy no expone nada. El código original, comentado en el mismo archivo, ya pide
+  `x-webhook-secret`: al reactivar los mails se vuelve a ese código y hay que confirmar que
+  el Apps Script mande el secreto. Mientras tanto no tocarla sin que Diego lo pida.
 - `temporada-ninera` (S3): no pide el link con token y acepta nombre + celular nuevo. Se
   endurece en noviembre, cuando termine la temporada (el formulario está en uso todo octubre).
   Tiene además un error de tipos (TS18046) que ya traía la versión publicada.
