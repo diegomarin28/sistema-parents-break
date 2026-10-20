@@ -1511,15 +1511,6 @@ function cambiarVistaFinanzas(vista, recargar=true){
   if(recargar && finVista==='revisar') pintarRevisarMes();
 }
 function claveNombreFin(id, nombre){ return id || ('n:'+normaliza(String(nombre||'').trim())); }
-function horasRegistroFin(r){
-  if(r.tipo!=='sitting' || !r.hora_inicio || !r.hora_fin) return 0;
-  const [hi, mi] = r.hora_inicio.split(':').map(Number);
-  const [hf, mf] = r.hora_fin.split(':').map(Number);
-  let fin = hf*60+mf;
-  if(r.termina_dia_siguiente) fin += 24*60;
-  const min = fin - (hi*60+mi);
-  return min > 0 ? min/60 : 0;
-}
 /* Motivos por los que conviene revisar cada registro del mes: { id: ['motivo', ...] }.
    ctx: { asigPorId, famPorId, hoy }. Los revisados y los cancelados no se marcan. */
 function sospechasDelMes(sits, ctx){
@@ -1558,7 +1549,8 @@ function sospechasDelMes(sits, ctx){
     let esperado = 0, deDonde = '';
     if(r.tipo==='traslado' && Number(asig?.cobro_traslado)>0){ esperado = Number(asig.cobro_traslado); deDonde = 'el fijo'; }
     else if(r.tipo==='sitting'){
-      const horas = horasRegistroFin(r);
+      // Horas que se le cobran (con el fin redondeado si la familia aceptó los términos).
+      const horas = horasSitting(r.hora_inicio, r.hora_fin, r.termina_dia_siguiente, fam, r.fecha)?.cobro || 0;
       const tarifa = Number(asig?.cobro_hora) || Number(fam?.cobro_hora) || 0;
       if(horas && tarifa){ esperado = Math.round(horas*tarifa); deDonde = Number(asig?.cobro_hora) ? 'el fijo' : 'la tarifa de la familia'; }
     }
@@ -1575,7 +1567,7 @@ async function cargarRevisarMes(sitsRaw, gastosGen, asigs){
   const sits = (sitsRaw||[]).filter(r=>!esPrevisto(r));
   const ids = sits.map(r=>r.id);
   const [{data:fams}, {data:ajustes, error:eAj}] = await Promise.all([
-    sb.from('familias').select('id,nombre,cobro_hora'),
+    leerFamiliasConTerminos('id,nombre,cobro_hora'),
     sb.from('ajustes_saldo').select('*').gte('fecha', desde).lt('fecha', hasta),
   ]);
   let gastosExtra = [];

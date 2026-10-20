@@ -120,7 +120,7 @@ async function renderAgenda(cont){
 
 async function cargarAgendaBase(){
   const [{data:fams}, {data:nins}] = await Promise.all([
-    sb.from('familias').select('id,nombre,zona,telefono,cobro_hora,pago_hora').order('nombre'),
+    leerFamiliasConTerminos('id,nombre,zona,telefono,cobro_hora,pago_hora', q=>q.order('nombre')),
     sb.from('ninieras').select('id,nombre,zona,tipo,telefono').eq('activa', true).order('nombre'),
   ]);
   agendaFamilias = fams || [];
@@ -331,9 +331,22 @@ function renderAgendaTarjetaDia(s){
 
 function onHoraSelectChange(){
   actualizarAgendaTotal();
+  pintarFinCobroAgenda();
   actualizarAgendaPrecioTraslado();
   actualizarPrecioSugeridoTraslado();
   actualizarCobroPagoPorHorario();
+}
+// "Hora real 17:36, se cobra hasta 18:00" al registrar un día de un fijo o su reemplazo
+// (términos y condiciones). Cada aviso lleva la familia y la fecha del día que se registra.
+function pintarFinCobroAgenda(){
+  [['agenda-fija-fin-cobro', 'agenda-fija-hi', 'agenda-fija-hf', 'agenda-fija-cruza'],
+   ['agenda-fija-rfin-cobro', 'agenda-fija-rhi', 'agenda-fija-rhf', 'agenda-fija-rcruza']].forEach(([id, hi, hf, cruza])=>{
+    const box = document.getElementById(id);
+    if(!box) return;
+    const familia = agendaFamilias.find(f=>f.id===box.dataset.familia);
+    const horas = horasSitting(leerHora(hi), leerHora(hf), document.getElementById(cruza)?.checked, familia, box.dataset.fecha);
+    box.textContent = textoFinCobrado(leerHora(hf), horas);
+  });
 }
 function selectHora(idPrefix, valHH='', valMM=''){
   const horas = Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
@@ -447,12 +460,11 @@ function actualizarAgendaTotal(){
   const hf = leerHora('agenda-hora-fin');
   const cruza = document.getElementById('agenda-cruza-medianoche')?.checked;
   if(!tarifa || !hi || !hf){ el.textContent=''; return; }
-  const mi = agendaMinutos(hi), mf = agendaMinutos(hf);
-  const durMin = cruza ? ((24*60-mi)+mf) : (mf-mi);
-  if(durMin<=0){ el.textContent = !cruza && mf<=mi ? 'La hora de fin tiene que ser después de la de inicio (o marcá "Termina al día siguiente").' : ''; return; }
-  const horas = durMin/60;
-  const total = tarifa*horas;
-  el.textContent = `Total estimado: $${Math.round(total).toLocaleString('es-UY')} (${horas.toFixed(1).replace('.0','')} h)`;
+  const familia = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(document.getElementById('agenda-familia')?.value||''));
+  const horas = horasSitting(hi, hf, cruza, familia, document.getElementById('agenda-nueva-fecha')?.value);
+  if(!horas){ el.textContent = !cruza ? 'La hora de fin tiene que ser después de la de inicio (o marcá "Termina al día siguiente").' : ''; return; }
+  const finCobro = textoFinCobrado(hf, horas);
+  el.textContent = `Total estimado: $${Math.round(tarifa*horas.cobro).toLocaleString('es-UY')} (${horas.cobro.toFixed(1).replace('.0','')} h)${finCobro ? ' · '+finCobro : ''}`;
 }
 let agendaModoNueva = 'puntual';
 function onAgendaModoChange(modo){
@@ -569,6 +581,7 @@ async function guardarSolicitudPuntual(){
     warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio. Si termina pasada la medianoche, marcá "Termina al día siguiente".</div>';
     return;
   }
+  const fam = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(familiaTxt));
   let cobroFinal = null;
   if(tipo==='traslado'){
     // Traslado: el total ya viene armado (por km, o tipeado a mano) — no se multiplica por
@@ -576,13 +589,11 @@ async function guardarSolicitudPuntual(){
     const cobroTraslado = document.getElementById('agenda-cobro-traslado')?.value;
     cobroFinal = cobroTraslado ? Number(cobroTraslado) : null;
   } else if(tarifa && horaFin){
-    const mi = agendaMinutos(horaInicio), mf = agendaMinutos(horaFin);
-    const durMin = cruza ? ((24*60-mi)+mf) : (mf-mi);
-    cobroFinal = durMin>0 ? Math.round(Number(tarifa)*(durMin/60)) : Number(tarifa);
+    const horas = horasSitting(horaInicio, horaFin, cruza, fam, fecha);
+    cobroFinal = horas ? Math.round(Number(tarifa)*horas.cobro) : Number(tarifa);
   } else if(tarifa){
     cobroFinal = Number(tarifa);
   }
-  const fam = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(familiaTxt));
   const { error } = await sb.from('solicitudes').insert({
     familia_id: fam ? fam.id : null,
     familia_nombre: familiaTxt,
@@ -874,7 +885,8 @@ function abrirModalAsignacionFija(s){
            <div class="field"><label>Hora inicio</label>${selectHora('agenda-fija-hi')}</div>
            <div class="field"><label>Hora fin</label>${selectHora('agenda-fija-hf')}</div>
          </div>
-         <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="agenda-fija-cruza"> Termina al día siguiente</label>
+         <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="agenda-fija-cruza" onchange="pintarFinCobroAgenda()"> Termina al día siguiente</label>
+         ${esTraslado ? '' : `<div class="helper" id="agenda-fija-fin-cobro" data-familia="${escaparHtml(a.familia_id)}" data-fecha="${escaparHtml(s.fecha)}" style="margin:-4px 0 8px;"></div>`}
          ${esTraslado ? `<div class="grid2" style="margin-bottom:8px;">
            <div class="field"><label>Cobro del traslado</label><div class="moneyfield"><input type="number" id="agenda-fija-cobro"></div></div>
            <div class="field"><label>Pago a la niñera</label><div class="moneyfield"><input type="number" id="agenda-fija-pago"></div></div>
@@ -892,6 +904,7 @@ function abrirModalAsignacionFija(s){
     setHoraSelect('agenda-fija-hi', (prev ? prev.hora_inicio : a.hora_inicio)||'');
     setHoraSelect('agenda-fija-hf', (prev ? prev.hora_fin : a.hora_fin)||'');
     if(prev && prev.termina_dia_siguiente){ const c = document.getElementById('agenda-fija-cruza'); if(c) c.checked = true; }
+    pintarFinCobroAgenda();
   }
   attachAutocomplete('agenda-fija-ninera-'+asigId, 'agenda-fija-ninera-'+asigId+'-dropdown', ()=>agendaNinierasBase, ()=>{});
   if(esTraslado && !s._yaRegistrado){
@@ -1019,11 +1032,11 @@ async function registrarSittingFijoDeHoy(id){
   if(cruza) mf += 24*60;
   if(mf<=mi){ if(warn) warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio (o marcá "Termina al día siguiente").</div>'; return; }
   const familia = agendaFamilias.find(f=>f.id===a.familia_id);
-  const horasFrac = (mf-mi)/60;
+  const horas = horasSitting(horaIni, horaFin, cruza, familia, s.fecha);
   const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
   const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
   const tipo = tipoAsignacion(a);
-  let cobro = Math.round(horasFrac*cobroHora), pago = Math.round(horasFrac*pagoHora);
+  let cobro = Math.round(horas.cobro*cobroHora), pago = Math.round(horas.real*pagoHora);
   if(tipo==='traslado'){
     const cobroTxt = document.getElementById('agenda-fija-cobro')?.value ?? '';
     const pagoTxt = document.getElementById('agenda-fija-pago')?.value ?? '';
@@ -1149,7 +1162,8 @@ function mostrarReemplazoFijoHoy(id){
       <div class="field"><label>Hora inicio</label>${selectHora('agenda-fija-rhi')}</div>
       <div class="field"><label>Hora fin</label>${selectHora('agenda-fija-rhf')}</div>
     </div>
-    <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="agenda-fija-rcruza"> Termina al día siguiente</label>
+    <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="agenda-fija-rcruza" onchange="pintarFinCobroAgenda()"> Termina al día siguiente</label>
+    ${tipoAsignacion(a)==='traslado' ? '' : `<div class="helper" id="agenda-fija-rfin-cobro" data-familia="${escaparHtml(a.familia_id)}" data-fecha="${escaparHtml(s.fecha)}" style="margin:-4px 0 8px;"></div>`}
     ${tipoAsignacion(a)==='traslado' ? `<div class="grid2" style="margin-bottom:8px;">
       <div class="field"><label>Cobro del traslado</label><div class="moneyfield"><input type="number" id="agenda-fija-rcobro"></div></div>
       <div class="field"><label>Pago a la niñera</label><div class="moneyfield"><input type="number" id="agenda-fija-rpago"></div></div>
@@ -1158,6 +1172,7 @@ function mostrarReemplazoFijoHoy(id){
     <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>confirmarReemplazoFijoHoy(${argJs(id)}))">Registrar reemplazo</button>`;
   setHoraSelect('agenda-fija-rhi', a.hora_inicio||'');
   setHoraSelect('agenda-fija-rhf', a.hora_fin||'');
+  pintarFinCobroAgenda();
   attachAutocomplete('agenda-fija-reemplazo-ninera', 'agenda-fija-reemplazo-ninera-dropdown', ()=>agendaNinierasBase, (o)=>{ agendaReemplazoNineraSel = o; });
 }
 async function confirmarReemplazoFijoHoy(id){
@@ -1176,11 +1191,11 @@ async function confirmarReemplazoFijoHoy(id){
   if(cruza) mf += 24*60;
   if(mf<=mi){ if(warn) warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio (o marcá "Termina al día siguiente").</div>'; return; }
   const familia = agendaFamilias.find(f=>f.id===a.familia_id);
-  const horasFrac = (mf-mi)/60;
+  const horas = horasSitting(horaIni, horaFin, cruza, familia, s.fecha);
   const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
   const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
   const nineraSel = agendaReemplazoNineraSel && normaliza(agendaReemplazoNineraSel.nombre)===normaliza(nineraTxt) ? agendaReemplazoNineraSel : null;
-  let cobro = Math.round(horasFrac*cobroHora), pago = Math.round(horasFrac*pagoHora);
+  let cobro = Math.round(horas.cobro*cobroHora), pago = Math.round(horas.real*pagoHora);
   if(tipoAsignacion(a)==='traslado'){
     const cobroTxt = document.getElementById('agenda-fija-rcobro')?.value ?? '';
     const pagoTxt = document.getElementById('agenda-fija-rpago')?.value ?? '';
@@ -1547,12 +1562,13 @@ async function filaDeHoySegunFijo(aHoy, r){
     fila.cobro_familia = aHoy.cobro_traslado ?? r.cobro_familia;
     fila.pago_ninera = aHoy.pago_traslado ?? r.pago_ninera;
   } else {
-    // Igual que generar_previstos_fijos: horas del fijo por la tarifa de la familia.
-    const { data: fam, error } = await sb.from('familias').select('cobro_hora,pago_hora').eq('id', aHoy.familia_id).maybeSingle();
+    // Igual que generar_previstos_fijos: horas del fijo por la tarifa de la familia (el
+    // cobro, con el fin redondeado si aceptó los términos).
+    const { data: fam, error } = await leerFamiliasConTerminos('cobro_hora,pago_hora', q=>q.eq('id', aHoy.familia_id).maybeSingle());
     if(error) throw error;
-    const horas = hi && hf ? ((agendaMinutos(hf) - agendaMinutos(hi) + (cruza ? 24*60 : 0)) / 60) : 0;
-    fila.cobro_familia = Math.round(horas * (Number(fam?.cobro_hora) || 0));
-    fila.pago_ninera = Math.round(horas * (Number(fam?.pago_hora) || 0));
+    const horas = horasSitting(hi, hf, cruza, fam, todayISO()) || { real: 0, cobro: 0 };
+    fila.cobro_familia = Math.round(horas.cobro * (Number(fam?.cobro_hora) || 0));
+    fila.pago_ninera = Math.round(horas.real * (Number(fam?.pago_hora) || 0));
   }
   return fila;
 }

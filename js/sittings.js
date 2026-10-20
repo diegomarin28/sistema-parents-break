@@ -133,17 +133,20 @@ function resenaBadge(nineraNombre){
 }
 // Horario/duración solo aplica a sittings (hora_inicio/hora_fin) -- los traslados usan
 // km/origen/destino, no tienen ese concepto, así que muestran "—".
+// Las horas son las reales; si la familia aceptó los términos, el horario aclara hasta qué
+// hora se le cobra (también en el PDF que se le manda).
+function horasRegistroSit(r){
+  if(r.tipo!=='sitting') return null;
+  return horasSitting(r.hora_inicio, r.hora_fin, r.termina_dia_siguiente, (sitFamilias||[]).find(f=>f.id===r.familia_id), r.fecha);
+}
 function horarioEfectuadoTexto(r){
   if(r.tipo!=='sitting' || !r.hora_inicio || !r.hora_fin) return '—';
-  return `${r.hora_inicio.slice(0,5)}–${r.hora_fin.slice(0,5)}`;
+  const finCobro = r.cancelado ? null : horasRegistroSit(r)?.finCobro;
+  return `${r.hora_inicio.slice(0,5)}–${r.hora_fin.slice(0,5)}${finCobro ? ` (se cobra hasta ${finCobro})` : ''}`;
 }
 function horasEfectuadasTexto(r){
-  if(r.tipo!=='sitting' || !r.hora_inicio || !r.hora_fin) return '—';
-  const mi = agendaMinutos(r.hora_inicio);
-  let mf = agendaMinutos(r.hora_fin);
-  if(r.termina_dia_siguiente) mf += 24*60;
-  if(mf<=mi) return '—';
-  const horas = (mf-mi)/60;
+  const horas = horasRegistroSit(r)?.real;
+  if(!horas) return '—';
   return (Number.isInteger(horas) ? horas : horas.toFixed(1)) + ' hs';
 }
 // Fila compartida entre el historial "Todo/período" y el de rango personalizado -- antes
@@ -488,7 +491,7 @@ function renderSitHistorial(){
 }
 async function cargarSitBase(){
   const [{data:fams}, {data:nins}] = await Promise.all([
-    sb.from('familias').select('id,nombre,direccion,cobro_hora,pago_hora').order('nombre'),
+    leerFamiliasConTerminos('id,nombre,direccion,cobro_hora,pago_hora', q=>q.order('nombre')),
     sb.from('ninieras').select('id,nombre').eq('activa', true).order('nombre'),
   ]);
   sitFamilias = fams || [];
@@ -608,11 +611,12 @@ async function verHistorialSitting(id){
 function sitCamposTipoHTML(){
   if(sitTipo==='sitting'){
     return `<div class="grid3">
-      <div class="field"><label>Fecha</label><input type="date" id="sit-fecha" value="${todayISO()}"></div>
+      <div class="field"><label>Fecha</label><input type="date" id="sit-fecha" value="${todayISO()}" onchange="onSitFechaChange()"></div>
       <div class="field"><label>Hora inicio</label>${selectHora('sit-horaini')}</div>
       <div class="field" id="sit-horafin-wrap"><label>Hora fin</label>${selectHora('sit-horafin')}</div>
     </div>
-    <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="sit-cruza-medianoche" onchange="actualizarCobroPagoPorHorario()"> Termina al día siguiente</label>`;
+    <label class="chk" style="margin:-4px 0 10px;"><input type="checkbox" id="sit-cruza-medianoche" onchange="actualizarCobroPagoPorHorario()"> Termina al día siguiente</label>
+    <div class="helper" id="sit-fin-cobro" style="margin:-4px 0 10px;"></div>`;
   }
   return `<div class="grid3">
       <div class="field"><label>Fecha</label><input type="date" id="sit-fecha" value="${todayISO()}"></div>
@@ -689,6 +693,7 @@ async function abrirModalSitForm(id=null){
         setHoraSelect('sit-horafin', r.hora_fin);
         const chk = document.getElementById('sit-cruza-medianoche');
         if(chk) chk.checked = !!r.termina_dia_siguiente;
+        pintarFinCobroSit(); // solo el aviso: el cobro guardado no se recalcula al abrir
       } else {
         setHoraSelect('sit-hora', r.hora_inicio);
         document.getElementById('sit-km').value = r.km || '';
@@ -1313,7 +1318,7 @@ function actualizarCobroPagoPorHorario(){
   const sinTarifaBox = document.getElementById('sit-sin-tarifa-box');
   if(!cobroInput || !pagoInput) return;
   if(document.getElementById('sit-cancelado')?.checked) return; // cancelado manda, no lo pisa el cálculo automático
-  if(sitTipo!=='sitting' || !sitFamiliaSel){ if(sinTarifaBox) sinTarifaBox.innerHTML = ''; return; }
+  if(sitTipo!=='sitting' || !sitFamiliaSel){ if(sinTarifaBox) sinTarifaBox.innerHTML = ''; pintarFinCobroSit(); return; }
   const cobroH = Number(sitFamiliaSel.cobro_hora)||0;
   const pagoH = Number(sitFamiliaSel.pago_hora)||0;
   const horaIni = leerHora('sit-horaini');
@@ -1343,15 +1348,11 @@ function actualizarCobroPagoPorHorario(){
   } else if(sinTarifaBox){
     sinTarifaBox.innerHTML = '';
   }
-  if(!horaIni || !horaFin) return;
-  const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
-  const mi = agendaMinutos(horaIni);
-  let mf = agendaMinutos(horaFin);
-  if(cruza) mf += 24*60;
-  if(mf<=mi) return; // horario todavía inválido/incompleto, no calcula nada raro
-  const horasFrac = (mf-mi)/60;
-  if(cobroH) cobroInput.value = Math.round(cobroH*horasFrac);
-  if(pagoH && !sitPagoModoHora) pagoInput.value = Math.round(pagoH*horasFrac);
+  const horas = pintarFinCobroSit();
+  if(!horas) return; // horario todavía inválido/incompleto, no calcula nada raro
+  // Cobro con el fin redondeado si la familia aceptó los términos; pago, con la hora real.
+  if(cobroH) cobroInput.value = Math.round(cobroH*horas.cobro);
+  if(pagoH && !sitPagoModoHora) pagoInput.value = Math.round(pagoH*horas.real);
   if(sitPagoModoHora) onSitPagoHoraInput(); // si cambió el horario, recalcula el total con el valor por hora ya tipeado
   calcSitMargen();
 }
@@ -1381,6 +1382,21 @@ function toggleSitPagoModoHora(){
     if(link) link.textContent = 'poner pago por hora';
     actualizarCobroPagoPorHorario();
   }
+}
+// La fecha decide si rige el redondeo (desde el día que aceptó los términos). En un registro
+// ya guardado solo se actualiza el aviso: su cobro no se pisa por cambiar la fecha.
+function onSitFechaChange(){
+  if(sitEditId) pintarFinCobroSit();
+  else actualizarCobroPagoPorHorario();
+}
+// "Hora real 17:36, se cobra hasta 18:00" debajo del horario (términos y condiciones).
+function pintarFinCobroSit(){
+  const box = document.getElementById('sit-fin-cobro');
+  const horaFin = leerHora('sit-horafin');
+  const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
+  const horas = sitTipo==='sitting' ? horasSitting(leerHora('sit-horaini'), horaFin, cruza, sitFamiliaSel, document.getElementById('sit-fecha')?.value) : null;
+  if(box) box.textContent = textoFinCobrado(horaFin, horas);
+  return horas;
 }
 function onSitPagoHoraInput(){
   const horaVal = Number(document.getElementById('sit-pago-hora')?.value)||0;

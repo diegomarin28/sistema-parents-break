@@ -34,8 +34,8 @@ function datosBase() {
     ],
     zonas_confirmadas: [],
     familias: [
-      { id: ID.fUno, nombre: 'Familia Prueba Uno', zona: 'Pocitos', telefono: '099000001', ninos: null, notas: null, created_at: '2026-09-01T00:00:00Z', direccion: 'Calle Falsa 123', cuenta_bancaria: ['0001234567'], cobro_hora: 380, pago_hora: 250, frecuencia_cobro: 'mensual', contactada_riesgo_en: null },
-      { id: ID.fDos, nombre: 'Familia Prueba Dos', zona: 'Carrasco', telefono: '099000002', ninos: null, notas: null, created_at: '2026-09-01T00:00:00Z', direccion: null, cuenta_bancaria: [], cobro_hora: 400, pago_hora: 260, frecuencia_cobro: 'semanal', contactada_riesgo_en: null },
+      { id: ID.fUno, nombre: 'Familia Prueba Uno', zona: 'Pocitos', telefono: '099000001', ninos: null, notas: null, created_at: '2026-09-01T00:00:00Z', direccion: 'Calle Falsa 123', cuenta_bancaria: ['0001234567'], cobro_hora: 380, pago_hora: 250, frecuencia_cobro: 'mensual', contactada_riesgo_en: null, terminos_aceptados_el: null },
+      { id: ID.fDos, nombre: 'Familia Prueba Dos', zona: 'Carrasco', telefono: '099000002', ninos: null, notas: null, created_at: '2026-09-01T00:00:00Z', direccion: null, cuenta_bancaria: [], cobro_hora: 400, pago_hora: 260, frecuencia_cobro: 'semanal', contactada_riesgo_en: null, terminos_aceptados_el: null },
     ],
     hijos_familia: [],
     ninieras: [

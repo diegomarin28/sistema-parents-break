@@ -43,20 +43,34 @@ function abrirModalNuevaFamilia(){
     </div>
     ${htmlHijosFamilia('fam', [])}
     ${htmlCuentasBancarias('fam', [])}
+    ${baseTieneTerminos() ? `<label class="chk" style="margin:4px 0 0;"><input type="checkbox" id="fam-terminos-nueva" onchange="onFamTerminosNuevaChange()"> Aceptó términos y condiciones</label>
+    <div class="field" id="fam-terminos-nueva-fecha-wrap" style="margin:6px 0 10px;display:none;"><label>Fecha en que los aceptó</label><input type="date" id="fam-terminos-nueva-fecha" value="${todayISO()}"></div>` : ''}
     <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="conGuardado(this, ()=>addFamilia())">Agregar familia</button>
     </div>`);
 }
+// Términos y condiciones al dar de alta (20/10/2026): la casilla solo aparece si la base ya
+// tiene la columna (con la base sin migrar, familias no la trae).
+function baseTieneTerminos(){
+  return !familiasSinTerminos && (!familiasItems.length || familiasItems.some(f=>'terminos_aceptados_el' in f));
+}
+function onFamTerminosNuevaChange(){
+  document.getElementById('fam-terminos-nueva-fecha-wrap').style.display = document.getElementById('fam-terminos-nueva').checked ? '' : 'none';
+}
 async function addFamilia(){
   const nombre = document.getElementById('fam-nombre').value.trim();
   if(!nombre){ toast('Falta el nombre de la familia.','bad'); return; }
+  const aceptoTerminos = !!document.getElementById('fam-terminos-nueva')?.checked;
+  const terminosDesde = aceptoTerminos ? document.getElementById('fam-terminos-nueva-fecha').value : null;
+  if(aceptoTerminos && !terminosDesde){ toast('Poné la fecha en que aceptó los términos.', 'bad'); return; }
   if(!(await confirmarNombreNuevo(nombre, familiasItems, 'familia'))) return;
   const fam = { nombre, zona:leerZonasChecklist('fam'), telefono:document.getElementById('fam-telefono').value,
     cobro_hora:document.getElementById('fam-cobro').value||null, pago_hora:document.getElementById('fam-pago').value||null,
     direccion:document.getElementById('fam-direccion').value,
     cuenta_bancaria:leerCuentasBancarias('fam'), notas:document.getElementById('fam-notas').value };
+  if(aceptoTerminos) fam.terminos_aceptados_el = terminosDesde; // sin marcar no se manda: anda con la base sin migrar
   const { data, error } = await sb.from('familias').insert(fam).select().single();
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   const hijos = leerHijosFamilia('fam');
@@ -312,6 +326,7 @@ function verFamilia(id){
     </div>
     <div class="helper">${escaparHtml(f.zona||'zona s/d')} ${escaparHtml(f.telefono?'· '+f.telefono:'')}</div>
     ${precioHtml}
+    ${'terminos_aceptados_el' in f ? htmlTerminosFamilia(f) : ''}
     ${f.frecuencia_cobro?`<div class="helper">Frecuencia de cobro: ${escaparHtml(f.frecuencia_cobro)}</div>`:''}
     ${f.direccion?`<div class="helper">Dirección: ${escaparHtml(f.direccion)}</div>`:''}
     ${textoHijosFamilia(f.hijos) ? `<div class="helper">Niños:<br>${textoHijosFamilia(f.hijos)}</div>` : (f.ninos ? `<div class="helper">Niños: ${escaparHtml(f.ninos)}</div>` : '')}
@@ -347,6 +362,49 @@ function verFamilia(id){
     <button class="smallbtn" onclick="conGuardado(this, ()=>addAsignacion(${argJs(f.id)}))">+ Asignar niñera</button>`);
   renderIncidentesEnFicha('fam-incidentes', 'familia', f.id, f.nombre);
   pintarSaldoEnFicha('fam-saldo', 'familia', f.id, f.nombre);
+}
+/* Términos y condiciones (20/10/2026): la admin marca que la familia los aceptó y desde qué
+   fecha. Desde ese día, el fin de cada sitting se le cobra redondeado (horasSitting, core.js).
+   Con la base sin migrar la columna no viene y la casilla no se muestra. */
+function htmlTerminosFamilia(f){
+  const desde = f.terminos_aceptados_el;
+  const fechaTxt = desde ? new Date(desde+'T12:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
+  return `<div id="fam-terminos" data-guardado="${escaparHtml(desde||'')}" style="margin:10px 0;">
+    <label class="chk" style="margin:0;"><input type="checkbox" id="fam-terminos-chk" ${desde?'checked':''} onchange="onFamTerminosChange()"> Aceptó términos y condiciones</label>
+    <div class="field" id="fam-terminos-fecha-wrap" style="margin:6px 0 0;display:${desde?'':'none'};"><label>Fecha en que los aceptó</label><input type="date" id="fam-terminos-fecha" value="${escaparHtml(desde||todayISO())}" onchange="onFamTerminosChange()"></div>
+    <div class="helper" style="margin:4px 0 0;">${desde ? `Desde el ${fechaTxt}, el` : 'Si los aceptó, desde esa fecha el'} fin de cada sitting se le cobra redondeado a la media hora siguiente (con 5 minutos de tolerancia). A la niñera se le paga la hora real.</div>
+    <button class="smallbtn" id="fam-terminos-guardar" style="display:none;margin-top:6px;" onclick="conGuardado(this, ()=>guardarTerminosFamilia(${argJs(f.id)}))">Guardar</button>
+  </div>`;
+}
+function valorTerminosFamilia(){
+  if(!document.getElementById('fam-terminos-chk')?.checked) return null;
+  return document.getElementById('fam-terminos-fecha')?.value || '';
+}
+function onFamTerminosChange(){
+  const box = document.getElementById('fam-terminos');
+  if(!box) return;
+  const valor = valorTerminosFamilia();
+  document.getElementById('fam-terminos-fecha-wrap').style.display = valor===null ? 'none' : '';
+  document.getElementById('fam-terminos-guardar').style.display = valor === (box.dataset.guardado || null) ? 'none' : '';
+}
+async function guardarTerminosFamilia(id){
+  const valor = valorTerminosFamilia();
+  if(valor===''){ toast('Poné la fecha en que aceptó los términos.', 'bad'); return; }
+  const { error } = await sb.from('familias').update({terminos_aceptados_el: valor}).eq('id', id);
+  if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  const f = familiasItems.find(x=>x.id===id);
+  if(f) f.terminos_aceptados_el = valor;
+  // Cambia lo que se le cobra: los previstos de sus fijos y el sitting de hoy se recalculan.
+  await sincronizarPrevistosFijos();
+  await alinearHoyFijosDeFamilia(id);
+  toast(valor ? 'Listo: aceptó los términos. El fin de sus sittings se cobra redondeado.' : 'Listo: se sacó la marca de los términos.');
+  if(f && famDetalleAbierta===id && document.getElementById('fam-terminos')) verFamilia(id);
+}
+// Tarifa o términos nuevos: el sitting de hoy de sus fijos, si lo cargó el proceso y nadie lo
+// tocó (06/10/2026, alinearRegistroDeHoy en agenda.js).
+async function alinearHoyFijosDeFamilia(id){
+  const { data: fijosFam } = await sb.from('asignaciones').select('*').eq('familia_id', id);
+  for(const a of (fijosFam||[]).filter(a=>tipoAsignacion(a)==='sitting')) await alinearRegistroDeHoy(a.id, a, null, {noCancelar:true});
 }
 function editarFamilia(id){
   const f = familiasItems.find(x=>x.id===id);
@@ -409,12 +467,10 @@ async function guardarEdicionFamilia(id){
   cerrarModal();
   // Fijos automáticos: con tarifa o nombre nuevos se recalculan los previstos que nadie tocó.
   await sincronizarPrevistosFijos();
-  // Tarifa nueva: también el sitting de hoy de sus fijos, si lo cargó el proceso y nadie lo
-  // tocó (06/10/2026, alinearRegistroDeHoy en agenda.js).
+  // Tarifa nueva: también el sitting de hoy de sus fijos.
   const antes = familiasItems.find(x=>x.id===id);
   if(antes && (String(antes.cobro_hora ?? '') !== String(cambios.cobro_hora ?? '') || String(antes.pago_hora ?? '') !== String(cambios.pago_hora ?? ''))){
-    const { data: fijosFam } = await sb.from('asignaciones').select('*').eq('familia_id', id);
-    for(const a of (fijosFam||[]).filter(a=>tipoAsignacion(a)==='sitting')) await alinearRegistroDeHoy(a.id, a, null, {noCancelar:true});
+    await alinearHoyFijosDeFamilia(id);
   }
   if(errHijos) toast('Se guardó lo demás, pero no los hijos: '+errHijos.message, 'bad');
   else toast('Cambios guardados.');

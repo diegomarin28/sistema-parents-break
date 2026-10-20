@@ -210,7 +210,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   todo apagado sin la marca. La función de la base se prueba aparte en Postgres local:
   `supabase/pruebas/fijos_automaticos.sql` y, con el "hoy" fijado a mano (fin de mes y de
   año, pausas entre semanas, cambios desde una fecha), `fijos_automaticos_bordes.sql`
-  (nunca en producción).
+  (nunca en producción). Si no hay Postgres instalado: PGlite (`npm i @electric-sql/pglite` en
+  una carpeta fuera del repo), creando antes los roles anon/authenticated/service_role y
+  esquemas auth, storage y cron de mentira, y sacando los `create extension` de schema.sql.
 - `tests/saldo.spec.js`: saldo a favor (ajustes) en Por pagar / Por cobrar, al marcar pagado o
   cobrado, en la ficha, en el PDF y con la base sin la tabla.
 - `tests/gastos-extra.spec.js`: gastos extra con ticket en el formulario, en Por cobrar / Por
@@ -219,6 +221,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   Revisado, editar sittings, gastos extra, gastos generales y saldos, historial, base sin migrar).
 - `tests/intermediaciones.spec.js`: colocación de Enrique con una persona externa (sin
   `ninera_id`) o con una niñera de la lista, errores, doble toque, historial y ficha.
+- `tests/terminos.spec.js`: términos y condiciones: casilla en la ficha y en el alta, bordes del redondeo
+  (17:05, 17:06, 17:35, 17:36, medianoche), registro, Agenda, historial y PDF, base sin migrar.
+  En la base: `supabase/pruebas/terminos_redondeo.sql`.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -345,6 +350,12 @@ reporte.
 - Colocaciones de Enrique (19/10/2026): `intermediaciones_enrique.ninera_id` puede venir vacío
   (persona externa, empleada de Enrique): se guarda solo `ninera_nombre`, no se crea niñera ni
   entra a `intermediaciones_enrique_pool`. Lo que lea esa tabla no puede suponer `ninera_id`.
+- Términos y condiciones (20/10/2026): `familias.terminos_aceptados_el` (lo marca la admin en la
+  ficha o en el alta). Desde ese día el fin de cada sitting se COBRA a la media hora siguiente con 5 min de
+  tolerancia (17:05 → 17:00, 17:36 → 18:00); el inicio no se redondea y el pago a la niñera va
+  siempre con la hora real. Todo cobro por hora pasa por `horasSitting()` (core.js); en la base,
+  por `minutos_fin_cobro()` (generar_previstos_fijos): si cambia la regla, cambian las dos. Las
+  familias que se usan para cobrar se leen con `leerFamiliasConTerminos()` (anda sin la columna).
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3). La semana de una
   fija que todavía no cerró (sábado, o domingo si trabaja el finde) se ve aparte como "Semana
@@ -370,16 +381,11 @@ o pagos automáticos. Va por etapas y Diego decide. El pago automático a niñer
 descartado (19/10/2026): no proponerlo de nuevo.
 
 ### Próximas tareas (pedidas por Paulina y Delfina)
-- Cobros atrasados en Hoy (la primera mejora que eligieron, 19/10/2026): lista de familias que
-  deben, con días de atraso y monto, y un botón que abra WhatsApp con el recordatorio ya
-  escrito para esa madre (link de WhatsApp con el texto, sin la API). Lo manda la admin.
-- Términos y condiciones para familias nuevas (19/10/2026): un documento de términos y
-  condiciones que se les manda a las madres nuevas, y en la ficha de la familia queda
-  registrado que lo aceptó, con la fecha (por ahora lo marca la admin; más adelante, que la
-  madre lo acepte desde un link). A las familias de siempre no se les aplica. Para las que
-  aceptaron, el horario de fin se redondea hacia arriba para el cobro (por ejemplo, si se fue
-  17:45 se cobra hasta las 18:00); el pago a la niñera se sigue calculando con la hora real.
-  Falta definir la regla exacta del redondeo y el texto del documento antes de construir.
+- Cobros atrasados en Hoy (19/10/2026), EN PAUSA (20/10/2026: la propuesta no convenció a las
+  chicas, retomar con sus cambios): lista de familias que deben, con días de atraso y monto, y
+  un botón que abra WhatsApp con el recordatorio ya escrito (link de WhatsApp, sin la API).
+- Términos y condiciones (20/10/2026): falta el texto del documento que se les manda a las
+  madres nuevas. Más adelante, que la madre los acepte desde un link (hoy los marca la admin).
 
 ### Esperando una decisión de Paulina y Delfina
 - Niñeras que dicen que no: ¿un contador visible o el aviso de baja actividad (cada 10

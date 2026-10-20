@@ -198,6 +198,9 @@ create table public.familias (
   pago_hora numeric,
   frecuencia_cobro text default 'mensual'::text not null,
   contactada_riesgo_en date,
+  -- Día en que aceptó los términos y condiciones (20/10/2026). Desde ese día el fin de cada
+  -- sitting se le cobra redondeado (minutos_fin_cobro). Vacío = familia de siempre.
+  terminos_aceptados_el date,
   constraint familias_pkey PRIMARY KEY (id),
   constraint familias_frecuencia_cobro_check CHECK ((frecuencia_cobro = ANY (ARRAY['diario'::text, 'semanal'::text, 'mensual'::text])))
 );
@@ -1119,6 +1122,22 @@ create trigger gastos_extra_historial_trg
   for each row execute function public.registrar_historial_finanzas();
 
 
+-- Términos y condiciones (20/10/2026).
+-- Fin de un sitting para el cobro a una familia que aceptó los términos: a la media hora
+-- siguiente, con 5 minutos de tolerancia (17:05 -> 17:00, 17:06 -> 17:30, 17:36 -> 18:00).
+-- Minutos desde las 00:00 del día del sitting (pasada la medianoche, más de 1440). Es la
+-- misma regla que redondearFinCobro() en js/core.js: si cambia una, cambia la otra.
+create or replace function public.minutos_fin_cobro(p_min integer)
+returns integer
+language sql
+immutable
+set search_path to ''
+as $function$
+  select case when p_min % 30 <= 5 then p_min - p_min % 30 else p_min - p_min % 30 + 30 end
+$function$;
+revoke execute on function public.minutos_fin_cobro(integer) from public, anon, authenticated;
+
+
 -- Fijos automáticos (06/10/2026). El proceso. Lo corre pg_cron todos los días a las 03:00 de Montevideo (lo programa
 --    _ACTIVAR) y la app lo llama después de cada cambio en un fijo, para que la ventana
 --    quede al día enseguida. Hace, en orden:
@@ -1157,7 +1176,8 @@ begin
   drop table if exists pg_temp._previstos_deseados;
   create temporary table _previstos_deseados on commit drop as
   with dias as (
-    select a.*, f.nombre as fam_nombre, f.cobro_hora as fam_cobro_hora, f.pago_hora as fam_pago_hora, d::date as dia
+    select a.*, f.nombre as fam_nombre, f.cobro_hora as fam_cobro_hora, f.pago_hora as fam_pago_hora,
+           f.terminos_aceptados_el as fam_terminos, d::date as dia
       from asignaciones a
       join familias f on f.id = a.familia_id
      cross join generate_series(hoy + 1, hoy + p_dias, interval '1 day') d
@@ -1174,14 +1194,23 @@ begin
            case when dias.hora_fin is null then null
                 else (extract(epoch from dias.hora_fin) - extract(epoch from dias.hora_inicio)) / 3600.0
                      + case when dias.hora_fin <= dias.hora_inicio then 24 else 0 end
-           end as horas
+           end as horas,
+           -- Términos y condiciones (20/10/2026): desde el día que los aceptó, a la familia se
+           -- le cobra con el fin redondeado (minutos_fin_cobro); a la niñera, la hora real.
+           case when dias.hora_fin is null then null
+                when dias.fam_terminos is null or dias.dia < dias.fam_terminos then null
+                else greatest(public.minutos_fin_cobro(
+                       (extract(epoch from dias.hora_fin) / 60)::integer
+                       + case when dias.hora_fin <= dias.hora_inicio then 1440 else 0 end)
+                     - (extract(epoch from dias.hora_inicio) / 60)::integer, 0) / 60.0
+           end as horas_cobro
       from dias
   )
   select c.id as asignacion_id, c.dia as fecha, c.familia_id, c.fam_nombre as familia_nombre,
          c.ninera_id, c.ninera_nombre, c.tipo_fijo as tipo, c.hora_inicio, c.hora_fin,
          c.cruza as termina_dia_siguiente,
          case when c.tipo_fijo = 'traslado' then coalesce(c.cobro_traslado, t.cobro_familia, 0)
-              else round(coalesce(c.horas, 0) * coalesce(c.fam_cobro_hora, 0)) end as cobro_familia,
+              else round(coalesce(c.horas_cobro, c.horas, 0) * coalesce(c.fam_cobro_hora, 0)) end as cobro_familia,
          case when c.tipo_fijo = 'traslado' then coalesce(c.pago_traslado, t.pago_ninera, 0)
               else round(coalesce(c.horas, 0) * coalesce(c.fam_pago_hora, 0)) end as pago_ninera
     from con_horas c

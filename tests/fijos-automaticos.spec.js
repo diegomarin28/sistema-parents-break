@@ -58,7 +58,7 @@ test.describe('apagado (antes de correr _ACTIVAR): todo como antes', () => {
     await verAgendaDesde(page, '2026-10-05');
     expect(await page.evaluate(() => agendaSolicitudes.filter(s => s._fuente === 'asignacion').map(s => s.fecha))).toEqual(['2026-10-05', '2026-10-07']);
     expect(llamadasProceso(e)).toEqual([]);
-    verificarLimpio(e);
+    verificarLimpio(e, { ignorar: [/status of 400/] }); // familias sin terminos_aceptados_el: se reintenta sin la columna
   });
 });
 

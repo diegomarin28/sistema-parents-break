@@ -179,7 +179,7 @@ test('con la base sin migrar el formulario no muestra gastos extra y guarda como
   await expect(page.locator('#sit-gasto-agregar')).toHaveCount(0);
   await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
   await expect(toasts(page).filter({ hasText: 'Registro guardado.' })).toBeVisible();
-  verificarLimpio(e, { ignorar: [/status of 404/] });
+  verificarLimpio(e, { ignorar: [/status of 400/, /status of 404/] });
 });
 
 // Borrar un registro con gastos (06/10/2026, testing de la noche): la base borra los gastos en
