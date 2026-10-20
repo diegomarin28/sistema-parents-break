@@ -883,19 +883,21 @@ async function cargarPorCobrarPorPagar(){
     // semana ya terminó, para no mostrar un total que todavía le faltan días por sumar.
     .filter(g => g.frec!=='semanal' || finDeSemanaDesde(g.bucket) < todayISO())
     .sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
-  const listaPagar = gruposPagar
-    // Un fijo se agrupa por semana completa -- si esa semana todavía no terminó, mostrar
-    // el total ahora sería mostrar un pago a mitad de armar (le falta lo que falta cobrar
-    // esos días). Se muestra recién cuando termina la semana: sábado pasado para la mayoría
-    // de los fijos, domingo pasado para los que tienen algún horario fijo el fin de semana.
-    .filter(g => g.frec!=='semanal' || finDeSemanaDesde(g.bucket, g.finde) < todayISO())
-    .sort((a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre));
+  // Un fijo se agrupa por semana completa -- si esa semana todavía no terminó, el total es
+  // un pago a mitad de armar (le faltan los días que quedan). Se puede pagar recién cuando
+  // termina la semana: sábado para la mayoría de los fijos, domingo para los que tienen algún
+  // horario fijo el fin de semana. Hasta entonces va aparte, como "Semana en curso" y sin
+  // botón (20/10/2026): antes no se veía y parecía que faltaban pagos.
+  const enCurso = g => g.frec==='semanal' && finDeSemanaDesde(g.bucket, g.finde) >= todayISO();
+  const ordenPagar = (a,b)=> b.bucket.localeCompare(a.bucket) || a.nombre.localeCompare(b.nombre);
+  const listaPagar = gruposPagar.filter(g => !enCurso(g)).sort(ordenPagar);
+  const pagarEnCurso = gruposPagar.filter(enCurso).sort((a,b)=> a.nombre.localeCompare(b.nombre));
 
   const ajustes = await cargarAjustesSaldo();
   const sueltosCobrar = aplicarAjustesAGrupos(listaCobrar, ajustes, 'familia');
   const sueltosPagar = aplicarAjustesAGrupos(listaPagar, ajustes, 'ninera');
   renderPorCobrar(listaCobrar, sueltosCobrar);
-  renderPorPagar(listaPagar, sueltosPagar);
+  renderPorPagar(listaPagar, sueltosPagar, pagarEnCurso);
 }
 // Saldos de alguien que hoy no tiene nada pendiente: se aplican en su próximo cobro/pago.
 function saldosSueltosHtml(sueltos, cuando){
@@ -930,10 +932,39 @@ function renderPorCobrar(lista, sueltos=[]){
     ${saldosSueltosHtml(sueltos, 'cobro')}
   `;
 }
-function renderPorPagar(lista, sueltos=[]){
+// "Semana en curso" de las fijas: lo que llevan hasta hoy (los días que no pasaron no entran,
+// E7). No tiene botón: se paga cuando la semana cierra y pasa a la lista de arriba. El saldo
+// a favor tampoco se aplica acá, sino en ese pago.
+function porPagarEnCursoHtml(enCurso){
+  if(!enCurso || !enCurso.length) return '';
+  const hoy = todayISO();
+  const cierre = g => {
+    const fin = finDeSemanaDesde(g.bucket, g.finde);
+    if(fin===hoy) return 'cierra hoy';
+    const dia = new Date(fin+'T12:00:00').toLocaleDateString('es-UY',{weekday:'long'});
+    return `cierra el ${dia} ${fin.slice(8,10)}/${fin.slice(5,7)}`;
+  };
+  return `<div id="fin-porpagar-encurso" style="margin-top:14px;">
+    <div class="statlabel" style="margin:0 0 2px;">Semana en curso · todavía no cierra</div>
+    <div class="helper" style="margin:0 0 4px;">Lo que llevan las fijas hasta hoy. Se paga cuando cierra la semana.</div>
+    ${enCurso.map(g=>`
+      <div class="agendarow fin-semana-en-curso" style="border-bottom:1px solid var(--line);">
+        <div>
+          <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
+          <div class="helper" style="margin:2px 0 0;">Semana en curso, ${cierre(g)}</div>
+          ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Reintegro de gasto')}
+        </div>
+        <div style="text-align:right;">
+          <div class="helper" style="margin:0;">Lleva</div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink-soft);">$${g.total.toLocaleString('es-UY')}</span>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+function renderPorPagar(lista, sueltos=[], enCurso=[]){
   const box = document.getElementById('fin-porpagar-wrap');
   if(!box) return;
-  if(!lista.length){ box.innerHTML = `<h2>Por pagar</h2><div class="empty">No hay pagos pendientes.</div>${saldosSueltosHtml(sueltos, 'pago')}`; return; }
+  if(!lista.length){ box.innerHTML = `<h2>Por pagar</h2><div class="empty">No hay pagos pendientes.</div>${porPagarEnCursoHtml(enCurso)}${saldosSueltosHtml(sueltos, 'pago')}`; return; }
   const total = lista.reduce((s,g)=>s+(g.totalNeto ?? g.total),0);
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
@@ -953,6 +984,7 @@ function renderPorPagar(lista, sueltos=[]){
           <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}, ${argJs(g.gastos||[])}))">Marcar pagado</button>
         </div>
       </div>`).join('')}
+    ${porPagarEnCursoHtml(enCurso)}
     ${saldosSueltosHtml(sueltos, 'pago')}
   `;
 }

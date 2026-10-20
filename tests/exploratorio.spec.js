@@ -111,8 +111,10 @@ test.describe('flujo de punta a punta', () => {
     await page.locator('#fin-porcobrar-wrap .agendarow', { hasText: 'Familia Punta A Punta' }).locator('button').click();
     await expect(page.locator('#fin-cobrado')).toHaveText('$1.200');
     await expect(page.locator('#fin-porcobrar')).toHaveText('$0');
-    // 6) Pagar: el fijo se paga por semana, aparece cuando termina la semana.
-    await expect(page.locator('#fin-porpagar-wrap')).not.toContainText('Ana Ficticia');
+    // 6) Pagar: el fijo se paga por semana. Mientras no termina se ve como "Semana en curso",
+    // sin botón; se puede pagar cuando termina.
+    await expect(page.locator('#fin-porpagar-encurso .fin-semana-en-curso', { hasText: 'Ana Ficticia' })).toContainText('$780');
+    await expect(page.locator('#fin-porpagar-encurso button')).toHaveCount(0);
     await page.clock.setFixedTime(new Date('2026-10-12T10:00:00-03:00'));
     await page.evaluate(async () => { finMes = '2026-10'; refrescarFinanzasCompleto(); });
     await esperarQuieta(page);
