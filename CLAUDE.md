@@ -98,8 +98,16 @@ marketing → postulantes → ninieras → familias → sittings → intermediac
   corra él en el SQL Editor, y después verificá el resultado con una consulta de lectura.
 
 ## Worktrees
-Diego trabaja con varios worktrees del mismo repo, a veces con otra sesión tuya trabajando en
-paralelo en otro worktree. La regla es: **un worktree = una tarea = una rama = un PR**.
+Forma de trabajo desde el 20/10/2026:
+- Diego trabaja en el worktree principal (`main`), una tarea por vez, un chat por tarea. No
+  crea worktrees aparte salvo que lo pida.
+- Al empezar: actualizá main (`git pull`), creá la rama de la tarea y explicale a Diego en 3 a
+  5 líneas simples qué vas a hacer, qué archivos tocás y si hay algo en producción. Esperá su OK.
+- Al terminar: después del merge, volvé a main, actualizalo y cerrá con "Listo, mergeado" más
+  el reporte de 10 líneas.
+
+Si Diego pide trabajar con worktrees aparte (a veces con otra sesión tuya en paralelo en otro
+worktree), la regla es: **un worktree = una tarea = una rama = un PR**.
 - Al empezar: confirmá en qué rama estás (`git status`) y que salga del `main` actualizado
   (`git fetch origin` y, si está atrás, `git rebase origin/main` antes de tocar nada). Si el
   worktree está en `main`, creá la rama de la tarea antes del primer cambio.
@@ -424,6 +432,9 @@ descartado (19/10/2026): no proponerlo de nuevo.
   como usado (`registrarAplicacionAjustes`), así que se volvería a descontar. Mientras tanto,
   con saldo a favor se marca desde Por cobrar / Por pagar.
 - Probar la conciliación de punta a punta con el extracto de un mes ya cerrado.
+- Resumen del mes (20/10/2026): el total "Por pagar a niñeras" suma la semana en curso de las
+  fijas y no coincide con la lista de Por pagar. Mostrarlo separado ("sin contar $X de semanas
+  que no cerraron") o decidir cuál es el número correcto.
 
 ### Funciones nuevas pedidas
 - Guía "Cómo se hace" dentro de la app (13/10/2026; sigue pendiente, el 19/10/2026 eligieron
@@ -438,6 +449,11 @@ descartado (19/10/2026): no proponerlo de nuevo.
 - Autoguardado de borrador en la Entrevista (red de seguridad si se cierra la pestaña o se
   queda sin batería): ofrecido, sin respuesta.
 - Modo offline (hoy no hay): pendiente aparte, sin fecha.
+
+### Tests
+- Fallan en la compu de Diego pero pasan en el CI (20/10/2026): pagos "lista todos y suma
+  bien" y exploratorio "monto negativo". Leen el modal o el autocompletar sin esperar a que
+  aparezca. Arreglarlos en un PR aparte.
 
 ### Cierre
 - Auditoría final módulo por módulo en el celular, antes de dar el sistema por terminado.
