@@ -146,7 +146,7 @@ test('con la base sin migrar (sin la tabla) Finanzas y las fichas andan como ant
   await esperarQuieta(page);
   await expect(page.locator('#fam-saldo')).toBeEmpty();
   // El navegador anota el 404 de la tabla que todavía no existe; la app no muestra error.
-  verificarLimpio(e, { ignorar: [/status of 404/] });
+  verificarLimpio(e, { ignorar: [/status of 400/, /status of 404/] });
 });
 
 // Las dos marcando lo mismo a la vez (06/10/2026, testing de la noche): el saldo a favor se

@@ -288,7 +288,7 @@ test.describe('app nueva con la base todavía sin migrar', () => {
     await cambiarNinera(page, ID.aFijo, '2026-10-05', 'Carla Ejemplo');
     await expect(page.locator('#editmodal')).toHaveCount(0);
     expect(e.escrituras.filter(w => w.tabla === 'asignaciones').map(w => w.metodo)).toEqual(['PATCH']);
-    verificarLimpio(e);
+    verificarLimpio(e, { ignorar: [/status of 400/] }); // familias sin terminos_aceptados_el: se reintenta sin la columna
   });
 
   test('el historial avisa que todavía no está activado', async ({ page }) => {
@@ -297,7 +297,7 @@ test.describe('app nueva con la base todavía sin migrar', () => {
     await page.evaluate(id => abrirModalSitForm(id), '70000000-0000-4000-8000-000000000002');
     await page.locator('#sit-historial-box button').click();
     await expect(page.locator('#sit-historial-box')).toContainText('todavía no está activado');
-    verificarLimpio(e, { ignorar: [/status of 404/] });
+    verificarLimpio(e, { ignorar: [/status of 400/, /status of 404/] });
   });
 });
 

@@ -148,11 +148,13 @@ function nuevoId() { secuenciaId++; return `00000000-0000-4000-9000-${String(sec
  *   ahora: fecha/hora fija (string ISO con zona) para el reloj del navegador
  *   ruta: path a abrir (por defecto '/')
  *   baseSinMigrar: true simula la base ANTES de la migración del 05/10/2026 (asignaciones
- *     sin vigencia/tipo, sin tabla sittings_historial), con los mismos errores que Supabase
+ *     sin vigencia/tipo, sin tabla sittings_historial) y de las siguientes (familias sin
+ *     terminos_aceptados_el, 20/10/2026), con los mismos errores que Supabase
  */
 async function abrirApp(page, opciones = {}) {
   const { datos = {}, sesion = true, ahora = '2026-10-04T12:00:00-03:00', ruta = '/', baseSinMigrar = false } = opciones;
   const db = structuredClone({ ...datosBase(), ...datos });
+  if (baseSinMigrar) (db.familias || []).forEach(f => { delete f.terminos_aceptados_el; });
   // demoraEscrituras (ms) y fallar(pedido) se pueden cambiar en medio del test: sirven para
   // simular una base lenta (doble toque) o que falle un guardado. fallar recibe
   // {tabla, metodo, cuerpo} y devuelve undefined (anda), 'red' (se corta la conexión) o
@@ -245,6 +247,10 @@ async function abrirApp(page, opciones = {}) {
     }
     if (baseSinMigrar && ['sittings_historial', 'finanzas_historial', 'ajustes_saldo', 'gastos_extra'].includes(tabla)) {
       return route.fulfill({ status: 404, json: { code: 'PGRST205', message: `Could not find the table 'public.${tabla}' in the schema cache` } });
+    }
+    // Términos y condiciones (20/10/2026): sin la migración, familias no tiene la columna.
+    if (baseSinMigrar && tabla === 'familias' && /terminos_aceptados_el/.test((url.searchParams.get('select') || '') + (req.postData() || ''))) {
+      return route.fulfill({ status: 400, json: { code: '42703', message: 'column familias.terminos_aceptados_el does not exist' } });
     }
     if (baseSinMigrar && tabla === 'asignaciones' && ['POST', 'PATCH'].includes(metodo) && req.postData()) {
       const filas = [].concat(JSON.parse(req.postData()));

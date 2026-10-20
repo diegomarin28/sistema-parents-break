@@ -1312,6 +1312,50 @@ function textoTotalConGastos(etiqueta, base, gastos){
   const b = Number(base)||0, f = n => '$'+Math.round(n).toLocaleString('es-UY');
   return `${etiqueta} ${f(b)} + gastos ${f(g)} = ${f(b+g)}`;
 }
+/* Términos y condiciones (20/10/2026, regla de Paulina y Delfina). A las familias que los
+   aceptaron (familias.terminos_aceptados_el) el fin de cada sitting se les COBRA redondeado a
+   la media hora siguiente, con 5 minutos de tolerancia: 17:05 → 17:00, 17:06 → 17:30,
+   17:36 → 18:00. El inicio no se redondea y a la niñera se le paga siempre la hora real.
+   Rige para los sittings desde el día que aceptó: las familias de siempre no cambian.
+   Es la misma regla que minutos_fin_cobro() en la base (generar_previstos_fijos): si cambia
+   acá, cambia allá. */
+const TOLERANCIA_FIN_COBRO_MIN = 5;
+function redondearFinCobro(min){
+  const media = Math.floor(min/30)*30;
+  return min - media <= TOLERANCIA_FIN_COBRO_MIN ? media : media + 30;
+}
+function familiaRedondeaFin(familia, fechaISO){
+  const desde = familia?.terminos_aceptados_el;
+  return !!desde && (!fechaISO || fechaISO >= desde);
+}
+// Horas de un sitting: las reales (pago a la niñera) y las que se le cobran a la familia,
+// y hasta qué hora se cobra si no es la real. null si el horario está incompleto o el fin no
+// es después del inicio. Todo cobro por hora pasa por acá.
+function horasSitting(horaIni, horaFin, cruza, familia, fechaISO){
+  if(!horaIni || !horaFin) return null;
+  const mi = agendaMinutos(String(horaIni).slice(0,5));
+  const mf = agendaMinutos(String(horaFin).slice(0,5)) + (cruza ? 24*60 : 0);
+  if(mf<=mi) return null;
+  const mfCobro = familiaRedondeaFin(familia, fechaISO) ? Math.max(mi, redondearFinCobro(mf)) : mf;
+  const hhmm = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  return { real: (mf-mi)/60, cobro: (mfCobro-mi)/60, finCobro: mfCobro!==mf ? hhmm(mfCobro) : null };
+}
+// "Hora real 17:36, se cobra hasta 18:00"; '' si se cobra la hora real.
+function textoFinCobrado(horaFin, horas){
+  return horas?.finCobro ? `Hora real ${String(horaFin).slice(0,5)}, se cobra hasta ${horas.finCobro}` : '';
+}
+/* Lee familias con terminos_aceptados_el. Con la base sin migrar la columna no existe y la
+   consulta entera fallaría: se reintenta sin ella (nadie redondea) y no se vuelve a pedir.
+   `armar` agrega lo que siga a la consulta (order, eq, maybeSingle). */
+let familiasSinTerminos = false;
+async function leerFamiliasConTerminos(columnas, armar = q=>q){
+  if(!familiasSinTerminos){
+    const res = await armar(sb.from('familias').select(columnas+',terminos_aceptados_el'));
+    if(!res.error || !/terminos_aceptados_el/.test(res.error.message||'')) return res;
+    familiasSinTerminos = true;
+  }
+  return armar(sb.from('familias').select(columnas));
+}
 /* Controles al crear un fijo (13/10/2026). Un fijo de traslado sin precio hizo que el
    precargado tomara un traslado con la comida sumada y lo copiara a todo el mes, y un fijo
    sin hora de inicio no se carga solo (generar_previstos_fijos lo saltea) y dejaba el aviso
