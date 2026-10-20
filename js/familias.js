@@ -43,20 +43,34 @@ function abrirModalNuevaFamilia(){
     </div>
     ${htmlHijosFamilia('fam', [])}
     ${htmlCuentasBancarias('fam', [])}
+    ${baseTieneTerminos() ? `<label class="chk" style="margin:4px 0 0;"><input type="checkbox" id="fam-terminos-nueva" onchange="onFamTerminosNuevaChange()"> Aceptó términos y condiciones</label>
+    <div class="field" id="fam-terminos-nueva-fecha-wrap" style="margin:6px 0 10px;display:none;"><label>Fecha en que los aceptó</label><input type="date" id="fam-terminos-nueva-fecha" value="${todayISO()}"></div>` : ''}
     <div class="field"><label>Notas</label><textarea id="fam-notas"></textarea></div>
     <div class="confirmbtns">
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="conGuardado(this, ()=>addFamilia())">Agregar familia</button>
     </div>`);
 }
+// Términos y condiciones al dar de alta (20/10/2026): la casilla solo aparece si la base ya
+// tiene la columna (con la base sin migrar, familias no la trae).
+function baseTieneTerminos(){
+  return !familiasSinTerminos && (!familiasItems.length || familiasItems.some(f=>'terminos_aceptados_el' in f));
+}
+function onFamTerminosNuevaChange(){
+  document.getElementById('fam-terminos-nueva-fecha-wrap').style.display = document.getElementById('fam-terminos-nueva').checked ? '' : 'none';
+}
 async function addFamilia(){
   const nombre = document.getElementById('fam-nombre').value.trim();
   if(!nombre){ toast('Falta el nombre de la familia.','bad'); return; }
+  const aceptoTerminos = !!document.getElementById('fam-terminos-nueva')?.checked;
+  const terminosDesde = aceptoTerminos ? document.getElementById('fam-terminos-nueva-fecha').value : null;
+  if(aceptoTerminos && !terminosDesde){ toast('Poné la fecha en que aceptó los términos.', 'bad'); return; }
   if(!(await confirmarNombreNuevo(nombre, familiasItems, 'familia'))) return;
   const fam = { nombre, zona:leerZonasChecklist('fam'), telefono:document.getElementById('fam-telefono').value,
     cobro_hora:document.getElementById('fam-cobro').value||null, pago_hora:document.getElementById('fam-pago').value||null,
     direccion:document.getElementById('fam-direccion').value,
     cuenta_bancaria:leerCuentasBancarias('fam'), notas:document.getElementById('fam-notas').value };
+  if(aceptoTerminos) fam.terminos_aceptados_el = terminosDesde; // sin marcar no se manda: anda con la base sin migrar
   const { data, error } = await sb.from('familias').insert(fam).select().single();
   if(error){ toast('No se pudo guardar: '+error.message,'bad'); return; }
   const hijos = leerHijosFamilia('fam');

@@ -150,6 +150,58 @@ test.describe('ficha de la familia: casilla "Aceptó términos y condiciones"', 
   });
 });
 
+test.describe('alta de familia nueva', () => {
+  async function abrirAlta(page) {
+    await irAModulo(page, 'familias');
+    await page.locator('button[onclick^="abrirModalNuevaFamilia"]').click();
+    await page.fill('#fam-nombre', 'Familia Prueba Nueva');
+  }
+  const altas = e => escrituras(e, 'familias', 'POST');
+
+  test('marcando la casilla se guarda con la fecha (hoy por defecto)', async ({ page }) => {
+    const e = await abrirApp(page);
+    await abrirAlta(page);
+    await expect(page.locator('#fam-terminos-nueva-fecha-wrap')).toBeHidden();
+    await page.check('#fam-terminos-nueva');
+    await expect(page.locator('#fam-terminos-nueva-fecha')).toHaveValue('2026-10-04');
+    await page.fill('#fam-terminos-nueva-fecha', '2026-10-02');
+    await page.locator('#editmodal button', { hasText: 'Agregar familia' }).click();
+    await expect(toasts(page).filter({ hasText: 'Familia agregada' })).toBeVisible();
+    expect(altas(e)[0].cuerpo).toMatchObject({ nombre: 'Familia Prueba Nueva', terminos_aceptados_el: '2026-10-02' });
+    verificarLimpio(e);
+  });
+
+  test('sin marcar no manda la columna', async ({ page }) => {
+    const e = await abrirApp(page);
+    await abrirAlta(page);
+    await page.locator('#editmodal button', { hasText: 'Agregar familia' }).click();
+    await expect(toasts(page).filter({ hasText: 'Familia agregada' })).toBeVisible();
+    expect(altas(e)[0].cuerpo).not.toHaveProperty('terminos_aceptados_el');
+    verificarLimpio(e);
+  });
+
+  test('marcada sin fecha no se guarda', async ({ page }) => {
+    const e = await abrirApp(page);
+    await abrirAlta(page);
+    await page.check('#fam-terminos-nueva');
+    await page.fill('#fam-terminos-nueva-fecha', '');
+    await page.locator('#editmodal button', { hasText: 'Agregar familia' }).click();
+    await expect(toasts(page).filter({ hasText: 'Poné la fecha' })).toBeVisible();
+    expect(altas(e)).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('con la base sin migrar no aparece la casilla y el alta anda igual', async ({ page }) => {
+    const e = await abrirApp(page, { baseSinMigrar: true });
+    await abrirAlta(page);
+    await expect(page.locator('#fam-terminos-nueva')).toHaveCount(0);
+    await page.locator('#editmodal button', { hasText: 'Agregar familia' }).click();
+    await expect(toasts(page).filter({ hasText: 'Familia agregada' })).toBeVisible();
+    expect(altas(e)[0].cuerpo).not.toHaveProperty('terminos_aceptados_el');
+    verificarLimpio(e, { ignorar: [/status of 400/, /status of 404/] });
+  });
+});
+
 test.describe('registro en Sittings: "Hora real 17:36, se cobra hasta 18:00"', () => {
   test('familia que aceptó: cobro hasta las 18:00, pago a la niñera con la hora real', async ({ page }) => {
     const e = await abrirApp(page, { datos: datosConTerminos() });

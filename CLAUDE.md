@@ -221,7 +221,7 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   Revisado, editar sittings, gastos extra, gastos generales y saldos, historial, base sin migrar).
 - `tests/intermediaciones.spec.js`: colocación de Enrique con una persona externa (sin
   `ninera_id`) o con una niñera de la lista, errores, doble toque, historial y ficha.
-- `tests/terminos.spec.js`: términos y condiciones: casilla en la ficha, bordes del redondeo
+- `tests/terminos.spec.js`: términos y condiciones: casilla en la ficha y en el alta, bordes del redondeo
   (17:05, 17:06, 17:35, 17:36, medianoche), registro, Agenda, historial y PDF, base sin migrar.
   En la base: `supabase/pruebas/terminos_redondeo.sql`.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
@@ -351,7 +351,7 @@ reporte.
   (persona externa, empleada de Enrique): se guarda solo `ninera_nombre`, no se crea niñera ni
   entra a `intermediaciones_enrique_pool`. Lo que lea esa tabla no puede suponer `ninera_id`.
 - Términos y condiciones (20/10/2026): `familias.terminos_aceptados_el` (lo marca la admin en la
-  ficha). Desde ese día el fin de cada sitting se COBRA a la media hora siguiente con 5 min de
+  ficha o en el alta). Desde ese día el fin de cada sitting se COBRA a la media hora siguiente con 5 min de
   tolerancia (17:05 → 17:00, 17:36 → 18:00); el inicio no se redondea y el pago a la niñera va
   siempre con la hora real. Todo cobro por hora pasa por `horasSitting()` (core.js); en la base,
   por `minutos_fin_cobro()` (generar_previstos_fijos): si cambia la regla, cambian las dos. Las
