@@ -340,27 +340,114 @@ function filtrarFijosSemanaIncompleta(sits, esTrabajoFijo){
   return (sits||[]).filter(r => !esTrabajoFijo(r) || finDeSemanaDesde(lunesDeSemana(r.fecha)) < hoy);
 }
 /* Números del resumen del mes (ver comentario en cargarFinanzas). */
-function resumenFinancieroMes(sitsTodos, gastosNegocio, gastosAbsorbidos=0){
+function resumenFinancieroMes(sitsTodos, gastosNegocio, gastosAbsorbidos=0, inter=null){
   const hoy = todayISO();
   const suma = (lista, campo, cond=()=>true) => (lista||[]).filter(cond).reduce((s,r)=>s+(Number(r[campo])||0), 0);
-  const facturado = suma(sitsTodos, 'cobro_familia');
-  const costoNinieras = suma(sitsTodos, 'pago_ninera');
+  // Intermediaciones (20/10/2026): suman igual que un sitting, lo cobrado a Enrique o a la
+  // empresa al facturado y lo que se les paga a las niñeras de un evento a pagos a niñeras.
+  const it = inter || resumenIntermediaciones([], []);
+  const facturado = suma(sitsTodos, 'cobro_familia') + it.facturado;
+  const costoNinieras = suma(sitsTodos, 'pago_ninera') + it.pagos;
   const gastos = Number(gastosNegocio)||0;
   return {
     facturado,
     costoNinieras,
     gastos,
-    cobrado: suma(sitsTodos, 'cobro_familia', r=>r.cobrado),
-    porCobrar: suma(sitsTodos, 'cobro_familia', r=>!r.cobrado),
+    cobrado: suma(sitsTodos, 'cobro_familia', r=>r.cobrado) + it.cobrado,
+    porCobrar: suma(sitsTodos, 'cobro_familia', r=>!r.cobrado) + it.porCobrar,
     // Como la lista de Por pagar (E7): lo de días que todavía no pasaron no se debe todavía
     // (05/10/2026). Facturado y resultado sí lo cuentan, porque son del mes.
-    porPagar: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha <= hoy),
-    porPagarFuturo: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha > hoy),
+    porPagar: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha <= hoy) + it.porPagar,
+    porPagarFuturo: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha > hoy) + it.porPagarFuturo,
     // Gastos extra que absorbe Parents Break (13/10/2026): no se le cobran a nadie y se le
     // reintegran a la niñera, así que bajan la ganancia del mes.
     absorbidos: Number(gastosAbsorbidos)||0,
     resultado: facturado - costoNinieras - gastos - (Number(gastosAbsorbidos)||0),
+    intermediaciones: it,
   };
+}
+/* ---- Intermediaciones en Finanzas (20/10/2026) ----
+   Las colocaciones de Enrique y los eventos de empresas suman al facturado y al resultado del
+   mes, y se ven en una línea aparte. Colocación: el monto entero queda para Parents Break.
+   Evento: lo cobrado a la empresa menos lo que se les paga a las niñeras. Se cobran y se pagan
+   desde Por cobrar / Por pagar, sin saldo a favor (ese es de los sittings). No entran al margen
+   por familia/zona/tipo. */
+async function leerIntermediacionesMes(desde, hasta){
+  const [{data:enrique, error:e1}, {data:eventos, error:e2}] = await Promise.all([
+    sb.from('intermediaciones_enrique').select('id,ninera_nombre,fecha,monto,cobrado').gte('fecha', desde).lt('fecha', hasta),
+    sb.from('intermediaciones_eventos').select('id,empresa,fecha,cobro_total,cobrado,intermediaciones_eventos_ninieras(id,ninera_nombre,pago,pagado)').gte('fecha', desde).lt('fecha', hasta),
+  ]);
+  return { enrique: enrique||[], eventos: eventos||[], error: e1||e2 };
+}
+function resumenIntermediaciones(enrique, eventos){
+  const hoy = todayISO();
+  const pagos = eventos.flatMap(ev=>(ev.intermediaciones_eventos_ninieras||[]).map(n=>({...n, fecha:ev.fecha})));
+  const suma = (lista, campo, cond=()=>true) => lista.filter(cond).reduce((s,r)=>s+(Number(r[campo])||0), 0);
+  const colocaciones = suma(enrique, 'monto');
+  const cobroEventos = suma(eventos, 'cobro_total');
+  const totalPagos = suma(pagos, 'pago');
+  return {
+    hay: enrique.length + eventos.length > 0,
+    colocaciones, cobroEventos,
+    facturado: colocaciones + cobroEventos,
+    pagos: totalPagos,
+    neto: colocaciones + cobroEventos - totalPagos,
+    cobrado: suma(enrique, 'monto', r=>r.cobrado) + suma(eventos, 'cobro_total', r=>r.cobrado),
+    porCobrar: suma(enrique, 'monto', r=>!r.cobrado) + suma(eventos, 'cobro_total', r=>!r.cobrado),
+    porPagar: suma(pagos, 'pago', r=>!r.pagado && r.fecha <= hoy),
+    porPagarFuturo: suma(pagos, 'pago', r=>!r.pagado && r.fecha > hoy),
+  };
+}
+function intermediacionesResumenHtml(it, fmt){
+  if(!it.hay) return '';
+  const partes = [
+    it.colocaciones ? `colocaciones ${fmt(it.colocaciones)}` : '',
+    it.cobroEventos ? `eventos ${fmt(it.cobroEventos)}` : '',
+  ].filter(Boolean).join(' + ') || 'sin montos cargados';
+  return `<div class="summarycard fin-intermediaciones" style="grid-column:1/-1;">
+    <div class="statlabel">Intermediaciones de ${monthLabel(finMes)}</div>
+    <div class="statnum" id="fin-intermediaciones" style="font-size:19px;margin-top:3px;">${fmt(it.neto)}</div>
+    <div class="helper" style="margin:4px 0 0;">${partes}${it.pagos ? ` − pagos a niñeras de eventos ${fmt(it.pagos)}` : ''}. Ya está sumado en el facturado y en el resultado.</div>
+  </div>`;
+}
+// Lo que falta cobrar (a Enrique o a la empresa) y pagar (a las niñeras de un evento que ya
+// pasó, E7), con la misma forma que los grupos de sittings y la marca `inter` para el botón.
+async function intermediacionesPendientes(){
+  const hoy = todayISO();
+  const [{data:enrique, error:e1}, {data:eventos, error:e2}, {data:pagos, error:e3}] = await Promise.all([
+    sb.from('intermediaciones_enrique').select('id,ninera_nombre,fecha,monto').eq('cobrado', false).gt('monto', 0),
+    sb.from('intermediaciones_eventos').select('id,empresa,fecha,cobro_total').eq('cobrado', false).gt('cobro_total', 0),
+    sb.from('intermediaciones_eventos_ninieras').select('id,evento_id,ninera_id,ninera_nombre,pago').eq('pagado', false).gt('pago', 0),
+  ]);
+  let error = e1||e2||e3;
+  let eventosDePagos = [];
+  if(!error && pagos?.length){
+    const res = await sb.from('intermediaciones_eventos').select('id,empresa,fecha').in('id', [...new Set(pagos.map(p=>p.evento_id))]).lte('fecha', hoy);
+    error = res.error;
+    eventosDePagos = res.data||[];
+  }
+  if(error){ toast('No se pudieron leer las intermediaciones pendientes: '+error.message, 'bad'); return { cobrar:[], pagar:[] }; }
+  const cobrar = [
+    ...(enrique||[]).map(r=>({nombre:'Agencia Enrique', detalle:`Colocación de ${r.ninera_nombre}`, bucket:r.fecha, total:Number(r.monto)||0, inter:{tabla:'intermediaciones_enrique', id:r.id}})),
+    ...(eventos||[]).map(r=>({nombre:r.empresa, detalle:'Evento', bucket:r.fecha, total:Number(r.cobro_total)||0, inter:{tabla:'intermediaciones_eventos', id:r.id}})),
+  ];
+  const eventoPorId = Object.fromEntries(eventosDePagos.map(ev=>[ev.id, ev]));
+  const pagar = (pagos||[]).filter(p=>eventoPorId[p.evento_id]).map(p=>{
+    const ev = eventoPorId[p.evento_id];
+    return {nombre:p.ninera_nombre, ninera_id:p.ninera_id, detalle:`Evento ${ev.empresa}`, bucket:ev.fecha, total:Number(p.pago)||0,
+      inter:{tabla:'intermediaciones_eventos_ninieras', id:p.id, ninera:p.ninera_nombre, titulo:`Evento ${ev.empresa}`, detalle:fmtFechaCortaFin(ev.fecha), monto:Number(p.pago)||0}};
+  });
+  return { cobrar, pagar };
+}
+async function marcarIntermediacionResuelta(inter){
+  const campo = inter.tabla==='intermediaciones_eventos_ninieras' ? 'pagado' : 'cobrado';
+  // Marcar pagado siempre pasa por la confirmación con el detalle y el total (E3).
+  if(campo==='pagado' && !(await confirmarPagoSittings([], {}, [], [], [inter]))) return;
+  const { data, error } = await sb.from(inter.tabla).update({[campo]:true}).eq('id', inter.id).eq(campo, false).select('id');
+  if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
+  if(!(data||[]).length) toast(`Ya estaba marcado como ${campo}: lo marcó alguien más hace un momento. No se cambió nada.`, 'bad');
+  else toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
+  refrescarFinanzasCompleto();
 }
 async function cargarFinanzas(){
   const chartReady = asegurarChart(); // en paralelo, no bloquea el resto de Finanzas
@@ -369,17 +456,18 @@ async function cargarFinanzas(){
   movsBox.innerHTML = '<div class="empty"><span class="spinner dark"></span> Cargando…</div>';
   const desde = `${finMes}-01`;
   const hasta = shiftMes(finMes, 1)+'-01';
-  let [{data:sitsRaw, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}, {data:famsZona}, {data:asigs}] = await Promise.all([
+  let [{data:sitsRaw, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}, {data:famsZona}, {data:asigs}, inter] = await Promise.all([
     sb.from('sittings_traslados').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_generales').select('*').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('*').order('concepto'),
     sb.from('familias').select('id,nombre,zona'),
     sb.from('asignaciones').select('*, familias(nombre)'),
+    leerIntermediacionesMes(desde, hasta),
   ]);
   // Si se navegó a otro módulo mientras esperábamos estos datos, no seguir —
   // evita escribir sobre una pantalla que ya no está (mismo caso que "Hoy").
   if(!document.getElementById('fin-movs')) return;
-  if(e1 || e2 || e3){ movsBox.innerHTML = errBox(e1||e2||e3); return; }
+  if(e1 || e2 || e3 || inter.error){ movsBox.innerHTML = errBox(e1||e2||e3||inter.error); return; }
   cargarRevisarMes(sitsRaw, gastos, asigs);
   // Fijos automáticos (06/10/2026): lo previsto (días que todavía no llegaron) no entra en
   // ninguna cifra del mes; se muestra aparte, como referencia.
@@ -431,7 +519,7 @@ async function cargarFinanzas(){
   finSitsTodosDelMes = sitsRaw || [];
   const absorbidos = await sumarGastosAbsorbidos(finSitsTodosDelMes.map(r=>r.id));
   if(!summary.isConnected) return; // se cambió de módulo mientras se leía
-  const res = resumenFinancieroMes(finSitsTodosDelMes, (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos, absorbidos);
+  const res = resumenFinancieroMes(finSitsTodosDelMes, (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos, absorbidos, resumenIntermediaciones(inter.enrique, inter.eventos));
   const egresosNinieras = res.costoNinieras;
   const egresosGenerales = res.gastos;
   const egresos = egresosNinieras + egresosGenerales;
@@ -446,6 +534,7 @@ async function cargarFinanzas(){
       <div class="statnum" id="fin-resultado" style="font-size:21px;margin-top:3px;color:${res.resultado>=0?'var(--good)':'var(--bad)'};">${fmt(res.resultado)}</div>
       <div class="helper" style="margin:4px 0 0;">Facturado ${fmt(res.facturado)} − pagos a niñeras ${fmt(res.costoNinieras)} − gastos del negocio ${fmt(res.gastos)}${res.absorbidos ? ` − gastos extra que absorbe Parents Break ${fmt(res.absorbidos)}` : ''}. Se calcula sobre lo facturado: un cobro sin marcar no lo cambia.</div>
     </div>
+    ${intermediacionesResumenHtml(res.intermediaciones, fmt)}
     ${previstosMes.length ? `<div class="summarycard fin-previsto" style="grid-column:1/-1;">
       <div class="statlabel">Previsto de acá a fin de mes (fijos que todavía no pasaron)</div>
       <div style="margin-top:3px;"><span id="fin-previsto-cobro" style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${fmt(previstosMes.reduce((t,r)=>t+(Number(r.cobro_familia)||0),0))}</span> a facturar · <span id="fin-previsto-pago" style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${fmt(previstosMes.reduce((t,r)=>t+(Number(r.pago_ninera)||0),0))}</span> a pagar a niñeras · ${previstosMes.length} día${previstosMes.length===1?'':'s'}</div>
@@ -483,6 +572,16 @@ async function cargarFinanzas(){
   (gastos||[]).forEach(g=>{
     movs.push({fecha:g.fecha, texto:g.concepto, monto:-Number(g.monto), gastoId:g.id});
   });
+  // Intermediaciones: sin botón de editar, se corrigen desde su módulo.
+  inter.enrique.forEach(r=>{
+    if(Number(r.monto)) movs.push({fecha:r.fecha, texto:`Colocación Enrique — ${r.ninera_nombre}`, monto:Number(r.monto), pendiente:!r.cobrado, pendTxt:'Sin cobrar'});
+  });
+  inter.eventos.forEach(ev=>{
+    if(Number(ev.cobro_total)) movs.push({fecha:ev.fecha, texto:`Evento — ${ev.empresa}`, monto:Number(ev.cobro_total), pendiente:!ev.cobrado, pendTxt:'Sin cobrar'});
+    (ev.intermediaciones_eventos_ninieras||[]).forEach(n=>{
+      if(Number(n.pago)) movs.push({fecha:ev.fecha, texto:`Pago a ${n.ninera_nombre} (evento ${ev.empresa})`, monto:-Number(n.pago), pendiente:!n.pagado, pendTxt:'Sin pagar'});
+    });
+  });
   movs.sort((a,b)=> b.fecha.localeCompare(a.fecha));
   if(!movs.length){ movsBox.innerHTML = `<div class="empty">No hay movimientos cargados en ${monthLabel(finMes)} todavía.</div>`; return; }
   movsBox.innerHTML = `<h2>Movimientos de ${monthLabel(finMes)}</h2><div class="helper">Los marcados como sin cobrar o sin pagar cuentan en el resultado del mes; la etiqueta solo avisa que esa plata todavía no entró o no salió.</div>` + movs.map(mv=>{
@@ -514,12 +613,13 @@ async function cargarBalanceMultiMes(nMeses){
   for(let i=nMeses-1;i>=0;i--) meses.push(shiftMes(hoy, -i));
   const desde = `${meses[0]}-01`;
   const hasta = shiftMes(meses[meses.length-1], 1)+'-01';
-  const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}] = await Promise.all([
+  const [{data:sits, error:e1}, {data:gastos, error:e2}, {data:fijos, error:e3}, inter] = await Promise.all([
     leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('fecha,cobro_familia,pago_ninera')).gte('fecha', desde).lt('fecha', hasta).order('id')),
     sb.from('gastos_generales').select('fecha,monto').gte('fecha', desde).lt('fecha', hasta),
     sb.from('gastos_fijos').select('monto,desde,activo'),
+    leerIntermediacionesMes(desde, hasta),
   ]);
-  if(e1 || e2 || e3){ if(wrap) wrap.innerHTML = errBox(e1||e2||e3); return; }
+  if(e1 || e2 || e3 || inter.error){ if(wrap) wrap.innerHTML = errBox(e1||e2||e3||inter.error); return; }
   const porMes = {};
   meses.forEach(mes=> porMes[mes] = {ingresos:0, gastos:0});
   (sits||[]).forEach(r=>{
@@ -534,6 +634,11 @@ async function cargarBalanceMultiMes(nMeses){
     const mes = g.fecha.slice(0,7);
     if(!porMes[mes]) return;
     porMes[mes].gastos += Number(g.monto)||0;
+  });
+  meses.forEach(mes=>{
+    const it = resumenIntermediaciones(inter.enrique.filter(r=>r.fecha.startsWith(mes)), inter.eventos.filter(r=>r.fecha.startsWith(mes)));
+    porMes[mes].ingresos += it.facturado;
+    porMes[mes].gastos += it.pagos;
   });
   meses.forEach(mes=>{
     const finMesStr = shiftMes(mes, 1)+'-01';
@@ -877,7 +982,11 @@ function lineaServiciosHtml(g){
   return `<div class="helper fin-total-gastos" style="margin:2px 0 0;">${conGastos ? escaparHtml(conGastos) : `Servicios: $${(g.total - gastos).toLocaleString('es-UY')}`}</div>`;
 }
 async function cargarPorCobrarPorPagar(){
-  const { gruposCobrar, gruposPagar } = await calcularPendientesAgrupados();
+  const [{ gruposCobrar, gruposPagar, nins }, inter] = await Promise.all([calcularPendientesAgrupados(), intermediacionesPendientes()]);
+  inter.pagar.forEach(g=>{
+    const info = nins.find(n=>n.id===g.ninera_id);
+    g.cuenta = info?.cuenta_bancaria?.length ? info.cuenta_bancaria.join(' · ') : '';
+  });
   const listaCobrar = gruposCobrar
     // Igual criterio que en Por pagar: un cobro semanal recién se muestra cuando esa
     // semana ya terminó, para no mostrar un total que todavía le faltan días por sumar.
@@ -896,8 +1005,9 @@ async function cargarPorCobrarPorPagar(){
   const ajustes = await cargarAjustesSaldo();
   const sueltosCobrar = aplicarAjustesAGrupos(listaCobrar, ajustes, 'familia');
   const sueltosPagar = aplicarAjustesAGrupos(listaPagar, ajustes, 'ninera');
-  renderPorCobrar(listaCobrar, sueltosCobrar);
-  renderPorPagar(listaPagar, sueltosPagar, pagarEnCurso);
+  // Las intermediaciones entran después del saldo a favor: no se les aplica.
+  renderPorCobrar([...listaCobrar, ...inter.cobrar].sort(ordenPagar), sueltosCobrar);
+  renderPorPagar([...listaPagar, ...inter.pagar].sort(ordenPagar), sueltosPagar, pagarEnCurso);
 }
 // Saldos de alguien que hoy no tiene nada pendiente: se aplican en su próximo cobro/pago.
 function saldosSueltosHtml(sueltos, cuando){
@@ -906,6 +1016,11 @@ function saldosSueltosHtml(sueltos, cuando){
     <div class="helper" style="margin:0 0 4px;">Saldos que se aplican en el próximo ${cuando}:</div>
     ${sueltos.map(a=>`<div class="helper" style="margin:2px 0 0;"><b>${escaparHtml(a.nombre)}</b>: ${textoMontoAjuste(a.restante)} · ${escaparHtml(a.motivo)}</div>`).join('')}
   </div>`;
+}
+// Intermediación: "Colocación de Ana · 20 oct"; sitting: el período y la frecuencia.
+function subtituloPendienteHtml(g){
+  if(g.inter) return `<span class="badge brand" style="margin-right:4px;">Intermediación</span>${escaparHtml(g.detalle)} · ${fmtFechaCortaFin(g.bucket)}`;
+  return `${bucketLabelFecha(g.bucket, g.frec, g.finde)} · ${escaparHtml(g.frec)}`;
 }
 function renderPorCobrar(lista, sueltos=[]){
   const box = document.getElementById('fin-porcobrar-wrap');
@@ -921,12 +1036,12 @@ function renderPorCobrar(lista, sueltos=[]){
       <div class="agendarow" style="border-bottom:1px solid var(--line);">
         <div>
           <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
-          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec)} · ${escaparHtml(g.frec)}</div>
+          <div class="helper" style="margin:2px 0 0;">${subtituloPendienteHtml(g)}</div>
           ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Gasto extra')}${lineasAjustesHtml(g.ajustes)}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${(g.totalNeto ?? g.total).toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado', ${argJs(g.ajustes||[])}, ${argJs((g.gastos||[]).map(x=>x.id))}))">Marcar cobrado</button>
+          <button class="smallbtn" onclick="conGuardado(this, ()=>${g.inter ? `marcarIntermediacionResuelta(${argJs(g.inter)})` : `marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado', ${argJs(g.ajustes||[])}, ${argJs((g.gastos||[]).map(x=>x.id))})`})">Marcar cobrado</button>
         </div>
       </div>`).join('')}
     ${saldosSueltosHtml(sueltos, 'cobro')}
@@ -975,13 +1090,13 @@ function renderPorPagar(lista, sueltos=[], enCurso=[]){
       <div class="agendarow" style="border-bottom:1px solid var(--line);">
         <div>
           <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
-          <div class="helper" style="margin:2px 0 0;">${bucketLabelFecha(g.bucket, g.frec, g.finde)} · ${escaparHtml(g.frec)}</div>
+          <div class="helper" style="margin:2px 0 0;">${subtituloPendienteHtml(g)}</div>
           ${g.cuenta ? `<div class="helper" style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;">${escaparHtml(g.cuenta)}</div>` : ''}
           ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Reintegro de gasto')}${lineasAjustesHtml(g.ajustes)}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${(g.totalNeto ?? g.total).toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="conGuardado(this, ()=>marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}, ${argJs(g.gastos||[])}))">Marcar pagado</button>
+          <button class="smallbtn" onclick="conGuardado(this, ()=>${g.inter ? `marcarIntermediacionResuelta(${argJs(g.inter)})` : `marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}, ${argJs(g.gastos||[])})`})">Marcar pagado</button>
         </div>
       </div>`).join('')}
     ${porPagarEnCursoHtml(enCurso)}
@@ -1021,8 +1136,9 @@ async function marcarGrupoResuelto(ids, campo, ajustes=[], gastos=[]){
    puede ver después qué incluía: se muestra cada sitting (niñera, familia, fecha, horario y
    monto) y el total, con Cancelar / Confirmar. Sirve para un sitting solo o para un grupo de
    Por pagar. montosNuevos pisa el monto guardado cuando se está editando ese movimiento.
-   Devuelve true solo si se confirma. */
-async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[], gastos=[]){
+   otros: pagos que no son sittings (niñeras de un evento, 20/10/2026), {ninera, titulo,
+   detalle, monto}. Devuelve true solo si se confirma. */
+async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[], gastos=[], otros=[]){
   let data = [];
   if(ids.length){
     const res = await sb.from('sittings_traslados')
@@ -1033,12 +1149,12 @@ async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[], gastos=[]
   }
   const filas = data.map(r=>({...r, monto: r.id in montosNuevos ? Number(montosNuevos[r.id])||0 : Number(r.pago_ninera)||0}))
     .sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||'') || (a.hora_inicio||'').localeCompare(b.hora_inicio||''));
-  if(!filas.length && !(gastos||[]).length){ toast('Esos registros ya no existen. Actualizá la pantalla.', 'bad'); return false; }
-  const subtotal = filas.reduce((s,r)=>s+r.monto, 0) + (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0);
+  if(!filas.length && !(gastos||[]).length && !otros.length){ toast('Esos registros ya no existen. Actualizá la pantalla.', 'bad'); return false; }
+  const subtotal = filas.reduce((s,r)=>s+r.monto, 0) + (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + otros.reduce((s,o)=>s+(Number(o.monto)||0), 0);
   const total = Math.round((subtotal + (ajustes||[]).reduce((s,a)=>s+(Number(a.monto)||0), 0))*100)/100;
   const hoy = todayISO();
   const futuros = filas.filter(r=>r.fecha > hoy).length;
-  const ninieras = [...new Set(filas.map(r=>r.ninera_nombre||'(sin niñera)'))];
+  const ninieras = [...new Set([...filas.map(r=>r.ninera_nombre||'(sin niñera)'), ...otros.map(o=>o.ninera||'(sin niñera)')])];
   const fmtF = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'short',day:'2-digit',month:'2-digit'}) : '—';
   const horario = r => r.hora_inicio ? `${r.hora_inicio.slice(0,5)}${r.hora_fin?'–'+r.hora_fin.slice(0,5):''}${r.termina_dia_siguiente?' (+1 día)':''}` : 'sin horario';
   const plata = n => '$'+Number(n).toLocaleString('es-UY', {maximumFractionDigits:2}); // sin redondear: hay pagos con centavos
@@ -1058,6 +1174,10 @@ async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[], gastos=[]
             </div>
             <div class="pago-monto">${plata(r.monto)}</div>
           </div>`).join('')}
+          ${otros.map(o=>`<div class="pago-fila pago-otro">
+            <div style="min-width:0;"><div style="font-weight:600;">${escaparHtml(o.titulo)}</div><div class="helper" style="margin:2px 0 0;">${escaparHtml(o.ninera)} · ${escaparHtml(o.detalle)}</div></div>
+            <div class="pago-monto">${plata(o.monto)}</div>
+          </div>`).join('')}
           ${(gastos||[]).map(g=>`<div class="pago-fila pago-gasto">
             <div style="min-width:0;"><div style="font-weight:600;">Reintegro de gasto extra</div><div class="helper" style="margin:2px 0 0;">${escaparHtml(g.concepto)}</div></div>
             <div class="pago-monto">${plata(g.monto)}</div>
@@ -1067,7 +1187,7 @@ async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[], gastos=[]
             <div class="pago-monto">${textoMontoAjuste(a.monto)}</div>
           </div>`).join('')}
           <div class="pago-fila pago-total-fila">
-            <div style="font-weight:700;">Total (${filas.length} ${filas.length===1?'registro':'registros'}${(gastos||[]).length?' y gastos':''}${(ajustes||[]).length?' y saldo':''})</div>
+            <div style="font-weight:700;">Total (${filas.length+otros.length} ${filas.length+otros.length===1?'registro':'registros'}${(gastos||[]).length?' y gastos':''}${(ajustes||[]).length?' y saldo':''})</div>
             <div class="pago-monto" id="pago-total" style="font-weight:700;">${plata(total)}</div>
           </div>
         </div>

@@ -229,6 +229,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   Revisado, editar sittings, gastos extra, gastos generales y saldos, historial, base sin migrar).
 - `tests/intermediaciones.spec.js`: colocación de Enrique con una persona externa (sin
   `ninera_id`) o con una niñera de la lista, errores, doble toque, historial y ficha.
+- `tests/intermediaciones-finanzas.spec.js`: intermediaciones en el resumen del mes, el balance,
+  Movimientos y Por cobrar / Por pagar (confirmación, ya marcado, falla, doble toque, escape, 390px).
 - `tests/terminos.spec.js`: términos y condiciones: casilla en la ficha y en el alta, bordes del redondeo
   (17:05, 17:06, 17:35, 17:36, medianoche), registro, Agenda, historial y PDF, base sin migrar.
   En la base: `supabase/pruebas/terminos_redondeo.sql`.
@@ -358,6 +360,11 @@ reporte.
 - Colocaciones de Enrique (19/10/2026): `intermediaciones_enrique.ninera_id` puede venir vacío
   (persona externa, empleada de Enrique): se guarda solo `ninera_nombre`, no se crea niñera ni
   entra a `intermediaciones_enrique_pool`. Lo que lea esa tabla no puede suponer `ninera_id`.
+- Intermediaciones en Finanzas (20/10/2026): suman al facturado y al resultado del mes (colocación:
+  `monto`; evento: `cobro_total`, y los pagos de sus niñeras van a pagos a niñeras), con la línea
+  aparte "Intermediaciones" (`resumenIntermediaciones`, finanzas.js). Se cobran y pagan desde Por
+  cobrar / Por pagar con sus columnas `cobrado` / `pagado` (`intermediacionesPendientes`), sin saldo
+  a favor ni conciliación; el pago pasa por `confirmarPagoSittings(..., otros)`. No van al margen.
 - Términos y condiciones (20/10/2026): `familias.terminos_aceptados_el` (lo marca la admin en la
   ficha o en el alta). Desde ese día el fin de cada sitting se COBRA a la media hora siguiente con 5 min de
   tolerancia (17:05 → 17:00, 17:36 → 18:00); el inicio no se redondea y el pago a la niñera va
@@ -387,6 +394,7 @@ La visión completa está en la skill `proyecto-grande` (`.claude/skills/proyect
 leela antes de proponer o tocar algo de apps, niñeras con usuario, WhatsApp o el agente, cobros
 o pagos automáticos. Va por etapas y Diego decide. El pago automático a niñeras quedó
 descartado (19/10/2026): no proponerlo de nuevo.
+- Niñeras que dicen que no (20/10/2026): va a la app de niñeras, como un contador.
 
 ### Próximas tareas (pedidas por Paulina y Delfina)
 - Cobros atrasados en Hoy (19/10/2026), EN PAUSA (20/10/2026: la propuesta no convenció a las
@@ -394,10 +402,37 @@ descartado (19/10/2026): no proponerlo de nuevo.
   un botón que abra WhatsApp con el recordatorio ya escrito (link de WhatsApp, sin la API).
 - Términos y condiciones (20/10/2026): falta el texto del documento que se les manda a las
   madres nuevas. Más adelante, que la madre los acepte desde un link (hoy los marca la admin).
-
-### Esperando una decisión de Paulina y Delfina
-- Niñeras que dicen que no: ¿un contador visible o el aviso de baja actividad (cada 10
-  rechazos, falta decidir si por mail o en la app)? Espera a WhatsApp.
+- Pedido desde WhatsApp (20/10/2026): botón "Nuevo pedido desde WhatsApp": se pegan uno o varios
+  mensajes de la madre y Claude Haiku arma la solicitud (familia, día, horario, chicos, zona,
+  precio según tarifa). Distingue pedido nuevo / cambio / cancelación / otra cosa y marca los
+  horarios aproximados ("sin hora de fin, no antes de las 2"). La admin revisa y confirma. Lo más
+  importante: niñeras sugeridas en orden, con el porqué en una línea. Se filtran las no
+  disponibles (fijo o sitting que se superpone), en Punta del Este (temporada) o inactivas. Orden
+  por defecto: 1) ya fue a esa casa, 2) la madre la pidió antes, 3) cuidó chicos de esa edad,
+  4) puede en esa zona, 5) favorita (estrella que marcan las admin), 6) cuidó varios chicos a la
+  vez; el orden se cambia desde la app. Botón "Copiar mensaje para niñeras" (lista de difusión).
+  Son 4 a 6 pedidos por semana: por ahora no hace falta la API de WhatsApp.
+- Mensajes editables (20/10/2026): todo mensaje que se copia o abre WhatsApp tiene "Editar" antes
+  de mandarlo y la opción de guardarlo como plantilla.
+- Pagos a niñeras (20/10/2026): pagan sábado o domingo desde Mercado Pago, de a una. En Finanzas →
+  Por pagar, la cuenta de cada niñera con un botón de copiar al lado del monto.
+- Mercado Pago automático (20/10/2026): van a usar todo Mercado Pago (cobros y pagos). Objetivo:
+  que nadie marque nada a mano. Con la API de reportes (settlement_report / release_report,
+  programables por día o semana), bajar solos los movimientos de entrada y salida y marcar solos
+  los cobros a familias y los pagos a niñeras. Lo que no cierre, con aviso claro: pagó de menos,
+  de más, dos veces, o un monto que no coincide con ninguna deuda. Si no coincide, buscar si cubre
+  varias deudas juntas de esa familia (debía $1.500 y pagó $3.500: ¿suma dos o más pendientes?) o
+  si dejó saldo a favor, y proponerlo para confirmar. Sin links de pago ni QR. Primer paso, antes
+  de construir: revisar un reporte real de una semana (en `local/`, nunca en el repo) para ver si
+  trae las transferencias que entran desde otros bancos y el nombre de quien paga.
+- Formulario de car sitting para niñeras (20/10/2026, va último): las que quieren hacer traslados
+  tienen que completarlo. En la base hay 0 respuestas (`carsitting_datos` vacía) de 90 niñeras
+  activas y ningún mail enviado: revisar el flujo completo (formulario de Google → Apps Script →
+  carsitting-webhook → `carsitting_datos`) y ver si las respuestas no llegan o si nadie lo
+  completó. Después: en la app, la lista de niñeras que no lo completaron, con un botón que abre
+  WhatsApp con el mensaje y el link al formulario (editable); cuando llega la respuesta, sale sola
+  de la lista. Jubilar el recordatorio por mail (Apps Script recordatorio_carsitting +
+  carsitting-recordatorio).
 
 ### WhatsApp y automatización de mensajes
 - Línea de WhatsApp Business + API de Meta (Coexistence): bloqueado. Es la base del flujo de
@@ -437,9 +472,9 @@ descartado (19/10/2026): no proponerlo de nuevo.
   que no cerraron") o decidir cuál es el número correcto.
 
 ### Funciones nuevas pedidas
-- Guía "Cómo se hace" dentro de la app (13/10/2026; sigue pendiente, el 19/10/2026 eligieron
-  primero Cobros atrasados): guía de uso que incluya cómo activar Face ID / Touch ID (una
-  passkey por dispositivo, en Safari).
+- Guía "Cómo se hace" dentro de la app (13/10/2026), BAJA PRIORIDAD (20/10/2026: saben hacer
+  todo, el problema es el tiempo; priorizar que las tareas sean más rápidas): guía de uso que
+  incluya cómo activar Face ID / Touch ID (una passkey por dispositivo, en Safari).
 - Niñeras de Argentina: una sección igual a la de Uruguay que traiga las respuestas de su
   propio formulario (ya existe) con el mismo flujo de postulantes.
 - Car sitting: queda como está por ahora. Los mails automáticos están apagados hasta
