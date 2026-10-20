@@ -185,6 +185,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/guardados.spec.js`: doble toque, base que falla o sin conexión, cerrar el modal a mitad
   del guardado, terminar un fijo desde una fecha.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
+- `tests/por-pagar-en-curso.spec.js`: semana en curso de las fijas en Por pagar (cuándo cierra,
+  sin botón, el día que cierra y el siguiente, fija con finde, saldo a favor, 390px).
 - `tests/arranque.spec.js`: pantalla de carga (símbolo latiendo), error si no carga supabase-js,
   "Entrando…", carga entre el login y Hoy, símbolo chico al cambiar de sección (> 300 ms).
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
@@ -344,7 +346,10 @@ reporte.
   (persona externa, empleada de Enrique): se guarda solo `ninera_nombre`, no se crea niñera ni
   entra a `intermediaciones_enrique_pool`. Lo que lea esa tabla no puede suponer `ninera_id`.
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
-  siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3).
+  siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3). La semana de una
+  fija que todavía no cerró (sábado, o domingo si trabaja el finde) se ve aparte como "Semana
+  en curso, cierra el ..." con lo que lleva hasta hoy, sin botón y sin saldo a favor
+  (`porPagarEnCursoHtml`, 20/10/2026).
 
 ## Pendientes
 Esta lista es la fuente de verdad de lo que falta en el sistema, para todas las sesiones y
@@ -375,9 +380,6 @@ descartado (19/10/2026): no proponerlo de nuevo.
   aceptaron, el horario de fin se redondea hacia arriba para el cobro (por ejemplo, si se fue
   17:45 se cobra hasta las 18:00); el pago a la niñera se sigue calculando con la hora real.
   Falta definir la regla exacta del redondeo y el texto del documento antes de construir.
-- Finanzas, Por pagar (19/10/2026): a las niñeras fijas su semana les aparece recién cuando
-  cierra (sábado o domingo), y eso hace pensar que faltan pagos. Mostrar también la semana en
-  curso, separada y marcada como "todavía no cierra".
 
 ### Esperando una decisión de Paulina y Delfina
 - Niñeras que dicen que no: ¿un contador visible o el aviso de baja actividad (cada 10
