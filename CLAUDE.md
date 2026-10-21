@@ -260,6 +260,11 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   en el registro, la Agenda, Por pagar / Por cobrar, "Copiar monto", saldo a favor, PDF y montos
   tipeados a mano. En la
   base: `supabase/pruebas/redondeo_montos.sql`.
+- `tests/carsitting.spec.js`: Niñeras > Car sitting: Completaron, Faltan (primero las de traslados),
+  Sin identificar y unir a mano, copiar / editar / guardar el mensaje, WhatsApp a una que falta, que
+  se actualice solo sin recargar la lista, base que falla, sin conexión, doble toque, base sin
+  migrar, datos tramposos y 390 px. En la base: `supabase/pruebas/carsitting_union.sql` (cómo se une
+  sola una respuesta); el webhook: `supabase/functions/carsitting-webhook/campos_test.ts` (Deno).
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -354,7 +359,13 @@ reporte.
   pérdida de entrevistas (ver comentarios en auth.js y bootstrap.js).
 - Realtime tampoco repinta lo que se está escribiendo: RR.HH. en Entrevista y Finanzas usan
   recarga liviana (`RT_RECARGA_LIVIANA`, agenda.js); con un modal abierto el cambio se aplica al
-  cerrarlo.
+  cerrarlo. Una tabla que solo usa una parte del módulo puede tener su propia recarga
+  (`RT_RECARGA_POR_TABLA`): una respuesta de car sitting repinta solo ese panel.
+- Car sitting (21/10/2026): la respuesta del formulario se une con la niñera en la base al entrar
+  (`vincular_carsitting`: celular, mail de la candidata o nombre; solo si hay una posible) y la app
+  la lee por `carsitting_datos.ninera_id`, nunca por nombre. Lo que no se une queda "Sin
+  identificar" en Niñeras > Car sitting para unirlo a mano. El mensaje para WhatsApp vive en
+  `app_config` 'carsitting_mensaje' (vacío = el de base, `CARSITTING_MENSAJE_BASE`).
 - Una función global nueva no puede repetir el nombre de otra en ningún archivo.
 - Escape (05/10/2026): helpers únicos en core.js. `escaparHtml()` para texto y atributos,
   `argJs()` para pasar un dato a un handler inline (`f(${argJs(x)})`, nunca `'${x}'`) y
@@ -506,14 +517,14 @@ descartado (19/10/2026): no proponerlo de nuevo.
   si dejó saldo a favor, y proponerlo para confirmar. Sin links de pago ni QR. Primer paso, antes
   de construir: revisar un reporte real de una semana (en `local/`, nunca en el repo) para ver si
   trae las transferencias que entran desde otros bancos y el nombre de quien paga.
-- Formulario de car sitting para niñeras (20/10/2026, va último): las que quieren hacer traslados
-  tienen que completarlo. En la base hay 0 respuestas (`carsitting_datos` vacía) de 90 niñeras
-  activas y ningún mail enviado: revisar el flujo completo (formulario de Google → Apps Script →
-  carsitting-webhook → `carsitting_datos`) y ver si las respuestas no llegan o si nadie lo
-  completó. Después: en la app, la lista de niñeras que no lo completaron, con un botón que abre
-  WhatsApp con el mensaje y el link al formulario (editable); cuando llega la respuesta, sale sola
-  de la lista. Jubilar el recordatorio por mail (Apps Script recordatorio_carsitting +
-  carsitting-recordatorio).
+- Formulario de car sitting para niñeras (20/10/2026): hecha la pantalla (Niñeras > Car sitting) y
+  la unión por celular / mail (21/10/2026). Diagnóstico: desde el 25/08 `carsitting_datos` no tuvo
+  ni una inserción; el mail se mandó a 6 candidatas (9 al 14/09) y a ninguna niñera; el formulario
+  pide entrar con una cuenta de Google (tiene preguntas para subir fotos). Falta, del lado de
+  Google (Diego): ver cuántas respuestas tiene el formulario, que el Apps Script de la planilla
+  mande `x-webhook-secret` y tenga su activador "al enviar el formulario", agregar la pregunta
+  "Celular" y prender "recopilar correos". Después, jubilar el recordatorio por mail (Apps Script
+  recordatorio_carsitting + `carsitting-recordatorio`) con el OK de Diego.
 
 ### Errores encontrados en la auditoría (21/10/2026)
 - "Editar horarios futuros" (`guardarHorarioAsignacionFija`) no permite fijos que cruzan medianoche.
@@ -532,6 +543,10 @@ descartado (19/10/2026): no proponerlo de nuevo.
   "Descartar" una candidata es un DELETE físico: decidido (21/10/2026) que pase al estado
   `descartada`; va en el PR de Postulantes del rediseño.
 - "Vaciar formulario" de la Entrevista no pide confirmación.
+- Test intermitente (21/10/2026): `regresiones.spec.js` "Ver ese sitting" al cargar uno repetido
+  falla 1 de cada 3 veces, también en main: el formulario ya muestra el registro pero `sitEditId`
+  sigue en null. Ver si la app lo asigna después de llenar el formulario (carrera real) o si el
+  test tiene que esperarlo.
 - `asignaciones.cobro_hora/pago_hora` se guardan pero solo `sospechasDelMes` las usa: decidir una
   sola fuente del precio del fijo.
 - Sittings no está en `RT_RECARGA_LIVIANA` (agenda.js): el propio guardado reconstruye el módulo y

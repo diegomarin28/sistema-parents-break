@@ -29,11 +29,14 @@ async function cargarCarsittingPendientes(){
   const [{data:nins}, {data:cands}, {data:cd}] = await Promise.all([
     sb.from('ninieras').select('id,nombre,tipo,carsitting_mail_enviado_at').in('tipo', ['Traslados','Ambas']),
     sb.from('candidatas').select('id,nombre,apellido,tipo,mail,carsitting_mail_enviado_at').in('tipo', ['Traslados','Ambas']),
-    sb.from('carsitting_datos').select('ninera_nombre'),
+    sb.from('carsitting_datos').select('ninera_nombre,ninera_id'),
   ]);
+  // Una niñera ya lo completó si alguna respuesta quedó unida a ella (por celular, mail o
+  // nombre, 21/10/2026) o, como antes, si el nombre del formulario es el de la ficha.
   const yaTiene = new Set((cd||[]).map(r=>normaliza(r.ninera_nombre||'')));
+  const yaTieneId = new Set((cd||[]).map(r=>r.ninera_id).filter(Boolean));
   carsittingPendData = [
-    ...(nins||[]).filter(n=>!yaTiene.has(normaliza(n.nombre))).map(n=>({origen:'ninera', id:n.id, nombre:n.nombre, mail:null, enviado:n.carsitting_mail_enviado_at})),
+    ...(nins||[]).filter(n=>!yaTieneId.has(n.id) && !yaTiene.has(normaliza(n.nombre))).map(n=>({origen:'ninera', id:n.id, nombre:n.nombre, mail:null, enviado:n.carsitting_mail_enviado_at})),
     ...(cands||[]).filter(c=>!yaTiene.has(normaliza(`${c.nombre} ${c.apellido||''}`.trim()))).map(c=>({origen:'candidata', id:c.id, nombre:`${c.nombre} ${c.apellido||''}`.trim(), mail:c.mail, enviado:c.carsitting_mail_enviado_at})),
   ];
   renderCarsittingPendientes();

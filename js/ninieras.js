@@ -28,6 +28,7 @@ function renderNinieras(body){
     <div id="nin-cumpleaneras-wrap"></div>
     <div id="nin-zonasnuevas-wrap"></div>
     <div id="nin-temporadas-wrap"></div>
+    <div id="nin-carsitting-wrap"></div>
     <div id="nin-utilizacion-wrap"></div>
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn primary" onclick="abrirModalNuevaNinera()">+ Agregar niñera</button></div>
     <div class="card" style="padding:14px 18px;"><div class="grid2">
@@ -67,11 +68,13 @@ async function cargarNinieras(){
   renderCumpleaneras();
   renderZonasNuevasPanel();
   renderTemporadasPanel();
+  const carsitting = cargarCarsittingPanel(); // en paralelo con lo que sigue: no frena la lista
   await cargarUtilizacionNinieras();
   await cargarConteoIncidentesNinieras();
   const wZonas = document.getElementById('filt-zonas-wrap');
   if(wZonas) wZonas.innerHTML = htmlFiltroZonas(ninFiltroZonas, 'toggleFiltroZonaNin');
   filtrarNinieras();
+  await carsitting;
 }
 const NIN_UTIL_DIAS = 30;
 let ninUtilChart = null;
@@ -249,15 +252,22 @@ function filtrarNinieras(){
   grid.innerHTML = countMsg + '<div class="person-list">' + completas.map(filaNinera).join('') + '</div>'
     + (parciales.length ? `<div class="helper" style="margin:16px 0 8px;">Solo parte del período (la tira muestra en qué quincenas está en ${zonaLabel}${hayZonaAfuera?'':' — lo pintado es cuándo está afuera'})</div><div class="person-list">${parciales.map(filaNinera).join('')}</div>` : '');
 }
-// Sección "Datos de carsitting" reutilizable: busca por nombre (sin importar tildes/mayúsculas)
-// contra TODOS los registros de carsitting_datos, sin depender de si ya está en Niñeras o
-// todavía en Candidatas — así aparece sola apenas ella manda el form, esté donde esté.
-async function cargarCarsittingSeccion(nombre, boxId, tipo, mail){
+// Sección "Datos de carsitting" reutilizable. Para una niñera (nineraId) trae su respuesta por
+// ninera_id: desde el 21/10/2026 la base la une por celular o mail aunque haya escrito otro
+// nombre en el formulario. Para una candidata (todavía sin niñera) busca por nombre, sin
+// importar tildes ni mayúsculas, así aparece sola apenas ella manda el form.
+async function cargarCarsittingSeccion(nombre, boxId, tipo, mail, nineraId){
   const box = document.getElementById(boxId);
   if(!box) return;
-  const { data } = await sb.from('carsitting_datos').select('*').order('created_at', {ascending:false});
-  const nombreNorm = normaliza(nombre);
-  const c = (data||[]).find(r=>normaliza(r.ninera_nombre)===nombreNorm);
+  let c = null;
+  if(nineraId){
+    const { data } = await sb.from('carsitting_datos').select('*').eq('ninera_id', nineraId).order('created_at', {ascending:false}).limit(1);
+    c = (data||[])[0] || null;
+  } else {
+    const { data } = await sb.from('carsitting_datos').select('*').order('created_at', {ascending:false});
+    const nombreNorm = normaliza(nombre);
+    c = (data||[]).find(r=>normaliza(r.ninera_nombre)===nombreNorm) || null;
+  }
   if(c){
     const campos = [
       ['Auto', [c.modelo_auto, c.color_auto].filter(Boolean).join(' · ')],
@@ -333,7 +343,7 @@ async function verNinera(id){
       </div>
       <div id="vn-historial"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
     </div>`);
-  cargarCarsittingSeccion(n.nombre, 'vn-carsitting', n.tipo, cd.mail);
+  cargarCarsittingSeccion(n.nombre, 'vn-carsitting', n.tipo, cd.mail, n.id);
   cargarJuguetesDeNinera(n.nombre);
   renderIncidentesEnFicha('vn-incidentes', 'ninera', n.id, n.nombre);
   pintarSaldoEnFicha('vn-saldo', 'ninera', n.id, n.nombre);
@@ -1203,4 +1213,234 @@ function pedirTemporadaWhatsapp(id){
     return;
   }
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensajeTemporadaPara(n))}`, '_blank');
+}
+
+/* ---- Panel "Car sitting" (21/10/2026) ----
+   Quién completó el formulario de car sitting (datos del auto y de la licencia, "Carsitters
+   datos") y quién falta, con el mensaje para mandarles por WhatsApp. Hasta ahora se pedía por
+   mail: se mandó a 6 candidatas en setiembre, se pausó el 13/09 y no llegó ninguna respuesta.
+   La respuesta llega del formulario de Google por carsitting-webhook a carsitting_datos y la
+   base la une sola con la niñera por celular, mail o nombre (vincular_carsitting). Lo que no se
+   pudo unir queda en "Sin identificar" para unirlo a mano. Se actualiza solo (Realtime, sin
+   recargar la lista) y el mensaje se edita y queda guardado para todas (app_config
+   'carsitting_mensaje'). */
+const CARSITTING_FORM_URL = 'https://forms.gle/J4QXgNJQ8kXMsA4C6';
+// Borrador del 21/10/2026: lo ajustan Paulina y Delfina desde "Editar". El formulario pide
+// entrar con una cuenta de Google porque tiene preguntas para subir fotos: mejor avisarlo.
+const CARSITTING_MENSAJE_BASE = `¡Hola! Para hacer traslados con Parents’ Break necesitamos los datos de tu auto y de tu licencia de conducir. Completalos en este formulario (te va a pedir entrar con tu cuenta de Google porque hay que subir fotos):\n\n${CARSITTING_FORM_URL}\n\n¡Gracias!`;
+let csRespuestas = null; // filas de carsitting_datos que usa el panel (null: todavía no se leyeron)
+let csMensaje = '';      // el mensaje guardado ('' = el de base)
+let csError = null;
+let csAbierto = false;
+let csSoloTraslados = false;
+
+function csHaceTraslados(n){ return n.tipo==='Traslados' || n.tipo==='Ambas'; }
+function mensajeCarsitting(){ return csMensaje || CARSITTING_MENSAJE_BASE; }
+function inicialesDe(nombre){
+  return String(nombre||'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase() || '?';
+}
+// "3 de octubre", el día en Montevideo (el formato corto del navegador cambia entre celulares).
+function fechaCortaCarsitting(ts){
+  const iso = ts ? fechaNegocioISO(new Date(ts)) : '';
+  return iso ? `${Number(iso.slice(8,10))} de ${TEMP_MESES_LARGO[Number(iso.slice(5,7))-1]}` : '';
+}
+async function leerRespuestasCarsitting(){
+  const leer = cols => sb.from('carsitting_datos').select(cols).order('created_at', {ascending:false});
+  const r = await leer('id,ninera_id,nombre_completo,created_at,telefono,mail');
+  // Base sin la migración del 21/10/2026: no hay celular ni mail, el resto anda igual.
+  if(r.error && /telefono|mail/.test(r.error.message||'')) return leer('id,ninera_id,nombre_completo,created_at');
+  return r;
+}
+async function cargarCarsittingPanel(){
+  if(!document.getElementById('nin-carsitting-wrap')) return;
+  try{
+    const [r, cfg] = await Promise.all([
+      leerRespuestasCarsitting(),
+      sb.from('app_config').select('valor').eq('id', 'carsitting_mensaje').maybeSingle(),
+    ]);
+    csError = r.error || null;
+    if(!r.error) csRespuestas = r.data || [];
+    // Si no se puede leer el mensaje guardado, se muestra el de base: no frena nada.
+    if(!cfg.error) csMensaje = String(cfg.data?.valor?.texto||'').trim();
+  }catch(e){
+    csError = e;
+  }
+  renderCarsittingPanel();
+}
+function toggleCarsittingPanel(){ csAbierto = !csAbierto; renderCarsittingPanel(); }
+function toggleCarsittingSoloTraslados(solo){ csSoloTraslados = !!solo; renderCarsittingPanel(); }
+// Completaron: niñeras activas con alguna respuesta unida (la fecha, la más reciente). Faltan:
+// el resto, primero las que hacen traslados. Sin identificar: respuestas sin niñera.
+function estadoCarsitting(){
+  const ultima = new Map();
+  const sinIdentificar = [];
+  (csRespuestas||[]).forEach(r=>{
+    if(!r.ninera_id){ sinIdentificar.push(r); return; }
+    const antes = ultima.get(r.ninera_id);
+    if(!antes || String(r.created_at) > String(antes)) ultima.set(r.ninera_id, r.created_at);
+  });
+  const base = csSoloTraslados ? ninierasItems.filter(csHaceTraslados) : ninierasItems;
+  const completaron = base.filter(n=>ultima.has(n.id)).map(n=>({n, fecha:ultima.get(n.id)}))
+    .sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  const faltan = base.filter(n=>!ultima.has(n.id))
+    .sort((a,b)=>(csHaceTraslados(b)-csHaceTraslados(a)) || String(a.nombre||'').localeCompare(String(b.nombre||''), 'es'));
+  return { base, completaron, faltan, sinIdentificar, ultima };
+}
+function filaCarsitting(nombre, meta, derecha, extra=''){
+  return `<div class="cs-fila">
+    <div class="cs-avatar" aria-hidden="true">${escaparHtml(inicialesDe(nombre))}</div>
+    <div class="cs-principal"><span class="cs-nombre">${escaparHtml(nombre||'(sin nombre)')}</span><span class="cs-meta">${escaparHtml(meta)}</span></div>
+    <div class="cs-derecha">${derecha}</div>${extra}
+  </div>`;
+}
+function renderCarsittingPanel(){
+  const wrap = document.getElementById('nin-carsitting-wrap');
+  if(!wrap) return;
+  asegurarEstilosCarsitting();
+  if(csRespuestas===null){
+    // Todavía no se pudo leer nada: si falló, se dice y se ofrece reintentar.
+    wrap.innerHTML = csError ? `<div class="card cs-card"><h2 style="margin:0 0 6px;">Car sitting</h2>
+      <div class="warnbox" style="margin:0 0 8px;">No se pudieron leer las respuestas del formulario de car sitting.</div>
+      <button type="button" class="smallbtn" onclick="cargarCarsittingPanel()">Reintentar</button></div>` : '';
+    return;
+  }
+  const { base, completaron, faltan, sinIdentificar, ultima } = estadoCarsitting();
+  const nTraslados = ninierasItems.filter(csHaceTraslados).length;
+  const resumen = `${completaron.length} de ${base.length} completaron${sinIdentificar.length ? ` · ${sinIdentificar.length} sin identificar` : ''}`;
+  // Para unir a mano: todas las activas, primero las que faltan.
+  const opcion = n => `<option value="${escaparHtml(n.id)}">${escaparHtml(n.nombre||'(sin nombre)')}</option>`;
+  const activasFaltan = ninierasItems.filter(n=>!ultima.has(n.id));
+  const activasYa = ninierasItems.filter(n=>ultima.has(n.id));
+  const opciones = `<option value="">Elegí de quién es…</option>`
+    + (activasFaltan.length ? `<optgroup label="Faltan">${activasFaltan.map(opcion).join('')}</optgroup>` : '')
+    + (activasYa.length ? `<optgroup label="Ya completaron">${activasYa.map(opcion).join('')}</optgroup>` : '');
+  const filasSinId = sinIdentificar.map(r=>{
+    const meta = ['Respondió el '+fechaCortaCarsitting(r.created_at), r.telefono, r.mail].filter(Boolean).join(' · ');
+    return filaCarsitting(r.nombre_completo, meta, '', `<div class="cs-unir">
+      <select id="cs-unir-${escaparHtml(r.id)}" aria-label="Niñera de esta respuesta">${opciones}</select>
+      <button type="button" class="smallbtn" onclick="conGuardado(this, ()=>guardarUnionCarsitting(${argJs(r.id)}))">Unir</button>
+    </div>`);
+  }).join('');
+  const filasFaltan = faltan.map(n=>{
+    const meta = [csHaceTraslados(n) ? 'Hace traslados' : 'Niñera', String(n.telefono||'').trim() ? '' : 'sin celular'].filter(Boolean).join(' · ');
+    return filaCarsitting(n.nombre, meta, `<button type="button" class="smallbtn" onclick="mandarCarsittingWhatsapp(${argJs(n.id)})">WhatsApp</button>`);
+  }).join('');
+  const filasCompletaron = completaron.map(({n, fecha})=>
+    filaCarsitting(n.nombre, 'Completó el '+fechaCortaCarsitting(fecha), `<button type="button" class="smallbtn" onclick="verNinera(${argJs(n.id)})">Ver</button>`)).join('');
+  wrap.innerHTML = `
+    <div class="card cs-card${faltan.length || sinIdentificar.length ? ' cs-pendiente' : ''}">
+      <div class="cs-cabecera" role="button" tabindex="0" aria-expanded="${csAbierto}" onclick="toggleCarsittingPanel()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCarsittingPanel();}">
+        <h2 style="margin:0;">Car sitting</h2>
+        <div class="helper cs-resumen" style="margin:0;">${resumen} ${csAbierto ? '(tocá para cerrar)' : '(tocá para ver)'}</div>
+      </div>
+      ${csError ? `<div class="warnbox" style="margin:8px 0 0;">No se pudo actualizar la lista. <button type="button" class="smallbtn" onclick="cargarCarsittingPanel()">Reintentar</button></div>` : ''}
+      ${csAbierto ? `
+        <div class="helper" style="margin:10px 0 6px;">Mandalo por la lista de difusión de WhatsApp. Cuando una lo completa, pasa sola a Completaron.</div>
+        <div class="cs-texto">${escaparHtml(mensajeCarsitting())}</div>
+        <div class="cs-botones">
+          <button type="button" class="btn primary" onclick="copiarMensajeCarsitting()">Copiar mensaje</button>
+          <button type="button" class="btn ghost" onclick="abrirEditarMensajeCarsitting()">Editar</button>
+        </div>
+        <div class="cs-filtro" role="group" aria-label="Qué niñeras contar">
+          <button type="button" class="smallbtn" aria-pressed="${!csSoloTraslados}" onclick="toggleCarsittingSoloTraslados(false)">Todas (${ninierasItems.length})</button>
+          <button type="button" class="smallbtn" aria-pressed="${csSoloTraslados}" onclick="toggleCarsittingSoloTraslados(true)">Hacen traslados (${nTraslados})</button>
+        </div>
+        ${sinIdentificar.length ? `<h3 class="cs-seccion">Sin identificar (${sinIdentificar.length})</h3>
+          <div class="helper" style="margin:0 0 6px;">Respondieron, pero no se pudo saber quién es. Elegí la niñera y tocá Unir.</div>
+          <div class="cs-lista" id="cs-sin-identificar">${filasSinId}</div>` : ''}
+        <h3 class="cs-seccion">Faltan (${faltan.length})</h3>
+        <div class="cs-lista" id="cs-faltan">${filasFaltan || '<div class="cs-vacio">Ya lo completaron todas.</div>'}</div>
+        <h3 class="cs-seccion">Completaron (${completaron.length})</h3>
+        <div class="cs-lista" id="cs-completaron">${filasCompletaron || '<div class="cs-vacio">Todavía no lo completó ninguna.</div>'}</div>
+      ` : ''}
+    </div>`;
+}
+function copiarMensajeCarsitting(){
+  copiarAlPortapapeles(mensajeCarsitting(), 'Mensaje copiado. Pegalo en la lista de difusión de WhatsApp.');
+}
+function mandarCarsittingWhatsapp(id){
+  const n = ninierasItems.find(x=>x.id===id);
+  if(!n) return;
+  const tel = formatearTelefonoWhatsApp(n.telefono);
+  if(!tel){
+    copiarAlPortapapeles(mensajeCarsitting(), `${(n.nombre||'').split(' ')[0] || 'Ella'} no tiene celular cargado: copié el mensaje para que se lo mandes por otro lado.`);
+    return;
+  }
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensajeCarsitting())}`, '_blank');
+}
+function abrirEditarMensajeCarsitting(){
+  abrirModal(`
+    <h2 style="margin:0 0 6px;padding-right:44px;">Mensaje de car sitting</h2>
+    <div class="helper" style="margin:0 0 10px;">Queda guardado para todas las que usan la app. Dejá el link al formulario.</div>
+    <textarea id="cs-mensaje-edit" style="width:100%;min-height:200px;">${escaparHtml(mensajeCarsitting())}</textarea>
+    <button type="button" class="smallbtn" style="margin-top:6px;" onclick="usarMensajeCarsittingBase()">Volver al texto original</button>
+    <div class="confirmbtns" style="margin-top:16px;">
+      <button type="button" class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button type="button" class="btn primary" onclick="conGuardado(this, ()=>guardarMensajeCarsitting())">Guardar</button>
+    </div>`);
+}
+function usarMensajeCarsittingBase(){
+  const ta = document.getElementById('cs-mensaje-edit');
+  if(ta) ta.value = CARSITTING_MENSAJE_BASE;
+}
+async function guardarMensajeCarsitting(){
+  const texto = (document.getElementById('cs-mensaje-edit')?.value || '').trim();
+  if(!texto){ toast('El mensaje no puede quedar vacío.', 'bad'); return; }
+  if(!/https?:\/\/\S+/.test(texto)){ toast('Falta el link al formulario: sin el link no lo pueden completar.', 'bad'); return; }
+  const ok = await sbGuardar(sb.from('app_config').upsert({ id:'carsitting_mensaje', valor:{ texto }, actualizado_at: new Date().toISOString() }, { onConflict:'id' }), 'el mensaje');
+  if(!ok) return;
+  csMensaje = texto;
+  cerrarModal();
+  toast('Mensaje guardado.');
+  renderCarsittingPanel();
+}
+async function guardarUnionCarsitting(id){
+  const nineraId = document.getElementById('cs-unir-'+id)?.value || '';
+  if(!nineraId){ toast('Elegí de quién es esta respuesta.', 'bad'); return; }
+  const n = ninierasItems.find(x=>x.id===nineraId);
+  try{
+    // Se pide la fila de vuelta para confirmar que se guardó (si ya no existe, no hay éxito falso).
+    const { data, error } = await sb.from('carsitting_datos').update({ ninera_id: nineraId }).eq('id', id).select('id');
+    // Sin conexión, supabase-js no tira una excepción: devuelve el error del fetch.
+    if(error){ toast(/fetch|network|load failed/i.test(error.message||'') ? 'No se pudo unir la respuesta. Revisá tu conexión.' : 'No se pudo unir la respuesta: '+error.message, 'bad'); return; }
+    if(!(data||[]).length){ toast('No se encontró esa respuesta: puede que la hayan borrado. Recargá la lista.', 'bad'); return; }
+  }catch(e){
+    toast('No se pudo unir la respuesta. Revisá tu conexión.', 'bad');
+    return;
+  }
+  const r = (csRespuestas||[]).find(x=>x.id===id);
+  if(r) r.ninera_id = nineraId;
+  toast(`Listo: quedó unida a ${n?.nombre || 'la niñera'}.`);
+  renderCarsittingPanel();
+}
+function asegurarEstilosCarsitting(){
+  if(document.getElementById('estilos-carsitting')) return;
+  const st = document.createElement('style');
+  st.id = 'estilos-carsitting';
+  // Filas como "Datos que faltan" de las maquetas (docs/maquetas/hoy.html): inicial, nombre con
+  // una línea de detalle y un solo botón a la derecha.
+  st.textContent = `
+.cs-card{padding:14px 18px;margin-bottom:14px;}
+.cs-card.cs-pendiente{border-left:3px solid var(--warn);border-radius:0 12px 12px 0;}
+.cs-cabecera{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;cursor:pointer;}
+.cs-texto{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;white-space:pre-wrap;font-size:14px;line-height:1.5;overflow-wrap:anywhere;}
+.cs-botones{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.cs-filtro{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 2px;}
+.cs-filtro .smallbtn{min-height:36px;}
+.cs-filtro .smallbtn[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent);}
+.cs-seccion{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;margin:16px 0 6px;}
+.cs-lista{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--paper);}
+.cs-fila{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);min-height:56px;}
+.cs-fila:last-child{border-bottom:none;}
+.cs-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;}
+.cs-principal{min-width:0;display:flex;flex-direction:column;gap:2px;}
+.cs-nombre{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cs-meta{color:var(--ink-soft);font-size:12.5px;overflow-wrap:anywhere;}
+.cs-derecha .smallbtn{min-height:36px;}
+.cs-unir{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;}
+.cs-unir select{flex:1 1 180px;min-width:0;}
+.cs-unir .smallbtn{min-height:36px;}
+.cs-vacio{padding:12px;color:var(--ink-soft);font-size:13px;}
+`;
+  document.head.appendChild(st);
 }
