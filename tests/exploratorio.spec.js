@@ -101,11 +101,13 @@ test.describe('flujo de punta a punta', () => {
     await expect.poll(() => e.db.sittings_traslados.length).toBe(1);
     const reg = e.db.sittings_traslados[0];
     expect(reg).toMatchObject({ familia_id: fam.id, ninera_nombre: 'Ana Ficticia', fecha: '2026-10-05', asignacion_id: e.db.asignaciones[0].id, cobro_familia: 1200, pago_ninera: 780, cobrado: false, pagado: false });
-    // 4) Finanzas: facturado 1.200, por cobrar 1.200, por pagar 780.
+    // 4) Finanzas: facturado 1.200, por cobrar 1.200; los 780 a pagar son de una semana que
+    // todavía no cierra (es un fijo), así que van aparte.
     await irAModulo(page, 'finanzas');
     await expect(page.locator('#fin-facturado')).toHaveText('$1.200');
     await expect(page.locator('#fin-porcobrar')).toHaveText('$1.200');
-    await expect(page.locator('#fin-porpagar')).toHaveText('$780');
+    await expect(page.locator('#fin-porpagar')).toHaveText('$0');
+    await expect(page.locator('#fin-porpagar-semanas')).toContainText('$780');
     await expect(page.locator('#fin-resultado')).toHaveText('$420');
     // 5) Cobrar (Por cobrar, mensual).
     await page.locator('#fin-porcobrar-wrap .agendarow', { hasText: 'Familia Punta A Punta' }).locator('button').click();
@@ -118,7 +120,8 @@ test.describe('flujo de punta a punta', () => {
     await page.clock.setFixedTime(new Date('2026-10-12T10:00:00-03:00'));
     await page.evaluate(async () => { finMes = '2026-10'; refrescarFinanzasCompleto(); });
     await esperarQuieta(page);
-    await page.locator('#fin-porpagar-wrap .agendarow', { hasText: 'Ana Ficticia' }).locator('button').click();
+    await expect(page.locator('#fin-porpagar')).toHaveText('$780'); // la semana ya cerró
+    await page.locator('#fin-porpagar-wrap .agendarow', { hasText: 'Ana Ficticia' }).locator('button', { hasText: 'Marcar pagado' }).click();
     await page.locator('[aria-label="Confirmar pago"] button', { hasText: 'Confirmar pago' }).click();
     await expect(page.locator('#fin-porpagar')).toHaveText('$0');
     // 7) Cuadra: resultado sobre lo facturado, sin cambiar por cobrar/pagar.
@@ -312,16 +315,23 @@ test.describe('errores de red en guardados que no son botones', () => {
 });
 
 test.describe('validaciones que faltaban', () => {
+  async function elegirDelAutocompletar(page, id, texto, opcion) {
+    const item = page.locator(`#${id}-dropdown .autocomplete-item`, { hasText: opcion });
+    await expect(async () => {
+      await page.fill(`#${id}`, texto);
+      await expect(item).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 10_000 });
+    await item.click();
+    await expect(page.locator(`#${id}`)).toHaveValue(opcion);
+  }
   test('un sitting con monto negativo no se guarda', async ({ page }) => {
     const e = await abrirApp(page);
     await irAModulo(page, 'sittings');
     await page.locator('button[onclick^="abrirModalSitForm"]').first().click();
-    await page.fill('#sit-familia', 'Famil');
-    await page.locator('#sit-familia-dropdown .autocomplete-item', { hasText: 'Familia Prueba Dos' }).click();
-    await page.waitForTimeout(200);
-    await page.fill('#sit-ninera', 'Bruno');
-    await page.locator('#sit-ninera-dropdown .autocomplete-item', { hasText: 'Bruno Inventado' }).click();
-    await page.waitForTimeout(200);
+    // Con la compu cargada, las listas del autocompletar pueden llegar después de tipear: se
+    // vuelve a tipear hasta que aparece la opción, y recién ahí se elige.
+    await elegirDelAutocompletar(page, 'sit-familia', 'Famil', 'Familia Prueba Dos');
+    await elegirDelAutocompletar(page, 'sit-ninera', 'Bruno', 'Bruno Inventado');
     await page.evaluate(() => { setHoraSelect('sit-horaini', '10:00'); setHoraSelect('sit-horafin', '12:00'); });
     await page.fill('#sit-cobro', '-800');
     await page.fill('#sit-pago', '500');

@@ -45,7 +45,7 @@ test.describe('Por pagar: semana en curso de las fijas', () => {
     await expect(enCurso(page)).toContainText('todavía no cierra');
     await expect(enCurso(page).locator('button')).toHaveCount(0);
     // La semana que ya cerró sigue arriba, con su botón.
-    await expect(listos(page).filter({ hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 12/ }).locator('button')).toHaveText('Marcar pagado');
+    await expect(listos(page).filter({ hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 12/ }).locator('button', { hasText: 'Marcar pagado' })).toHaveCount(1);
     // El puntual de esta semana no es de un fijo: va arriba, como siempre.
     await expect(listos(page).filter({ hasText: 'Bruno Inventado' }).filter({ hasText: '$600' })).toHaveCount(1);
     await expect(enCurso(page)).not.toContainText('Bruno Inventado');
@@ -66,7 +66,7 @@ test.describe('Por pagar: semana en curso de las fijas', () => {
     await expect(listos(page).filter({ hasText: /Semana del 19/ })).toContainText('$1.550');
     await expect(enCurso(page)).toHaveCount(0);
     // Marcar pagado sigue pasando por la confirmación y marca justo esos dos (no el del 26).
-    await listos(page).filter({ hasText: /Semana del 19/ }).locator('button').click();
+    await listos(page).filter({ hasText: /Semana del 19/ }).locator('button', { hasText: 'Marcar pagado' }).click();
     await page.locator('[aria-label="Confirmar pago"] button', { hasText: 'Confirmar pago' }).click();
     await expect.poll(() => e.db.sittings_traslados.filter(r => r.pagado && [S(2), S(3)].includes(r.id)).length).toBe(2);
     expect(e.db.sittings_traslados.find(r => r.id === FUTURO).pagado).toBe(false);

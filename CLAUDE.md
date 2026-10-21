@@ -229,6 +229,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   Revisado, editar sittings, gastos extra, gastos generales y saldos, historial, base sin migrar).
 - `tests/intermediaciones.spec.js`: colocación de Enrique con una persona externa (sin
   `ninera_id`) o con una niñera de la lista, errores, doble toque, historial y ficha.
+- `tests/finanzas-arreglos.spec.js`: copiar cuenta y monto en Por pagar, "Falta la cuenta", resumen
+  sin semanas en curso y con meses anteriores, puntito rojo por eventos, error y Reintentar.
 - `tests/intermediaciones-finanzas.spec.js`: intermediaciones en el resumen del mes, el balance,
   Movimientos y Por cobrar / Por pagar (confirmación, ya marcado, falla, doble toque, escape, 390px).
 - `tests/terminos.spec.js`: términos y condiciones: casilla en la ficha y en el alta, bordes del redondeo
@@ -375,7 +377,10 @@ reporte.
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3). La semana de una
   fija que todavía no cerró (sábado, o domingo si trabaja el finde) se ve aparte como "Semana
   en curso, cierra el ..." con lo que lleva hasta hoy, sin botón y sin saldo a favor
-  (`porPagarEnCursoHtml`, 20/10/2026).
+  (`porPagarEnCursoHtml`, 20/10/2026). El "Por pagar a niñeras" del resumen tampoco la cuenta: va
+  aparte ("Más $X de semanas que todavía no cierran"), y en el mes actual se aclara cuánto de la
+  lista es de meses anteriores (21/10/2026). Pagan de a una desde el celular: cada fila tiene
+  "Copiar" (la cuenta) y "Copiar monto" (`copiarAlPortapapeles`, core.js).
 
 ## Pendientes
 Esta lista es la fuente de verdad de lo que falta en el sistema, para todas las sesiones y
@@ -414,8 +419,6 @@ descartado (19/10/2026): no proponerlo de nuevo.
   Son 4 a 6 pedidos por semana: por ahora no hace falta la API de WhatsApp.
 - Mensajes editables (20/10/2026): todo mensaje que se copia o abre WhatsApp tiene "Editar" antes
   de mandarlo y la opción de guardarlo como plantilla.
-- Pagos a niñeras (20/10/2026): pagan sábado o domingo desde Mercado Pago, de a una. En Finanzas →
-  Por pagar, la cuenta de cada niñera con un botón de copiar al lado del monto.
 - Mercado Pago automático (20/10/2026): van a usar todo Mercado Pago (cobros y pagos). Objetivo:
   que nadie marque nada a mano. Con la API de reportes (settlement_report / release_report,
   programables por día o semana), bajar solos los movimientos de entrada y salida y marcar solos
@@ -467,9 +470,6 @@ descartado (19/10/2026): no proponerlo de nuevo.
   como usado (`registrarAplicacionAjustes`), así que se volvería a descontar. Mientras tanto,
   con saldo a favor se marca desde Por cobrar / Por pagar.
 - Probar la conciliación de punta a punta con el extracto de un mes ya cerrado.
-- Resumen del mes (20/10/2026): el total "Por pagar a niñeras" suma la semana en curso de las
-  fijas y no coincide con la lista de Por pagar. Mostrarlo separado ("sin contar $X de semanas
-  que no cerraron") o decidir cuál es el número correcto.
 
 ### Funciones nuevas pedidas
 - Guía "Cómo se hace" dentro de la app (13/10/2026), BAJA PRIORIDAD (20/10/2026: saben hacer
@@ -484,11 +484,6 @@ descartado (19/10/2026): no proponerlo de nuevo.
 - Autoguardado de borrador en la Entrevista (red de seguridad si se cierra la pestaña o se
   queda sin batería): ofrecido, sin respuesta.
 - Modo offline (hoy no hay): pendiente aparte, sin fecha.
-
-### Tests
-- Fallan en la compu de Diego pero pasan en el CI (20/10/2026): pagos "lista todos y suma
-  bien" y exploratorio "monto negativo". Leen el modal o el autocompletar sin esperar a que
-  aparezca. Arreglarlos en un PR aparte.
 
 ### Cierre
 - Auditoría final módulo por módulo en el celular, antes de dar el sistema por terminado.

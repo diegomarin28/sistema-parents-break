@@ -340,7 +340,9 @@ function filtrarFijosSemanaIncompleta(sits, esTrabajoFijo){
   return (sits||[]).filter(r => !esTrabajoFijo(r) || finDeSemanaDesde(lunesDeSemana(r.fecha)) < hoy);
 }
 /* Números del resumen del mes (ver comentario en cargarFinanzas). */
-function resumenFinancieroMes(sitsTodos, gastosNegocio, gastosAbsorbidos=0, inter=null){
+// esEnCurso(r): sitting de una fija cuya semana todavía no cerró. No se debe todavía, como en
+// la lista de Por pagar (20/10/2026), así que va aparte de porPagar.
+function resumenFinancieroMes(sitsTodos, gastosNegocio, gastosAbsorbidos=0, inter=null, esEnCurso=()=>false){
   const hoy = todayISO();
   const suma = (lista, campo, cond=()=>true) => (lista||[]).filter(cond).reduce((s,r)=>s+(Number(r[campo])||0), 0);
   // Intermediaciones (20/10/2026): suman igual que un sitting, lo cobrado a Enrique o a la
@@ -357,7 +359,8 @@ function resumenFinancieroMes(sitsTodos, gastosNegocio, gastosAbsorbidos=0, inte
     porCobrar: suma(sitsTodos, 'cobro_familia', r=>!r.cobrado) + it.porCobrar,
     // Como la lista de Por pagar (E7): lo de días que todavía no pasaron no se debe todavía
     // (05/10/2026). Facturado y resultado sí lo cuentan, porque son del mes.
-    porPagar: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha <= hoy) + it.porPagar,
+    porPagar: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha <= hoy && !esEnCurso(r)) + it.porPagar,
+    porPagarEnCurso: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha <= hoy && esEnCurso(r)),
     porPagarFuturo: suma(sitsTodos, 'pago_ninera', r=>!r.pagado && r.fecha > hoy) + it.porPagarFuturo,
     // Gastos extra que absorbe Parents Break (13/10/2026): no se le cobran a nadie y se le
     // reintegran a la niñera, así que bajan la ganancia del mes.
@@ -449,6 +452,16 @@ async function marcarIntermediacionResuelta(inter){
   else toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
   refrescarFinanzasCompleto();
 }
+// El resumen es del mes y la lista de Por pagar junta todos los meses: en el mes actual se
+// avisa cuánto de la lista es de meses anteriores, para que se entienda por qué no coinciden.
+// Solo sittings ya pagables (sin semanas en curso); en otro mes no aplica y da 0.
+async function sinPagarDeMesesAnteriores(desde, esEnCurso){
+  if(finMes!==currentMonthStr()) return 0;
+  const { data, error } = await leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('id,fecha,pago_ninera,asignacion_id,ninera_id,familia_id,ninera_nombre,familia_nombre'))
+    .eq('pagado', false).gt('pago_ninera', 0).lt('fecha', desde).order('id'));
+  if(error) return 0; // es solo una aclaración: si falla, no se muestra
+  return data.filter(r=>!esEnCurso(r)).reduce((t,r)=>t+(Number(r.pago_ninera)||0), 0);
+}
 async function cargarFinanzas(){
   const chartReady = asegurarChart(); // en paralelo, no bloquea el resto de Finanzas
   const summary = document.getElementById('fin-summary');
@@ -467,7 +480,14 @@ async function cargarFinanzas(){
   // Si se navegó a otro módulo mientras esperábamos estos datos, no seguir —
   // evita escribir sobre una pantalla que ya no está (mismo caso que "Hoy").
   if(!document.getElementById('fin-movs')) return;
-  if(e1 || e2 || e3 || inter.error){ movsBox.innerHTML = errBox(e1||e2||e3||inter.error); return; }
+  // Si falla la lectura, lo que dependía de ella no puede quedar en "Cargando…" para siempre
+  // (21/10/2026): el error y Reintentar, en el resumen, el margen y Revisar meses.
+  const errorMes = e1||e2||e3||inter.error;
+  if(errorMes){
+    summary.innerHTML = '';
+    ['fin-movs','fin-margen-tabla','fin-revisar'].forEach(id=>{ const el = document.getElementById(id); if(el) el.innerHTML = errorConReintentoHtml(errorMes); });
+    return;
+  }
   cargarRevisarMes(sitsRaw, gastos, asigs);
   // Fijos automáticos (06/10/2026): lo previsto (días que todavía no llegaron) no entra en
   // ninguna cifra del mes; se muestra aparte, como referencia.
@@ -517,9 +537,14 @@ async function cargarFinanzas(){
   // registrado en el mes), así siempre se cumple facturado = cobrado + por cobrar. El margen por
   // familia/zona/tipo sigue esperando a que termine la semana de los fijos (renderMargen).
   finSitsTodosDelMes = sitsRaw || [];
-  const absorbidos = await sumarGastosAbsorbidos(finSitsTodosDelMes.map(r=>r.id));
+  const esTrabajoFijo = construirEsTrabajoFijo(asigs), trabajaFinde = construirTrabajaFinde(asigs);
+  const esEnCurso = r => esTrabajoFijo(r) && finDeSemanaDesde(lunesDeSemana(r.fecha), trabajaFinde(r.ninera_nombre)) >= todayISO();
+  const [absorbidos, previosSinPagar] = await Promise.all([
+    sumarGastosAbsorbidos(finSitsTodosDelMes.map(r=>r.id)),
+    sinPagarDeMesesAnteriores(desde, esEnCurso),
+  ]);
   if(!summary.isConnected) return; // se cambió de módulo mientras se leía
-  const res = resumenFinancieroMes(finSitsTodosDelMes, (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos, absorbidos, resumenIntermediaciones(inter.enrique, inter.eventos));
+  const res = resumenFinancieroMes(finSitsTodosDelMes, (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + totalFijos, absorbidos, resumenIntermediaciones(inter.enrique, inter.eventos), esEnCurso);
   const egresosNinieras = res.costoNinieras;
   const egresosGenerales = res.gastos;
   const egresos = egresosNinieras + egresosGenerales;
@@ -528,7 +553,7 @@ async function cargarFinanzas(){
     <div class="summarycard"><div class="statlabel">Facturado de ${monthLabel(finMes)}</div><div class="statnum" id="fin-facturado" style="font-size:19px;margin-top:3px;">${fmt(res.facturado)}</div></div>
     <div class="summarycard"><div class="statlabel">Cobrado (plata que ya entró)</div><div class="statnum" id="fin-cobrado" style="font-size:19px;margin-top:3px;color:var(--good);">${fmt(res.cobrado)}</div></div>
     <div class="summarycard"><div class="statlabel">Por cobrar</div><div class="statnum" id="fin-porcobrar" style="font-size:19px;margin-top:3px;color:var(--warn);">${fmt(res.porCobrar)}</div></div>
-    <div class="summarycard"><div class="statlabel">Por pagar a niñeras</div><div class="statnum" id="fin-porpagar" style="font-size:19px;margin-top:3px;color:var(--clay-text);">${fmt(res.porPagar)}</div>${res.porPagarFuturo ? `<div class="helper" id="fin-porpagar-futuro" style="margin:2px 0 0;">Sin contar ${fmt(res.porPagarFuturo)} de días que todavía no pasaron.</div>` : ''}</div>
+    <div class="summarycard"><div class="statlabel">Por pagar a niñeras</div><div class="statnum" id="fin-porpagar" style="font-size:19px;margin-top:3px;color:var(--clay-text);">${fmt(res.porPagar)}</div>${res.porPagarEnCurso ? `<div class="helper" id="fin-porpagar-semanas" style="margin:2px 0 0;">Más ${fmt(res.porPagarEnCurso)} de semanas que todavía no cierran.</div>` : ''}${res.porPagarFuturo ? `<div class="helper" id="fin-porpagar-futuro" style="margin:2px 0 0;">Sin contar ${fmt(res.porPagarFuturo)} de días que todavía no pasaron.</div>` : ''}${previosSinPagar ? `<div class="helper" id="fin-porpagar-previos" style="margin:2px 0 0;">En la lista de Por pagar hay ${fmt(previosSinPagar)} más de meses anteriores.</div>` : ''}</div>
     <div class="summarycard fin-resultado" style="grid-column:1/-1;border-left:3px solid ${res.resultado>=0?'var(--good)':'var(--bad)'};">
       <div class="statlabel">Resultado de ${monthLabel(finMes)}</div>
       <div class="statnum" id="fin-resultado" style="font-size:21px;margin-top:3px;color:${res.resultado>=0?'var(--good)':'var(--bad)'};">${fmt(res.resultado)}</div>
@@ -598,6 +623,10 @@ async function cargarFinanzas(){
   }).join('');
 }
 
+function errorConReintentoHtml(error){
+  return `${errBox(error)}<button class="smallbtn fin-reintentar" style="min-height:36px;margin-top:8px;" onclick="refrescarFinanzasCompleto()">Reintentar</button>`;
+}
+
 /* ---- Balance de varios meses ---- */
 let finBalanceChart = null;
 let finBalanceMeses = 6;
@@ -619,7 +648,7 @@ async function cargarBalanceMultiMes(nMeses){
     sb.from('gastos_fijos').select('monto,desde,activo'),
     leerIntermediacionesMes(desde, hasta),
   ]);
-  if(e1 || e2 || e3 || inter.error){ if(wrap) wrap.innerHTML = errBox(e1||e2||e3||inter.error); return; }
+  if(e1 || e2 || e3 || inter.error){ if(wrap) wrap.innerHTML = errorConReintentoHtml(e1||e2||e3||inter.error); return; }
   const porMes = {};
   meses.forEach(mes=> porMes[mes] = {ingresos:0, gastos:0});
   (sits||[]).forEach(r=>{
@@ -874,7 +903,7 @@ async function borrarAjusteSaldo(ajusteId, contId, sujeto, id, nombre){
 // período según su frecuencia). Lo usan esas dos listas y la conciliación con el extracto.
 async function calcularPendientesAgrupados(){
   await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
-  const [{data:pendCobrar}, {data:pendPagar}, {data:fams}, {data:nins}, {data:asigs}] = await Promise.all([
+  const [{data:pendCobrar, error:e1}, {data:pendPagar, error:e2}, {data:fams}, {data:nins}, {data:asigs}] = await Promise.all([
     sinPrevistos(sb.from('sittings_traslados').select('id,familia_id,familia_nombre,fecha,cobro_familia')).eq('cobrado', false).gt('cobro_familia', 0),
     // Por pagar solo muestra lo que ya pasó (05/10/2026, E7): un sitting cargado por
     // adelantado aparecía como para pagar y se le pagó a una niñera antes de que ocurriera.
@@ -907,7 +936,7 @@ async function calcularPendientesAgrupados(){
     const bucket = bucketKeyFecha(r.fecha, frec);
     const info = r.ninera_id ? ninInfoPorId[r.ninera_id] : ninInfoPorNombre[normaliza(r.ninera_nombre)];
     const key = (r.ninera_id||normaliza(r.ninera_nombre))+'|'+bucket;
-    if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuenta:(info?.cuenta_bancaria&&info.cuenta_bancaria.length)?info.cuenta_bancaria.join(' · '):''};
+    if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuentas:cuentasDeFicha(info)};
     gruposPagar[key].total += Number(r.pago_ninera)||0;
     gruposPagar[key].ids.push(r.id);
   });
@@ -934,12 +963,13 @@ async function calcularPendientesAgrupados(){
       const bucket = bucketKeyFecha(r.fecha, frec);
       const info = r.ninera_id ? ninInfoPorId[r.ninera_id] : ninInfoPorNombre[normaliza(r.ninera_nombre)];
       const key = (r.ninera_id||normaliza(r.ninera_nombre))+'|'+bucket;
-      if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuenta:(info?.cuenta_bancaria&&info.cuenta_bancaria.length)?info.cuenta_bancaria.join(' · '):''};
+      if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuentas:cuentasDeFicha(info)};
       (gruposPagar[key].gastos ||= []).push(item);
       gruposPagar[key].total += item.monto;
     }
   });
-  return { gruposCobrar:Object.values(gruposCobrar), gruposPagar:Object.values(gruposPagar), fams:fams||[], nins:nins||[] };
+  // Sin los pendientes no se puede decir "No hay pagos pendientes": quien llama muestra el error.
+  return { gruposCobrar:Object.values(gruposCobrar), gruposPagar:Object.values(gruposPagar), fams:fams||[], nins:nins||[], error:e1||e2 };
 }
 /* ---- Gastos extra (08/10/2026) ----
    Sin la tabla (base sin migrar) no hay gastos y todo sigue como antes. */
@@ -982,11 +1012,15 @@ function lineaServiciosHtml(g){
   return `<div class="helper fin-total-gastos" style="margin:2px 0 0;">${conGastos ? escaparHtml(conGastos) : `Servicios: $${(g.total - gastos).toLocaleString('es-UY')}`}</div>`;
 }
 async function cargarPorCobrarPorPagar(){
-  const [{ gruposCobrar, gruposPagar, nins }, inter] = await Promise.all([calcularPendientesAgrupados(), intermediacionesPendientes()]);
-  inter.pagar.forEach(g=>{
-    const info = nins.find(n=>n.id===g.ninera_id);
-    g.cuenta = info?.cuenta_bancaria?.length ? info.cuenta_bancaria.join(' · ') : '';
-  });
+  const [{ gruposCobrar, gruposPagar, nins, error }, inter] = await Promise.all([calcularPendientesAgrupados(), intermediacionesPendientes()]);
+  if(error){
+    [['fin-porcobrar-wrap','Por cobrar'], ['fin-porpagar-wrap','Por pagar']].forEach(([id, titulo])=>{
+      const box = document.getElementById(id);
+      if(box) box.innerHTML = `<h2>${titulo}</h2>${errorConReintentoHtml(error)}`;
+    });
+    return;
+  }
+  inter.pagar.forEach(g=>{ g.cuentas = cuentasDeFicha(nins.find(n=>n.id===g.ninera_id)); });
   const listaCobrar = gruposCobrar
     // Igual criterio que en Por pagar: un cobro semanal recién se muestra cuando esa
     // semana ya terminó, para no mostrar un total que todavía le faltan días por sumar.
@@ -1076,6 +1110,19 @@ function porPagarEnCursoHtml(enCurso){
       </div>`).join('')}
   </div>`;
 }
+/* Pagan sábado o domingo desde Mercado Pago, de a una y desde el celular (21/10/2026): la
+   cuenta y el monto se copian con un toque. Sin cuenta cargada, el aviso lleva a la ficha. */
+function cuentasDeFicha(info){ return (info?.cuenta_bancaria||[]).filter(Boolean); }
+// Sin "$" ni puntos de miles, para pegarlo en el campo del monto; los centavos con coma.
+function montoParaCopiar(n){ return String(Math.round((Number(n)||0)*100)/100).replace('.', ','); }
+function cuentasPorPagarHtml(g){
+  if(g.cuentas?.length) return g.cuentas.map(c=>`<div class="fin-cuenta" style="display:flex;align-items:center;gap:8px;margin:4px 0 0;flex-wrap:wrap;">
+      <span class="helper" style="margin:0;font-family:'IBM Plex Mono',monospace;">${escaparHtml(c)}</span>
+      <button class="smallbtn" style="min-height:36px;" onclick="copiarAlPortapapeles(${argJs(c)}, 'Cuenta copiada.')">Copiar</button>
+    </div>`).join('');
+  const link = g.ninera_id ? ` · <a href="#" onclick="abrirFichaDesdeHoy('ninera', ${argJs(g.ninera_id)});return false;">Cargarla en su ficha</a>` : '';
+  return `<div class="helper fin-falta-cuenta" style="margin:4px 0 0;color:var(--clay-text);">Falta la cuenta${link}</div>`;
+}
 function renderPorPagar(lista, sueltos=[], enCurso=[]){
   const box = document.getElementById('fin-porpagar-wrap');
   if(!box) return;
@@ -1091,12 +1138,13 @@ function renderPorPagar(lista, sueltos=[], enCurso=[]){
         <div>
           <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
           <div class="helper" style="margin:2px 0 0;">${subtituloPendienteHtml(g)}</div>
-          ${g.cuenta ? `<div class="helper" style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;">${escaparHtml(g.cuenta)}</div>` : ''}
+          ${cuentasPorPagarHtml(g)}
           ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Reintegro de gasto')}${lineasAjustesHtml(g.ajustes)}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${(g.totalNeto ?? g.total).toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="conGuardado(this, ()=>${g.inter ? `marcarIntermediacionResuelta(${argJs(g.inter)})` : `marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}, ${argJs(g.gastos||[])})`})">Marcar pagado</button>
+          <button class="smallbtn fin-copiar-monto" style="min-height:36px;" onclick="copiarAlPortapapeles(${argJs(montoParaCopiar(g.totalNeto ?? g.total))}, 'Monto copiado.')">Copiar monto</button>
+          <button class="smallbtn" style="min-height:36px;" onclick="conGuardado(this, ()=>${g.inter ? `marcarIntermediacionResuelta(${argJs(g.inter)})` : `marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}, ${argJs(g.gastos||[])})`})">Marcar pagado</button>
         </div>
       </div>`).join('')}
     ${porPagarEnCursoHtml(enCurso)}

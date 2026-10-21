@@ -95,11 +95,13 @@ test.describe('Por pagar del resumen sin días futuros', () => {
     await expect(page.locator('#fin-facturado')).toHaveText('$2.280');
     verificarLimpio(e);
   });
-  test('cuando llega el día entra en Por pagar y desaparece el aviso', async ({ page }) => {
+  test('cuando llega el día desaparece el aviso y, si es de una fija, espera a que cierre la semana', async ({ page }) => {
     const e = await abrirApp(page, { datos: datosConFuturo(), ahora: '2026-10-10T09:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     await verMes(page, '2026-10');
-    await expect(page.locator('#fin-porpagar')).toHaveText('$1.500');
+    // El del 10/10 es de la fija de Ana: su semana cierra hoy, así que va aparte (21/10/2026).
+    await expect(page.locator('#fin-porpagar')).toHaveText('$750');
+    await expect(page.locator('#fin-porpagar-semanas')).toHaveText('Más $750 de semanas que todavía no cierran.');
     await expect(page.locator('#fin-porpagar-futuro')).toHaveCount(0);
     verificarLimpio(e);
   });
