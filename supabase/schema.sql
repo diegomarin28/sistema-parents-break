@@ -135,6 +135,8 @@ create table public.carsitting_datos (
   foto_libreta_url text,
   foto_asientos_url text,
   created_at timestamp with time zone default now() not null,
+  telefono text, -- 21/10/2026: celular y mail del formulario, para unirla a la niñera
+  mail text,
   constraint carsitting_datos_pkey PRIMARY KEY (id)
 );
 
@@ -1179,6 +1181,69 @@ create trigger ajustes_saldo_historial_trg
 create trigger gastos_extra_historial_trg
   after insert or update or delete on public.gastos_extra
   for each row execute function public.registrar_historial_finanzas();
+
+-- Car sitting (21/10/2026): una respuesta del formulario que llega sin niñera se une sola por
+-- celular (últimos 8 dígitos), mail de la candidata o nombre; solo si hay una sola posible
+-- (prefiere la activa). Lo que no se une queda "Sin identificar" para unirlo a mano.
+create or replace function public.vincular_carsitting()
+returns trigger
+language plpgsql
+set search_path to ''
+as $function$
+declare
+  v_tel text := right(regexp_replace(coalesce(new.telefono, ''), '\D', '', 'g'), 8);
+  v_mail text := lower(trim(coalesce(new.mail, '')));
+  v_nombre text := regexp_replace(translate(lower(trim(coalesce(new.nombre_completo, ''))),
+                     'áàäâãéèëêíìïîóòöôõúùüûñç', 'aaaaaeeeeiiiiooooouuuunc'), '\s+', ' ', 'g');
+  v_activas uuid[];
+  v_todas uuid[];
+begin
+  if new.ninera_id is not null then
+    return new;
+  end if;
+
+  -- 1) Celular: los últimos 8 dígitos (con 0 adelante, con +598 o sin nada es el mismo número).
+  if length(v_tel) = 8 then
+    select array_agg(n.id) filter (where n.activa), array_agg(n.id)
+      into v_activas, v_todas
+      from public.ninieras n
+     where right(regexp_replace(coalesce(n.telefono, ''), '\D', '', 'g'), 8) = v_tel;
+    if cardinality(v_activas) = 1 then new.ninera_id := v_activas[1]; return new; end if;
+    if coalesce(cardinality(v_activas), 0) = 0 and cardinality(v_todas) = 1 then new.ninera_id := v_todas[1]; return new; end if;
+  end if;
+
+  -- 2) Mail: el que dejó como candidata (la niñera no tiene mail propio).
+  if v_mail <> '' then
+    select array_agg(n.id) filter (where n.activa), array_agg(n.id)
+      into v_activas, v_todas
+      from public.ninieras n
+      join public.candidatas c on c.id = n.candidata_id
+     where lower(trim(coalesce(c.mail, ''))) = v_mail;
+    if cardinality(v_activas) = 1 then new.ninera_id := v_activas[1]; return new; end if;
+    if coalesce(cardinality(v_activas), 0) = 0 and cardinality(v_todas) = 1 then new.ninera_id := v_todas[1]; return new; end if;
+  end if;
+
+  -- 3) Nombre: igual al de la ficha sin tildes, mayúsculas ni espacios de más (lo de antes).
+  if v_nombre <> '' then
+    select array_agg(n.id) filter (where n.activa), array_agg(n.id)
+      into v_activas, v_todas
+      from public.ninieras n
+     where regexp_replace(translate(lower(trim(n.nombre)),
+             'áàäâãéèëêíìïîóòöôõúùüûñç', 'aaaaaeeeeiiiiooooouuuunc'), '\s+', ' ', 'g') = v_nombre;
+    if cardinality(v_activas) = 1 then new.ninera_id := v_activas[1]; return new; end if;
+    if coalesce(cardinality(v_activas), 0) = 0 and cardinality(v_todas) = 1 then new.ninera_id := v_todas[1]; return new; end if;
+  end if;
+
+  return new;
+end
+$function$;
+revoke execute on function public.vincular_carsitting() from public, anon, authenticated;
+
+-- Solo al entrar una respuesta o si le corrigen el celular, el mail o el nombre. Unir o desunir
+-- a mano (cambiar ninera_id) no lo dispara.
+create trigger carsitting_vincular
+  before insert or update of telefono, mail, nombre_completo on public.carsitting_datos
+  for each row execute function public.vincular_carsitting();
 
 
 -- Términos y condiciones (20/10/2026).

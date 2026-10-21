@@ -1750,7 +1750,7 @@ const RT_TABLAS_POR_MODULO = {
   hoy: ['sittings_traslados','gastos_generales','solicitudes','asignaciones','candidatas','ninieras','familias','solicitud_ninieras'],
   agenda: ['solicitudes','solicitud_ninieras','asignaciones','sittings_traslados','familias','ninieras'],
   rrhh: ['candidatas','entrevistas','carsitting_datos','ninieras'],
-  ninieras: ['ninieras','candidatas','resenas_ninieras','sittings_traslados','juguetes'],
+  ninieras: ['ninieras','candidatas','resenas_ninieras','sittings_traslados','juguetes','carsitting_datos','app_config'],
   familias: ['familias','asignaciones','sittings_traslados','resenas_ninieras','ninieras'],
   sittings: ['sittings_traslados','familias','ninieras','resenas_ninieras','tarifas_traslado_config'],
   finanzas: ['sittings_traslados','gastos_generales','gastos_extra','ajustes_saldo','gastos_fijos','familias','ninieras','asignaciones','app_config','intermediaciones_enrique','intermediaciones_eventos','intermediaciones_eventos_ninieras'],
@@ -1759,8 +1759,15 @@ const RT_TABLAS_POR_MODULO = {
   juguetes: ['juguetes','juguetes_movimientos','ninieras'],
   intermediaciones: ['intermediaciones_enrique','intermediaciones_eventos','intermediaciones_eventos_ninieras','intermediaciones_enrique_pool','ninieras'],
 };
+// Más liviana todavía, para tablas que solo usa una parte del módulo: una respuesta nueva del
+// formulario de car sitting (o el mensaje editado en otro celular, app_config) repinta solo
+// el panel de car sitting, sin volver a pedir toda la lista de niñeras (21/10/2026).
+const RT_RECARGA_POR_TABLA = {
+  ninieras: { carsitting_datos: 'cargarCarsittingPanel', app_config: 'cargarCarsittingPanel' },
+};
 let rtChannel = null;
 let rtRefrescarTimer = null;
+let rtTablasPendientes = new Set(); // tablas que cambiaron desde el último repintado
 // Recarga liviana por módulo: solo trae los datos de nuevo y repinta la lista, sin destruir
 // y reconstruir el módulo entero (buscador, filtros, etc.) como hace renderModulo(). Antes,
 // CUALQUIER cambio en 'ninieras' o 'familias' — incluido tu propio guardado, que ya se
@@ -1780,6 +1787,7 @@ const RT_RECARGA_LIVIANA = {
 };
 function suscribirRealtimeModuloActivo(){
   if(rtChannel){ sb.removeChannel(rtChannel); rtChannel = null; }
+  rtTablasPendientes = new Set();
   const clave = moduloActivo && !moduloActivo.startsWith('pend-') ? moduloActivo : 'hoy';
   const tablas = RT_TABLAS_POR_MODULO[clave] || [];
   if(!tablas.length) return;
@@ -1787,15 +1795,22 @@ function suscribirRealtimeModuloActivo(){
   tablas.forEach(t=>{
     rtChannel.on('postgres_changes', {event:'*', schema:'public', table:t}, ()=>{
       clearTimeout(rtRefrescarTimer);
+      rtTablasPendientes.add(t);
       const refrescar = async ()=>{
         const claveAhora = moduloActivo && !moduloActivo.startsWith('pend-') ? moduloActivo : 'hoy';
-        if(claveAhora !== clave) return; // ya se cambió de módulo: ese módulo cargó datos frescos
+        if(claveAhora !== clave){ rtTablasPendientes.clear(); return; } // ya se cambió de módulo: ese módulo cargó datos frescos
         // Con un formulario abierto no se interrumpe, pero el cambio no se pierde: se aplica
         // apenas se cierra (antes se descartaba y la pantalla quedaba vieja hasta recargar).
         if(document.querySelector('.confirmoverlay.show')){ rtRefrescarTimer = setTimeout(refrescar, 800); return; }
+        const tablas = [...rtTablasPendientes];
+        rtTablasPendientes.clear();
+        // Si todo lo que cambió tiene su recarga por tabla, alcanza con esa; si no, la del módulo.
+        const porTabla = RT_RECARGA_POR_TABLA[clave] || {};
+        const soloPorTabla = tablas.length && tablas.every(x=>porTabla[x] && window[porTabla[x]]);
         const recargaLiviana = RT_RECARGA_LIVIANA[clave] && window[RT_RECARGA_LIVIANA[clave]];
         const scrollRT = guardarScrollMainarea();
-        if(recargaLiviana){ await recargaLiviana(); }
+        if(soloPorTabla){ for(const f of new Set(tablas.map(x=>porTabla[x]))) await window[f](); }
+        else if(recargaLiviana){ await recargaLiviana(); }
         else { renderModulo(); }
         restaurarScrollMainarea(scrollRT);
       };

@@ -1334,7 +1334,12 @@ function textoTotalConGastos(etiqueta, base, gastos){
 async function copiarAlPortapapeles(texto, aviso='Copiado.'){
   try{ await navigator.clipboard.writeText(texto); toast(aviso); }
   catch(e){
-    abrirModal(`<h2 style="margin:0 0 8px;">Copialo de acá</h2><input type="text" id="copiar-a-mano" readonly value="${escaparHtml(texto)}" style="font-family:'IBM Plex Mono',monospace;">`);
+    // Un texto de varias líneas (un mensaje de WhatsApp) va en un cuadro grande, para que se
+    // copie entero con los saltos de línea.
+    const campo = String(texto).includes('\n')
+      ? `<textarea id="copiar-a-mano" readonly style="width:100%;min-height:180px;">${escaparHtml(texto)}</textarea>`
+      : `<input type="text" id="copiar-a-mano" readonly value="${escaparHtml(texto)}" style="font-family:'IBM Plex Mono',monospace;">`;
+    abrirModal(`<h2 style="margin:0 0 8px;">Copialo de acá</h2>${campo}`);
     document.getElementById('copiar-a-mano')?.select();
   }
 }

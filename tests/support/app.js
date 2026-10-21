@@ -149,7 +149,8 @@ function nuevoId() { secuenciaId++; return `00000000-0000-4000-9000-${String(sec
  *   ruta: path a abrir (por defecto '/')
  *   baseSinMigrar: true simula la base ANTES de la migración del 05/10/2026 (asignaciones
  *     sin vigencia/tipo, sin tabla sittings_historial) y de las siguientes (familias sin
- *     terminos_aceptados_el, 20/10/2026), con los mismos errores que Supabase
+ *     terminos_aceptados_el, 20/10/2026; carsitting_datos sin telefono ni mail, 21/10/2026),
+ *     con los mismos errores que Supabase
  */
 async function abrirApp(page, opciones = {}) {
   const { datos = {}, sesion = true, ahora = '2026-10-04T12:00:00-03:00', ruta = '/', baseSinMigrar = false } = opciones;
@@ -251,6 +252,10 @@ async function abrirApp(page, opciones = {}) {
     // Términos y condiciones (20/10/2026): sin la migración, familias no tiene la columna.
     if (baseSinMigrar && tabla === 'familias' && /terminos_aceptados_el/.test((url.searchParams.get('select') || '') + (req.postData() || ''))) {
       return route.fulfill({ status: 400, json: { code: '42703', message: 'column familias.terminos_aceptados_el does not exist' } });
+    }
+    // Car sitting (21/10/2026): sin la migración, carsitting_datos no tiene celular ni mail.
+    if (baseSinMigrar && tabla === 'carsitting_datos' && /\b(telefono|mail)\b/.test(url.searchParams.get('select') || '')) {
+      return route.fulfill({ status: 400, json: { code: '42703', message: 'column carsitting_datos.telefono does not exist' } });
     }
     if (baseSinMigrar && tabla === 'asignaciones' && ['POST', 'PATCH'].includes(metodo) && req.postData()) {
       const filas = [].concat(JSON.parse(req.postData()));
