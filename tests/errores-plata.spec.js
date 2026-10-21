@@ -112,10 +112,11 @@ test.describe('Finanzas → editar un movimiento no pisa cobrado / pagado de otr
     // Mientras tanto, desde otro celular, lo marcan como cobrado.
     e.db.sittings_traslados.find(r => r.id === ID_SEP28).cobrado = true;
     await page.fill('#fin-mov-cobro', '1200');
+    await page.selectOption('#fin-mov-motivo', 'descuento'); // cambiar el monto pide el motivo (21/10/2026)
     await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
     await expect(page.locator('#editmodal')).toHaveCount(0);
     const [w] = escriturasEn(e, 'sittings_traslados', 'PATCH');
-    expect(w.cuerpo).toEqual({ cobro_familia: 1200, pago_ninera: 750 });
+    expect(w.cuerpo).toEqual({ cobro_familia: 1200, pago_ninera: 750, precio_motivo: 'descuento' });
     expect(e.db.sittings_traslados.find(r => r.id === ID_SEP28)).toMatchObject({ cobro_familia: 1200, cobrado: true, pagado: false });
     verificarLimpio(e);
   });
@@ -125,6 +126,7 @@ test.describe('Finanzas → editar un movimiento no pisa cobrado / pagado de otr
     await abrirMovimiento(page, ID_SEP28);
     e.db.sittings_traslados.find(r => r.id === ID_SEP28).cobrado = true;
     await page.fill('#fin-mov-cobro', '1200');
+    await page.selectOption('#fin-mov-motivo', 'descuento'); // cambiar el monto pide el motivo (21/10/2026)
     await page.check('#fin-mov-cobrado');
     await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
     await expect(page.locator('#fin-mov-warn')).toContainText('alguien más');

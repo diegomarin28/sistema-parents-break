@@ -8,6 +8,7 @@ let sitAsignacionId = null; // fijo del que sale el registro nuevo (vino con sit
 let sitEsRegistroConocido = false; // true si se está editando uno ya guardado, o si vino con sitPrefill (un fijo/pendiente ya sabido) — controla si tiene sentido mostrar "Este día no hubo servicio"
 let sitPagoModoHora = false; // true = el campo de pago a niñera se tipea por hora (y se calcula el total solo), false = se tipea el total directo
 let sitEditId = null;
+let sitPrecioMotivo = ''; // el motivo guardado del registro que se edita (precio a mano, 21/10/2026)
 let sitFamiliaSel = null;
 let sitNineraSel = null;
 let sitOrigenAuto = true;
@@ -27,7 +28,7 @@ function findNinera(nombre){ const n = normaliza(nombre); return sitNinieras.fin
 
 async function renderSittings(body){
   sitMes = sitMes || currentMonthStr();
-  sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting';
+  sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting'; sitPrecioMotivo = '';
   body.innerHTML = `
     <div style="display:flex;justify-content:center;margin-bottom:16px;">
       <button class="btn primary" style="font-size:16px;padding:14px 40px;" onclick="abrirModalSitForm()">+ Agregar sitting o traslado</button>
@@ -551,10 +552,10 @@ function sitFormHTML(){
       Este día no hubo servicio (canceló la familia o faltó la niñera sin reemplazo) — sin cargo
     </label>
     <div class="grid2">
-      <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-cobro')"></div>
+      <div class="field"><label>Cobro a familia</label><input type="number" id="sit-cobro" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-cobro');refrescarSugerenciaPrecioSit()"></div>
       <div class="field">
         <label>Pago TOTAL a niñera <span style="font-weight:400;color:var(--ink-soft);">(no por hora)</span></label>
-        <input type="number" id="sit-pago" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-pago')">
+        <input type="number" id="sit-pago" value="0" oninput="calcSitMargen();marcarCampoEditadoManual('sit-pago');refrescarSugerenciaPrecioSit()">
         ${sitTipo==='sitting' ? `<a href="#" id="sit-pago-modo-link" onclick="toggleSitPagoModoHora();return false;" style="display:inline-block;margin-top:5px;font-size:11.5px;color:var(--ink);text-decoration:underline;cursor:pointer;">poner pago por hora</a>` : ''}
         <div id="sit-pago-hora-wrap" style="display:none;margin-top:6px;">
           <input type="number" id="sit-pago-hora" placeholder="Pago por hora, ej. 280" oninput="onSitPagoHoraInput()">
@@ -663,6 +664,7 @@ async function abrirModalSitForm(id=null){
     r = data;
   }
   sitEditId = id;
+  sitPrecioMotivo = r?.precio_motivo || '';
   sitEsRegistroConocido = !!r || !!sitPrefill; // nuevo en blanco -> no corresponde "no hubo servicio"
   sitPagoModoHora = false;
   sitAsignacionId = (!r && sitPrefill?.asignacionId) || null;
@@ -735,6 +737,7 @@ async function abrirModalSitForm(id=null){
       sitPrefill = null;
     }
     calcSitMargen();
+    refrescarSugerenciaPrecioSit(); // un registro con precio a mano muestra su motivo al abrir
     // Después de precargar (lo precargado no cuenta como cambio): borrador y aviso antes de
     // cerrar con cambios (21/10/2026).
     protegerModal('sitting:'+(id || 'nuevo'));
@@ -1436,6 +1439,16 @@ function actualizarCobroPagoPorHorario(){
   if(sitPagoModoHora) onSitPagoHoraInput(); // si cambió el horario, recalcula el total con el valor por hora ya tipeado
   calcSitMargen();
 }
+// Al tipear un precio, el aviso de "no es el de la tarifa" (con el motivo) aparece enseguida, sin
+// tocar los montos ni lo demás del formulario (21/10/2026).
+function refrescarSugerenciaPrecioSit(){
+  if(sitTipo!=='sitting' || !sitFamiliaSel || document.getElementById('sit-cancelado')?.checked) return;
+  const horaIni = leerHora('sit-horaini'), horaFin = leerHora('sit-horafin');
+  if(!horaIni || !horaFin) return;
+  const calc = precioSegunHorario(sitFamiliaSel, horaIni, horaFin, document.getElementById('sit-cruza-medianoche')?.checked || false, document.getElementById('sit-fecha')?.value);
+  if(sitPagoModoHora) calc.pago = null;
+  pintarSugerenciaPrecioSit(calc);
+}
 // Cobro y pago de un sitting según el horario y la tarifa de la familia (null si no se puede).
 function precioSegunHorario(familia, horaIni, horaFin, cruza, fechaISO){
   const horas = horasSitting(horaIni, horaFin, cruza, familia, fechaISO);
@@ -1452,8 +1465,11 @@ function pintarSugerenciaPrecioSit(calc){
   const plata = n => '$'+Number(n).toLocaleString('es-UY');
   const difiere = (id, n) => { const el = document.getElementById(id); return n!=null && !!el?.dataset.tocadoManual && Number(el.value)!==n; };
   const partes = [difiere('sit-cobro', calc.cobro) ? `cobro ${plata(calc.cobro)}` : '', difiere('sit-pago', calc.pago) ? `pago ${plata(calc.pago)}` : ''].filter(Boolean);
+  // El motivo elegido se conserva al volver a dibujar el aviso (se redibuja con cada cambio).
+  const motivo = document.getElementById('sit-precio-motivo')?.value ?? sitPrecioMotivo;
   if(!partes.length){ box.innerHTML = ''; return; }
   box.innerHTML = `<div class="warnbox" style="margin:0 0 10px;">Con este horario y la tarifa de la familia: ${partes.join(' y ')}. Lo que pusiste a mano no se cambió.
+    ${htmlMotivoPrecio('sit-precio-motivo', motivo)}
     <div style="margin-top:6px;"><button type="button" class="smallbtn" onclick="usarPrecioCalculadoSit(${argJs(difiere('sit-cobro', calc.cobro) ? calc.cobro : null)}, ${argJs(difiere('sit-pago', calc.pago) ? calc.pago : null)})">Usar estos montos</button></div></div>`;
 }
 function usarPrecioCalculadoSit(cobro, pago){
@@ -1611,6 +1627,10 @@ async function guardarSitting(){
   }
   // Un monto negativo (un "-" de más al tipear) deformaba Finanzas sin avisar (05/10/2026).
   if(registro.cobro_familia < 0 || registro.pago_ninera < 0){ toast('Los montos no pueden ser negativos.', 'bad'); return; }
+  // Precio a mano (21/10/2026): si no coincide con el de la tarifa, se anota por qué.
+  const motivoEl = document.getElementById('sit-precio-motivo');
+  if(motivoEl && !motivoEl.value){ toast('Elegí por qué el precio no es el de la tarifa: descuento, extra, se cobra sin servicio u otro.', 'bad'); motivoEl.focus(); return; }
+  registro.precio_motivo = motivoEl ? motivoEl.value : null;
   // Gastos extra nuevos: se revisan ANTES de guardar el registro (concepto, monto y foto).
   const gastosNuevos = leerGastosExtraNuevos();
   if(gastosNuevos.error){ toast(gastosNuevos.error, 'bad'); return; }
@@ -1639,16 +1659,18 @@ async function guardarSitting(){
     const choqueFamilia = await chequearFamiliaYaCubierta(registro.familia_id, fecha, registro.hora_inicio, registro.hora_fin, nineraNombre, sitEditId);
     if(!(await avisarSiFamiliaYaCubierta(choqueFamilia, familiaNombre, 'Sí, van dos'))) return;
   }
-  let error, sitGuardadoId = sitEditId;
-  if(sitEditId){
-    ({ error } = await sb.from('sittings_traslados').update(registro).eq('id', sitEditId));
-  } else {
-    let creado;
-    if(sitAsignacionId) registro.asignacion_id = sitAsignacionId; // día de un fijo cargado desde "Sin registrar"
-    ({ data: creado, error } = await sb.from('sittings_traslados').insert(registro).select('id').single());
-    sitGuardadoId = creado?.id || null;
-  }
+  let sitGuardadoId = sitEditId;
+  if(!sitEditId && sitAsignacionId) registro.asignacion_id = sitAsignacionId; // día de un fijo cargado desde "Sin registrar"
+  const escribir = ()=> sitEditId
+    ? sb.from('sittings_traslados').update(registro).eq('id', sitEditId)
+    : sb.from('sittings_traslados').insert(registro).select('id').single();
+  let res = await escribir();
+  let sinMotivo = false;
+  if(esFaltaColumnaMotivo(res.error)){ sinMotivo = registro.precio_motivo != null; delete registro.precio_motivo; res = await escribir(); }
+  const error = res.error;
+  if(!sitEditId) sitGuardadoId = res.data?.id || null;
   if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
+  if(sinMotivo) toast('Se guardó, pero sin el motivo del precio: falta actualizar la base. Avisale a Diego.', 'bad');
   // Si falla un gasto, el registro ya está guardado: se dice qué faltó y no se muestra
   // además el "Registro guardado" en verde (06/10/2026).
   let falloGastos = null;
@@ -1684,7 +1706,7 @@ async function guardarSitting(){
   } else if(!falloGastos){
     toast(sitEditId ? 'Registro actualizado.' : 'Registro guardado.');
   }
-  sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting'; sitAsignacionId = null;
+  sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting'; sitAsignacionId = null; sitPrecioMotivo = '';
   cerrarModal();
   cargarSitLista();
 }

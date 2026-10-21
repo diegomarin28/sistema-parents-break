@@ -101,6 +101,7 @@ test('editar un sitting desde Revisar meses recalcula los totales del mes', asyn
   const antes = Number((await page.locator('#fin-facturado').innerText()).replace(/[$.]/g, ''));
   await fila(page, S(2)).locator('button', { hasText: 'Editar' }).click();
   await page.locator('#fin-mov-cobro').fill('1140');
+  await page.selectOption('#fin-mov-motivo', 'otro'); // cambiar el monto pide el motivo (21/10/2026)
   await page.locator('#editmodal .confirmbtns button', { hasText: 'Guardar' }).click();
   await expect(page.locator('.toaststack .toast', { hasText: 'Movimiento actualizado.' })).toBeVisible();
   await expect(page.locator('#fin-facturado')).toHaveText('$' + (antes + 1140).toLocaleString('es-UY'));

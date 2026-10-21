@@ -1637,6 +1637,8 @@ function editarMovimientoSitting(id){
       <label class="chk"><input type="checkbox" id="fin-mov-pagado" data-antes="${r.pagado?'1':'0'}" ${r.pagado?'checked':''}> Ya se le pagó</label>
     </div>
     <div class="helper" style="margin-top:10px;">Marcar cobrado o pagado no cambia el resultado del mes: solo indica si la plata ya entró o ya salió.</div>
+    ${htmlMotivoPrecio('fin-mov-motivo', r.precio_motivo || '')}
+    <div class="helper" style="margin:2px 0 0;">Si cambiás el cobro o el pago, elegí por qué.</div>
     <div id="fin-mov-warn"></div>
     <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="editarRegistroDesdeAgenda(${argJs(r.id)})">Cambiar horario, familia o niñera</button>
     <div class="confirmbtns">
@@ -1659,15 +1661,29 @@ async function guardarMovimientoSitting(id){
   // al abrir el formulario: si la otra admin los cambió mientras tanto, no se pisan. Antes se
   // mandaban siempre y se desmarcaba un cobro que la otra acababa de marcar (auditoría, 21/10/2026).
   const cambios = { cobro_familia: cobro, pago_ninera: pago };
+  // Precio a mano (21/10/2026): cambiar el monto acá es ponerlo a mano, así que se pide por qué.
+  const original = finSitsTodosDelMes.find(x=>x.id===id);
+  const montoCambiado = !original || cobro!==Number(original.cobro_familia||0) || pago!==Number(original.pago_ninera||0);
+  const motivo = document.getElementById('fin-mov-motivo')?.value || '';
+  if(montoCambiado && !motivo){
+    if(warn) warn.innerHTML = '<div class="warnbox">Cambiaste el monto: elegí por qué (descuento, extra, se cobra sin servicio u otro).</div>';
+    return;
+  }
+  if(montoCambiado || motivo !== (original?.precio_motivo || '')) cambios.precio_motivo = motivo || null;
   const marcas = ['cobrado', 'pagado'].map(campo=>{
     const chk = document.getElementById('fin-mov-'+campo);
     return { campo, antes: chk.dataset.antes==='1', ahora: chk.checked };
   }).filter(m=>m.antes!==m.ahora);
   marcas.forEach(m=>{ cambios[m.campo] = m.ahora; });
   if(cambios.pagado===true && !(await confirmarPagoSittings([id], {[id]: pago}))) return;
-  let consulta = sb.from('sittings_traslados').update(cambios).eq('id', id);
-  marcas.forEach(m=>{ consulta = consulta.eq(m.campo, m.antes); });
-  const { data, error } = await consulta.select('id');
+  const escribir = ()=>{
+    let consulta = sb.from('sittings_traslados').update(cambios).eq('id', id);
+    marcas.forEach(m=>{ consulta = consulta.eq(m.campo, m.antes); });
+    return consulta.select('id');
+  };
+  let { data, error } = await escribir();
+  let sinMotivo = false;
+  if(esFaltaColumnaMotivo(error)){ sinMotivo = cambios.precio_motivo != null; delete cambios.precio_motivo; ({ data, error } = await escribir()); }
   if(error){ if(warn) warn.innerHTML = errBox(error); return; }
   if(!data || !data.length){
     if(warn) warn.innerHTML = `<div class="warnbox">${marcas.length
@@ -1677,6 +1693,7 @@ async function guardarMovimientoSitting(id){
   }
   cerrarModal();
   toast('Movimiento actualizado.');
+  if(sinMotivo) toast('Se guardó, pero sin el motivo del precio: falta actualizar la base. Avisale a Diego.', 'bad');
   refrescarFinanzasCompleto();
 }
 
@@ -2086,7 +2103,8 @@ function sospechasDelMes(sits, ctx){
       const tarifa = Number(asig?.cobro_hora) || Number(fam?.cobro_hora) || 0;
       if(horas && tarifa){ esperado = redondearCobro(horas*tarifa); deDonde = Number(asig?.cobro_hora) ? 'el fijo' : 'la tarifa de la familia'; }
     }
-    if(esperado && cobro>0 && Math.abs(cobro-esperado) > esperado*0.30) agregar(r.id, `Cobro ${fmt(cobro)}; con ${deDonde} daría ${fmt(esperado)}`);
+    // Con el motivo anotado (precio a mano, 21/10/2026) ya está explicado: no es sospechoso.
+    if(esperado && cobro>0 && !r.precio_motivo && Math.abs(cobro-esperado) > esperado*0.30) agregar(r.id, `Cobro ${fmt(cobro)}; con ${deDonde} daría ${fmt(esperado)}`);
     if(r.pagado && !r.cobrado && r.fecha < sumarDiasISO(ctx.hoy, -30)) agregar(r.id, 'Pagado a la niñera y sin cobrar hace más de 30 días');
   });
   sits.forEach(r=>{ if(r.revisado_at || r.cancelado) delete out[r.id]; });

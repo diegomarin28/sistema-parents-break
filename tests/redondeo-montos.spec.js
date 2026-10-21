@@ -129,6 +129,7 @@ test.describe('montos tipeados a mano', () => {
       await nuevoSitting(page, { ini: '14:00', fin: '17:00' });
       await page.fill('#sit-cobro', tipeado);
       await page.fill('#sit-pago', tipeado);
+      await page.selectOption('#sit-precio-motivo', 'otro'); // no es el de la tarifa: pide el motivo (21/10/2026)
       await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
       await expect(page.locator('#editmodal')).toHaveCount(0);
       expect(escrituras(e, 'sittings_traslados', 'POST')[0].cuerpo).toMatchObject({ cobro_familia: cobro, pago_ninera: pago });
@@ -144,6 +145,7 @@ test.describe('montos tipeados a mano', () => {
     await page.evaluate(i => editarMovimientoSitting(i), SIT_28);
     await page.fill('#fin-mov-cobro', '600.5');
     await page.fill('#fin-mov-pago', '600.5');
+    await page.selectOption('#fin-mov-motivo', 'otro'); // cambiar el monto pide el motivo (21/10/2026)
     await page.check('#fin-mov-pagado');
     await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
     await expect(page.locator('#pago-total')).toHaveText('$600');

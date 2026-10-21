@@ -252,6 +252,10 @@ async function abrirApp(page, opciones = {}) {
     if (baseSinMigrar && tabla === 'familias' && /terminos_aceptados_el/.test((url.searchParams.get('select') || '') + (req.postData() || ''))) {
       return route.fulfill({ status: 400, json: { code: '42703', message: 'column familias.terminos_aceptados_el does not exist' } });
     }
+    // Precio a mano (21/10/2026): sin la migración, sittings_traslados no tiene precio_motivo.
+    if (baseSinMigrar && tabla === 'sittings_traslados' && ['POST', 'PATCH'].includes(metodo) && /"precio_motivo"/.test(req.postData() || '')) {
+      return route.fulfill({ status: 400, json: { code: 'PGRST204', message: "Could not find the 'precio_motivo' column of 'sittings_traslados' in the schema cache" } });
+    }
     if (baseSinMigrar && tabla === 'asignaciones' && ['POST', 'PATCH'].includes(metodo) && req.postData()) {
       const filas = [].concat(JSON.parse(req.postData()));
       const col = ['vigente_desde', 'vigente_hasta', 'tipo'].find(c => filas.some(f => c in f));

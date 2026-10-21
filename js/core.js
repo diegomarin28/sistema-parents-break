@@ -1281,6 +1281,16 @@ function fechaNegocioISO(d){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function todayISO(){ return fechaNegocioISO(new Date()); }
+/* Precio puesto a mano (21/10/2026, Paulina y Delfina): cuando el precio de un sitting no es el de
+   la tarifa, se anota por qué (sittings_traslados.precio_motivo). Lo piden el registro (si no
+   coincide con el calculado) y "Editar movimiento" en Finanzas (si se cambia el monto). */
+const MOTIVOS_PRECIO = [['descuento', 'Descuento'], ['extra', 'Extra'], ['sin_servicio', 'Se cobra sin servicio'], ['otro', 'Otro (contalo en las notas)']];
+function htmlMotivoPrecio(id, actual){
+  return `<div class="field" style="margin:8px 0 0;"><label for="${id}">¿Por qué este precio? (queda anotado)</label>
+    <select id="${id}"><option value="">Elegí el motivo…</option>${MOTIVOS_PRECIO.map(([v, t])=>`<option value="${v}"${actual===v?' selected':''}>${t}</option>`).join('')}</select></div>`;
+}
+// Sin la migración del 21/10/2026 la columna no existe: se guarda igual, sin el motivo.
+function esFaltaColumnaMotivo(error){ return !!error && /precio_motivo/.test(error.message||''); }
 // Minutos desde la medianoche de ahora en Montevideo (21/10/2026): para saber si ya terminó el
 // último fijo del día, aunque el aparato tenga otra zona horaria.
 function minutosAhoraMontevideo(d=new Date()){
