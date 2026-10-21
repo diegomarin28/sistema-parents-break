@@ -266,6 +266,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   en el registro, la Agenda, Por pagar / Por cobrar, "Copiar monto", saldo a favor, PDF y montos
   tipeados a mano. En la
   base: `supabase/pruebas/redondeo_montos.sql`.
+- `tests/filtro-punta.spec.js`: filtro de Niñeras por Punta del Este y por meses (vive en Punta sin
+  temporada, temporada por quincenas, "Dijo que no va", Montevideo sin temporada aparte, la zona
+  escrita en el buscador, 390 px).
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -376,6 +379,12 @@ reporte.
   Nunca pisar la niñera de una asignación con historia: cerrarla y abrir otra desde una
   fecha. Lo que se registra desde un fijo lleva `asignacion_id`. Para saber si un fijo
   corre un día, usar `asignacionVigenteEn(a, fecha)` (core.js).
+- Temporada en el filtro de Niñeras (21/10/2026, regla de Paulina y Delfina): quien tiene solo
+  zonas de afuera (Punta del Este) y no cargó temporada está ahí todo el año; con temporada, solo
+  en las quincenas marcadas. "Dijo que no va" (temporada sin quincenas): sin meses aparece con esa
+  marca, con meses no. Con un mes elegido, las que no cargaron temporada van aparte ("sin
+  temporada cargada"), nunca escondidas. Escribir una zona de afuera en el buscador es igual que
+  marcarla (`zonasDelFiltroNin`, ninieras.js).
 - Fijos que empezaron antes de la app (10/10/2026): la fecha real va en `inicio_real` (solo se
   muestra, "empezó el"); `vigente_desde` es desde cuándo se registra en la app. Nunca llevar
   `vigente_desde` hacia atrás a meses que están en los Docs.
