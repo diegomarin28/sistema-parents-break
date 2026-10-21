@@ -5,14 +5,19 @@
 // La llama la app con la sesión de la admin: verify_jwt = false como todas, pero acá se valida
 // adentro el token de la usuaria y que esté en usuarias_autorizadas (es_usuaria_autorizada). Sin
 // eso, 401/403: la clave de Anthropic se paga por uso y no puede quedar abierta.
+// Prueba interna (21/10/2026): con el encabezado x-cron-secret (app_secrets 'cron_push_secret',
+// el mismo del cron) se puede llamar sin sesión, pero SOLO con probar: true (no guarda nada).
+// Sirve para probar la función publicada desde el SQL Editor sin usar la cuenta de nadie, y
+// cuenta para el tope del día como cualquier otra llamada.
 // Secretos (Supabase > Edge Functions > Secrets): ANTHROPIC_API_KEY. Opcional:
 // ORIGENES_PERMITIDOS (separados por coma) si la app se publica en otro dominio.
 import Anthropic from "npm:@anthropic-ai/sdk@0.131.0";
 import { zodOutputFormat } from "npm:@anthropic-ai/sdk@0.131.0/helpers/zod";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { hoyEnMontevideo, MODELO, procesarPedido, RespuestaModelo, type Dependencias } from "./ticket.ts";
+import { accesoInterno, hoyEnMontevideo, parametrosModelo, procesarPedido, RespuestaModelo, type Dependencias } from "./ticket.ts";
 
-const ORIGENES = (Deno.env.get("ORIGENES_PERMITIDOS") || "https://diegomarin28.github.io,http://localhost:4173")
+// Solo la app publicada (Diego, 21/10/2026).
+const ORIGENES = (Deno.env.get("ORIGENES_PERMITIDOS") || "https://diegomarin28.github.io")
   .split(",").map(o => o.trim()).filter(Boolean);
 
 function encabezados(origen: string | null): Record<string, string> {
@@ -31,23 +36,34 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
   if (req.method !== "POST") return responder({ error: "Solo POST" }, 405);
 
-  // Quién llama: la sesión de la admin, y que esté autorizada.
-  const token = req.headers.get("Authorization");
-  if (!token) return responder({ error: "Falta la sesión" }, 401);
+  let cuerpo: { texto?: unknown; familia_id?: unknown; probar?: unknown } = {};
+  try { cuerpo = await req.json(); } catch { return responder({ error: "El cuerpo tiene que ser JSON" }, 400); }
   const url = Deno.env.get("SUPABASE_URL")!;
-  const comoUsuaria = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: token } } });
-  const { data: { user }, error: errUsuaria } = await comoUsuaria.auth.getUser();
-  if (errUsuaria || !user) return responder({ error: "Sesión vencida: volvé a entrar" }, 401);
-  const { data: autorizada } = await comoUsuaria.rpc("es_usuaria_autorizada");
-  if (autorizada !== true) return responder({ error: "Esta cuenta no tiene acceso" }, 403);
+  // La base se usa con la clave de servicio, como las otras funciones, recién después de saber
+  // quién llama (abajo).
+  const sb = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+  // Quién llama: la prueba interna (solo probar) o la sesión de una admin autorizada.
+  let creadoPor: string;
+  const secretoCron = req.headers.get("x-cron-secret");
+  if (secretoCron) {
+    const { data: fila } = await sb.from("app_secrets").select("valor").eq("clave", "cron_push_secret").maybeSingle();
+    const acceso = accesoInterno(secretoCron, fila?.valor, cuerpo.probar);
+    if (!acceso.ok) return responder({ error: acceso.error }, acceso.status);
+    creadoPor = "prueba interna";
+  } else {
+    const token = req.headers.get("Authorization");
+    if (!token) return responder({ error: "Falta la sesión" }, 401);
+    const comoUsuaria = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: token } } });
+    const { data: { user }, error: errUsuaria } = await comoUsuaria.auth.getUser();
+    if (errUsuaria || !user) return responder({ error: "Sesión vencida: volvé a entrar" }, 401);
+    const { data: autorizada } = await comoUsuaria.rpc("es_usuaria_autorizada");
+    if (autorizada !== true) return responder({ error: "Esta cuenta no tiene acceso" }, 403);
+    creadoPor = user.email || user.id;
+  }
 
   const claveAnthropic = Deno.env.get("ANTHROPIC_API_KEY");
   if (!claveAnthropic) return responder({ error: "Falta cargar ANTHROPIC_API_KEY en los secretos de Supabase" }, 503);
-  let cuerpo: { texto?: unknown; familia_id?: unknown; probar?: unknown } = {};
-  try { cuerpo = await req.json(); } catch { return responder({ error: "El cuerpo tiene que ser JSON" }, 400); }
-
-  // Ya autorizada, la base se usa con la clave de servicio, como las otras funciones.
-  const sb = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const claude = new Anthropic({ apiKey: claveAnthropic, timeout: 60_000, maxRetries: 2 });
 
   const deps: Dependencias = {
@@ -57,15 +73,18 @@ Deno.serve(async (req: Request) => {
       if (error) throw error;
       return data || [];
     },
+    reservarLlamada: async (quien, probar, tope) => {
+      const { data, error } = await sb.rpc("reservar_llamada_pedido", { p_creado_por: quien, p_probar: probar, p_tope: tope });
+      if (error) throw error;
+      return (data as string | null) ?? null;
+    },
+    anotarUso: async (id, uso) => {
+      const { error } = await sb.from("pedidos_whatsapp_uso").update({ tokens_entrada: uso.entrada, tokens_salida: uso.salida }).eq("id", id);
+      if (error) throw error;
+    },
     pedirAlModelo: async (sistema, mensaje) => {
-      // Esfuerzo bajo: es extraer datos de un mensaje corto (4 a 6 pedidos por semana).
-      const r = await claude.messages.parse({
-        model: MODELO,
-        max_tokens: 8000,
-        system: sistema,
-        output_config: { effort: "low", format: zodOutputFormat(RespuestaModelo) },
-        messages: [{ role: "user", content: mensaje }],
-      });
+      const p = parametrosModelo(sistema, mensaje);
+      const r = await claude.messages.parse({ ...p, output_config: { ...p.output_config, format: zodOutputFormat(RespuestaModelo) } });
       const uso = { entrada: r.usage.input_tokens, salida: r.usage.output_tokens };
       if (r.stop_reason === "refusal") return { salida: null, motivo: "rechazo", uso };
       if (r.stop_reason === "max_tokens") return { salida: null, motivo: "cortado", uso };
@@ -84,7 +103,7 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    const res = await procesarPedido(deps, { texto: cuerpo.texto, familia_id: cuerpo.familia_id, probar: cuerpo.probar, creado_por: user.email || user.id });
+    const res = await procesarPedido(deps, { texto: cuerpo.texto, familia_id: cuerpo.familia_id, probar: cuerpo.probar, creado_por: creadoPor });
     return res.ok ? responder({ pedido: res.pedido }) : responder({ error: res.error }, res.status);
   } catch (e) {
     // De lo más específico a lo más general (errores tipados del SDK, nunca por el texto).

@@ -1,8 +1,9 @@
 -- ============================================================================
 -- Prueba de 20261021_pedidos_whatsapp.sql en un Postgres LOCAL (nunca en producción).
--- La tabla pedidos_whatsapp (estados, tipos, límites, política) y precio_sitting() con casos a
--- mano: términos (antes y después del día), medianoche, sin hora de fin, sin tarifa. Los casos al
--- azar contra la app están en paridad_plata.sql. Datos inventados.
+-- La tabla pedidos_whatsapp (estados, tipos, límites, política), precio_sitting() con casos a
+-- mano: términos (antes y después del día), medianoche, sin hora de fin, sin tarifa; y el tope
+-- diario (reservar_llamada_pedido). Los casos al azar contra la app están en paridad_plata.sql.
+-- Datos inventados.
 -- Uso: crear una base con supabase/schema.sql (sin las extensiones de Supabase) y correr este
 -- archivo con psql -v ON_ERROR_STOP=1. Todo termina en rollback.
 -- ============================================================================
@@ -64,5 +65,33 @@ select pg_temp.verificar('borrar la familia deja el pedido sin familia', (select
 select pg_temp.verificar('RLS prendida y una política con es_usuaria_autorizada',
   (select relrowsecurity from pg_class where oid = 'public.pedidos_whatsapp'::regclass)
   and exists (select 1 from pg_policies where tablename = 'pedidos_whatsapp' and qual like '%es_usuaria_autorizada%'));
+
+-- Tope diario (reservar_llamada_pedido): cuenta las llamadas del día de Montevideo, pedidos y
+-- pruebas juntas. 98 de hoy (un tercio son pruebas) y 5 de ayer a última hora, que en UTC ya son
+-- de hoy: esas no cuentan.
+create temporary table _dia as
+  select date_trunc('day', now() at time zone 'America/Montevideo') at time zone 'America/Montevideo' as desde;
+insert into pedidos_whatsapp_uso (creado_el, creado_por, probar)
+  select (select desde from _dia) + make_interval(mins => g), 'prueba@ejemplo.test', g % 3 = 0 from generate_series(0, 97) g;
+insert into pedidos_whatsapp_uso (creado_el, creado_por, probar)
+  select (select desde from _dia) - make_interval(mins => g), 'prueba@ejemplo.test', false from generate_series(1, 5) g;
+select pg_temp.verificar('con 98 de hoy, la 99 (una prueba) pasa y devuelve su id',
+  public.reservar_llamada_pedido('prueba@ejemplo.test', true, 100) is not null);
+select pg_temp.verificar('la 100 (de otra cuenta) también pasa',
+  public.reservar_llamada_pedido('otra@ejemplo.test', false, 100) is not null);
+select pg_temp.verificar('la 101 no pasa: devuelve null',
+  public.reservar_llamada_pedido('prueba@ejemplo.test', false, 100) is null);
+select pg_temp.verificar('una prueba tampoco pasa con el tope lleno',
+  public.reservar_llamada_pedido('prueba@ejemplo.test', true, 100) is null);
+select pg_temp.verificar('lo rechazado no se anota: hoy quedan 100, 34 de ellas pruebas',
+  (select count(*) = 100 and count(*) filter (where probar) = 34 from pedidos_whatsapp_uso where creado_el >= (select desde from _dia)));
+select pg_temp.verificar('lo de ayer sigue ahí y no contó', (select count(*) = 5 from pedidos_whatsapp_uso where creado_el < (select desde from _dia)));
+select pg_temp.verificar('ni la app ni anon pueden llamar a las funciones (solo la clave de servicio)',
+  not has_function_privilege('authenticated', 'public.reservar_llamada_pedido(text, boolean, integer)', 'execute')
+  and not has_function_privilege('anon', 'public.reservar_llamada_pedido(text, boolean, integer)', 'execute')
+  and not has_function_privilege('authenticated', 'public.precio_sitting(uuid, date, time without time zone, time without time zone)', 'execute'));
+select pg_temp.verificar('pedidos_whatsapp_uso con RLS y solo lectura para las autorizadas',
+  (select relrowsecurity from pg_class where oid = 'public.pedidos_whatsapp_uso'::regclass)
+  and (select count(*) = 1 and bool_and(cmd = 'SELECT' and qual like '%es_usuaria_autorizada%') from pg_policies where tablename = 'pedidos_whatsapp_uso'));
 
 rollback;

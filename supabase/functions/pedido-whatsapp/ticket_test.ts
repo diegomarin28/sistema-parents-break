@@ -2,7 +2,10 @@
 // base. Datos inventados. Se corren desde una carpeta fuera del repo (el package.json de la raíz
 // confunde a Deno), por ejemplo: npx deno@2 test --allow-env <carpeta>/pedido-whatsapp/
 import { assert, assertEquals, assertMatch, assertStringIncludes } from "jsr:@std/assert@1.0.13";
-import { armarMensaje, hoyEnMontevideo, MAX_TEXTO, procesarPedido, type Dependencias, type Familia, type Respuesta, RespuestaModelo } from "./ticket.ts";
+import {
+  accesoInterno, armarMensaje, hoyEnMontevideo, MAX_NOTAS, MAX_TEXTO, MAX_TOKENS, MENSAJE_TOPE, parametrosModelo, procesarPedido,
+  type Dependencias, type Familia, type Respuesta, RespuestaModelo, SISTEMA, TOPE_DIARIO,
+} from "./ticket.ts";
 
 const FAMILIAS: Familia[] = [
   { id: "20000000-0000-4000-8000-000000000001", nombre: "Familia Prueba Uno", zona: "Pocitos" },
@@ -18,12 +21,24 @@ function respuesta(cambios: Partial<Respuesta> = {}): Respuesta {
     chicos_cantidad: 2, chicos_edades: "2 y 5 años", zona: "Pocitos", notas: null, dudas: [], ...cambios,
   };
 }
-// Base y modelo de mentira: anotan qué se les pidió.
-function simulado(salida: Respuesta | null, motivo?: "rechazo" | "cortado" | "sin_formato") {
-  const llamadas = { modelo: [] as string[], precio: [] as unknown[][], guardado: [] as Record<string, unknown>[] };
+// Base y modelo de mentira: anotan qué se les pidió. La base lleva la cuenta de las llamadas
+// del día como reservar_llamada_pedido (yaHoy = las que ya se hicieron hoy).
+function simulado(salida: Respuesta | null, motivo?: "rechazo" | "cortado" | "sin_formato", yaHoy = 0) {
+  const llamadas = {
+    modelo: [] as string[], precio: [] as unknown[][], guardado: [] as Record<string, unknown>[],
+    reservas: [] as unknown[][], usos: [] as unknown[][],
+  };
+  let hoyVan = yaHoy;
   const deps: Dependencias = {
     hoy: () => HOY,
     familias: async () => FAMILIAS,
+    reservarLlamada: async (quien, probar, tope) => {
+      llamadas.reservas.push([quien, probar, tope]);
+      if (hoyVan >= tope) return null;
+      hoyVan++;
+      return `b0000000-0000-4000-8000-${String(hoyVan).padStart(12, "0")}`;
+    },
+    anotarUso: async (id, uso) => { llamadas.usos.push([id, uso]); },
     pedirAlModelo: async (_sistema, mensaje) => { llamadas.modelo.push(mensaje); return { salida, motivo, uso: { entrada: 900, salida: 200 } }; },
     precio: async (...args) => { llamadas.precio.push(args); return { cobro: 1400, pago: 910 }; },
     guardar: async fila => { llamadas.guardado.push(fila); return { id: "a0000000-0000-4000-8000-000000000001", ...fila }; },
@@ -55,6 +70,82 @@ Deno.test("probar: devuelve el ticket con su precio y no guarda nada", async () 
   assert(r.ok);
   if (r.ok) { assertEquals(r.pedido.sin_guardar, true); assertEquals(r.pedido.cobro_estimado, 1400); }
   assertEquals(llamadas.guardado, []);
+});
+
+Deno.test("tope del día: cada llamada al modelo se anota, pruebas incluidas, con sus tokens", async () => {
+  const { deps, llamadas } = simulado(respuesta());
+  await pedir(deps);
+  await procesarPedido(deps, { texto: "Hola, ¿el sábado de 20 a 23:30?", probar: true, creado_por: "otra@ejemplo.test" });
+  assertEquals(TOPE_DIARIO, 100);
+  assertEquals(llamadas.reservas, [["prueba@ejemplo.test", false, 100], ["otra@ejemplo.test", true, 100]]);
+  assertEquals(llamadas.usos, [
+    ["b0000000-0000-4000-8000-000000000001", { entrada: 900, salida: 200 }],
+    ["b0000000-0000-4000-8000-000000000002", { entrada: 900, salida: 200 }],
+  ]);
+});
+
+Deno.test("tope del día: la 100 pasa, la 101 no llama al modelo y dice que se llegó al máximo", async () => {
+  const { deps, llamadas } = simulado(respuesta(), undefined, TOPE_DIARIO - 1);
+  assert((await pedir(deps)).ok); // la 100
+  const r = await pedir(deps); // la 101
+  assertEquals(r.ok, false);
+  if (!r.ok) { assertEquals(r.status, 429); assertEquals(r.error, "Llegaste al máximo de pedidos de hoy, avisale a Diego"); }
+  assertEquals(MENSAJE_TOPE, "Llegaste al máximo de pedidos de hoy, avisale a Diego");
+  assertEquals(llamadas.modelo.length, 1);
+  assertEquals(llamadas.guardado.length, 1);
+  // Una prueba tampoco pasa con el tope lleno.
+  const p = await procesarPedido(deps, { texto: "Hola", probar: true, creado_por: "prueba@ejemplo.test" });
+  assertEquals(p.ok, false);
+  assertEquals(llamadas.modelo.length, 1);
+});
+
+Deno.test("tope del día: lo que se rechaza antes del modelo no gasta una llamada", async () => {
+  const { deps, llamadas } = simulado(respuesta());
+  await pedir(deps, "");
+  await pedir(deps, "Hola", "no-existe");
+  assertEquals(llamadas.reservas, []);
+});
+
+Deno.test("si no se pueden anotar los tokens, el ticket igual se guarda", async () => {
+  const { deps, llamadas } = simulado(respuesta());
+  deps.anotarUso = async () => { throw new Error("falla simulada"); };
+  const r = await pedir(deps);
+  assert(r.ok);
+  assertEquals(llamadas.guardado.length, 1);
+});
+
+Deno.test("si falla la cuenta del tope, no se llama al modelo (la función responde 500)", async () => {
+  const { deps, llamadas } = simulado(respuesta());
+  deps.reservarLlamada = async () => { throw new Error("base caída"); };
+  let error = "";
+  try { await pedir(deps); } catch (e) { error = (e as Error).message; }
+  assertEquals(error, "base caída");
+  assertEquals(llamadas.modelo, []);
+});
+
+Deno.test("techo de tokens: lo que se le pide al modelo", () => {
+  const p = parametrosModelo(SISTEMA, "hola");
+  assertEquals(p.model, "claude-haiku-5-5");
+  // Medido en producción: 2.109 el peor caso. Más bajo corta conversaciones largas; más alto
+  // solo sirve para gastar si el modelo se va de largo.
+  assertEquals(p.max_tokens, 4000);
+  assertEquals(MAX_TOKENS, 4000);
+  assertEquals(p.output_config.effort, "low");
+  assertEquals(p.messages, [{ role: "user", content: "hola" }]);
+});
+
+Deno.test("clave interna: solo con la clave correcta y solo para probar", () => {
+  const clave = "c".repeat(64);
+  assertEquals(accesoInterno(clave, clave, true), { ok: true });
+  assertEquals(accesoInterno(clave, clave, false).ok, false);
+  assertEquals(accesoInterno(clave, clave, "true").ok, false);
+  const sinProbar = accesoInterno(clave, clave, undefined);
+  if (!sinProbar.ok) assertEquals(sinProbar.status, 403);
+  const mala = accesoInterno("d".repeat(64), clave, true);
+  if (!mala.ok) assertEquals(mala.status, 401);
+  assertEquals(accesoInterno("", clave, true).ok, false);
+  assertEquals(accesoInterno(clave, null, true).ok, false); // sin clave cargada en la base, nadie entra
+  assertEquals(accesoInterno(clave.slice(1), clave, true).ok, false);
 });
 
 Deno.test("sin hora de fin: horario aproximado, sin precio, con la nota", async () => {
@@ -114,6 +205,18 @@ Deno.test("un traslado no lleva precio por hora", async () => {
   await pedir(deps);
   assertEquals(llamadas.precio, []);
   assertEquals(llamadas.guardado[0].servicio, "traslado");
+});
+
+Deno.test("las notas (alergias, indicaciones) no se cortan a los 300 caracteres", async () => {
+  const alergia = "Pedro es alérgico al maní: nada con maní, autoinyector en la heladera. ";
+  const notas = alergia + "x".repeat(600);
+  const { deps, llamadas } = simulado(respuesta({ notas, zona: "z".repeat(400) }));
+  await pedir(deps);
+  assertEquals(llamadas.guardado[0].notas, notas);
+  assertEquals((llamadas.guardado[0].zona as string).length, 300); // el resto de los campos, como antes
+  const { deps: d2, llamadas: l2 } = simulado(respuesta({ notas: "y".repeat(MAX_NOTAS + 50) }));
+  await pedir(d2);
+  assertEquals((l2.guardado[0].notas as string).length, MAX_NOTAS);
 });
 
 Deno.test("cancelación: se guarda como cancelacion", async () => {

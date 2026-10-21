@@ -8,8 +8,12 @@
 -- 2) precio_sitting(): cobro y pago de un sitting con la tarifa de la familia y las reglas de
 --    siempre (fin redondeado si aceptó los términos, montos sin centavos), la misma cuenta que
 --    generar_previstos_fijos. La usa la función para el precio estimado del ticket.
+-- 3) Tope diario: pedidos_whatsapp_uso anota cada llamada al modelo (los pedidos guardados y las
+--    pruebas con probar, que no se guardan) y reservar_llamada_pedido() no deja pasar más de las
+--    del tope en el día de Montevideo, entre todas las cuentas. La clave de Anthropic se paga por
+--    uso: es el freno si algo llama en loop.
 --
--- Compatible con la app publicada: solo agrega una tabla y una función nuevas; no toca nada que
+-- Compatible con la app publicada: solo agrega tablas y funciones nuevas; no toca nada que
 -- la app use. No modifica filas, así que no hace falta respaldo. Se deshace con
 -- 20261021_pedidos_whatsapp_DESHACER.sql.
 -- ============================================================================
@@ -92,5 +96,46 @@ as $function$
     from h
 $function$;
 revoke execute on function public.precio_sitting(uuid, date, time without time zone, time without time zone) from public, anon, authenticated;
+
+-- Tope diario de llamadas al modelo (21/10/2026). Una fila por llamada, se guarde o no el pedido.
+create table public.pedidos_whatsapp_uso (
+  id uuid default gen_random_uuid() not null,
+  creado_el timestamp with time zone default now() not null,
+  creado_por text,
+  probar boolean default false not null,
+  tokens_entrada integer,
+  tokens_salida integer,
+  constraint pedidos_whatsapp_uso_pkey PRIMARY KEY (id)
+);
+create index pedidos_whatsapp_uso_creado_el_idx on public.pedidos_whatsapp_uso using btree (creado_el);
+alter table public.pedidos_whatsapp_uso enable row level security;
+-- Solo lectura para las admin (la pantalla puede mostrar cuántas quedan); escribe la función.
+create policy solo_autorizadas_leer on public.pedidos_whatsapp_uso as permissive for select to public
+  using ((select public.es_usuaria_autorizada()));
+
+-- Reserva una llamada si hoy (en Montevideo) van menos de p_tope entre todas las cuentas, y
+-- devuelve su id; si ya se llegó, null y no anota nada. El candado hace que dos pedidos al mismo
+-- tiempo no pasen los dos con 99. Se reserva antes de llamar al modelo, así que una llamada que
+-- después falla igual cuenta (mejor de más que de menos).
+create or replace function public.reservar_llamada_pedido(p_creado_por text, p_probar boolean, p_tope integer)
+returns uuid
+language plpgsql
+volatile
+set search_path to ''
+as $function$
+declare
+  v_id uuid;
+  v_desde timestamp with time zone := date_trunc('day', now() at time zone 'America/Montevideo') at time zone 'America/Montevideo';
+begin
+  perform pg_advisory_xact_lock(hashtext('public.reservar_llamada_pedido'));
+  if (select count(*) from public.pedidos_whatsapp_uso where creado_el >= v_desde) >= p_tope then
+    return null;
+  end if;
+  insert into public.pedidos_whatsapp_uso (creado_por, probar) values (p_creado_por, coalesce(p_probar, false))
+  returning id into v_id;
+  return v_id;
+end
+$function$;
+revoke execute on function public.reservar_llamada_pedido(text, boolean, integer) from public, anon, authenticated;
 
 commit;

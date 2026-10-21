@@ -428,6 +428,16 @@ create table public.pedidos_whatsapp (
   constraint pedidos_whatsapp_servicio_check CHECK ((servicio = ANY (ARRAY['sitting'::text, 'traslado'::text]))),
   constraint pedidos_whatsapp_chicos_check CHECK ((chicos_cantidad between 1 and 12))
 );
+-- Una fila por llamada al modelo (pedidos guardados y pruebas): tope diario, reservar_llamada_pedido().
+create table public.pedidos_whatsapp_uso (
+  id uuid default gen_random_uuid() not null,
+  creado_el timestamp with time zone default now() not null,
+  creado_por text,
+  probar boolean default false not null,
+  tokens_entrada integer,
+  tokens_salida integer,
+  constraint pedidos_whatsapp_uso_pkey PRIMARY KEY (id)
+);
 create table public.push_subscriptions (
   id uuid default gen_random_uuid() not null,
   usuario text not null,
@@ -768,6 +778,7 @@ CREATE INDEX idx_solicitudes_fecha ON public.solicitudes USING btree (fecha);
 CREATE INDEX pedidos_whatsapp_creado_el_idx ON public.pedidos_whatsapp USING btree (creado_el DESC);
 CREATE INDEX pedidos_whatsapp_familia_id_idx ON public.pedidos_whatsapp USING btree (familia_id);
 CREATE INDEX pedidos_whatsapp_solicitud_id_idx ON public.pedidos_whatsapp USING btree (solicitud_id);
+CREATE INDEX pedidos_whatsapp_uso_creado_el_idx ON public.pedidos_whatsapp_uso USING btree (creado_el);
 
 -- ----------------------------------------------------------------------------
 -- Row Level Security: todas las tablas con RLS. Las que no tienen política
@@ -800,6 +811,7 @@ alter table public.notif_push_enviadas enable row level security;
 alter table public.notif_push_preferencias enable row level security;
 alter table public.notificaciones_leidas enable row level security;
 alter table public.pedidos_whatsapp enable row level security;
+alter table public.pedidos_whatsapp_uso enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.resenas_ninieras enable row level security;
 alter table public.respaldo_asignaciones_20261005 enable row level security;
@@ -920,6 +932,8 @@ create policy notificaciones_leidas_authenticated_all on public.notificaciones_l
   with check ((select public.es_usuaria_autorizada()));
 create policy solo_autenticados_todo on public.pedidos_whatsapp as permissive for all to public
   using ((select public.es_usuaria_autorizada())) with check ((select public.es_usuaria_autorizada()));
+create policy solo_autorizadas_leer on public.pedidos_whatsapp_uso as permissive for select to public
+  using ((select public.es_usuaria_autorizada()));
 create policy push_subscriptions_authenticated_all on public.push_subscriptions as permissive for all to authenticated
   using ((select public.es_usuaria_autorizada()))
   with check ((select public.es_usuaria_autorizada()));
@@ -1239,6 +1253,30 @@ as $function$
     from h
 $function$;
 revoke execute on function public.precio_sitting(uuid, date, time without time zone, time without time zone) from public, anon, authenticated;
+
+-- Tope diario del pedido desde WhatsApp (21/10/2026): reserva una llamada al modelo si hoy, en
+-- Montevideo, van menos de p_tope entre todas las cuentas (devuelve el id), si no null. Solo la
+-- usa la Edge Function pedido-whatsapp con la clave de servicio.
+create or replace function public.reservar_llamada_pedido(p_creado_por text, p_probar boolean, p_tope integer)
+returns uuid
+language plpgsql
+volatile
+set search_path to ''
+as $function$
+declare
+  v_id uuid;
+  v_desde timestamp with time zone := date_trunc('day', now() at time zone 'America/Montevideo') at time zone 'America/Montevideo';
+begin
+  perform pg_advisory_xact_lock(hashtext('public.reservar_llamada_pedido'));
+  if (select count(*) from public.pedidos_whatsapp_uso where creado_el >= v_desde) >= p_tope then
+    return null;
+  end if;
+  insert into public.pedidos_whatsapp_uso (creado_por, probar) values (p_creado_por, coalesce(p_probar, false))
+  returning id into v_id;
+  return v_id;
+end
+$function$;
+revoke execute on function public.reservar_llamada_pedido(text, boolean, integer) from public, anon, authenticated;
 
 
 -- Fijos automáticos (06/10/2026). El proceso. Lo corre pg_cron todos los días a las 03:00 de Montevideo (lo programa

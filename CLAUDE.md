@@ -202,9 +202,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   y 60 pantallas de Finanzas. La base, contra el mismo oráculo: `supabase/pruebas/paridad_plata.sql`
   (2.880 minutos, 800 montos, 450 días de fijos y 300 precios de `precio_sitting`; Postgres local).
 - `supabase/pruebas/pedidos_whatsapp.sql`: la tabla del pedido desde WhatsApp (estados, límites,
-  política) y `precio_sitting()` con casos a mano. `supabase/functions/pedido-whatsapp/ticket_test.ts`:
-  la Edge Function con el modelo simulado (Deno, desde una copia fuera del repo:
-  `npx deno@2 test --allow-env <copia>/pedido-whatsapp/`).
+  política), `precio_sitting()` con casos a mano y el tope diario (`reservar_llamada_pedido`: la
+  101 no pasa, lo de ayer no cuenta). `supabase/functions/pedido-whatsapp/ticket_test.ts`: la Edge
+  Function con el modelo simulado, tope y techo de tokens incluidos (Deno, desde una copia fuera
+  del repo: `npx deno@2 test --allow-env <copia>/pedido-whatsapp/`).
 - `tests/errores-plata.spec.js`: errores de plata de la auditoría del 21/10/2026: "Termina al día
   siguiente" mal marcado (Sittings, Agenda, día de un fijo y reemplazo), editar un movimiento sin
   pisar cobrado / pagado de la otra, asignar un pedido que ya asignó otra o cuando falla guardar,
@@ -312,10 +313,16 @@ reporte.
 - Para revisarlas: `npx deno@2 check` desde una carpeta fuera del repo (el package.json de la
   raíz confunde a Deno).
 - pedido-whatsapp (21/10/2026) es la primera que llama la app: valida adentro la sesión de la
-  admin y `es_usuaria_autorizada()` (sin eso, 401/403), responde CORS a `ORIGENES_PERMITIDOS`
-  (por defecto GitHub Pages y localhost) y usa `ANTHROPIC_API_KEY` (Secrets) con
+  admin y `es_usuaria_autorizada()` (sin eso, 401/403), responde CORS solo a la app publicada
+  (`ORIGENES_PERMITIDOS` si cambia el dominio) y usa `ANTHROPIC_API_KEY` (Secrets) con
   `claude-haiku-5-5`. La lógica va en `ticket.ts`, sin red, para poder probarla con el modelo
-  simulado; `index.ts` solo conecta la base y la API.
+  simulado; `index.ts` solo conecta la base y la API. Frenos de gasto: 100 llamadas por día entre
+  todas las cuentas, pruebas incluidas (`pedidos_whatsapp_uso` + `reservar_llamada_pedido()`;
+  al llegar, "Llegaste al máximo de pedidos de hoy, avisale a Diego") y `max_tokens` 4.000 (lo
+  que piensa el modelo cuenta; el peor caso medido fue 2.109). Para probar la publicada sin la
+  cuenta de nadie: `net.http_post` desde el SQL Editor con `x-cron-secret` (app_secrets
+  'cron_push_secret') y `probar: true` (no guarda nada; con esa clave no se puede sin probar);
+  la respuesta queda en `net._http_response`. Solo mensajes inventados.
 
 ## Convenciones
 - UI y comentarios en español rioplatense (voseo). Los comentarios explican el porqué y

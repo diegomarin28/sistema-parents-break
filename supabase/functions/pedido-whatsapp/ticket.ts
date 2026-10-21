@@ -12,7 +12,20 @@ import * as z from "npm:zod@4.6.5/v4";
 
 export const MODELO = "claude-haiku-5-5";
 export const MAX_TEXTO = 6000;
+// Frenos de gasto (21/10/2026). La clave de Anthropic se paga por uso: un tope de llamadas por
+// día entre todas las cuentas (pedidos y pruebas, se cuentan en la base con
+// reservar_llamada_pedido) y un techo de tokens por respuesta. Lo que piensa el modelo también
+// cuenta como salida y varía de una vez a otra. Medido en producción con pedidos inventados: de
+// 190 a 645 tokens un pedido común, 1.728 y 2.109 la misma conversación de 14 mensajes, 1.672 una
+// de 5.300 caracteres (cerca del máximo de texto). 4.000 deja casi el doble del peor caso; si se
+// corta, la admin ve el aviso.
+export const TOPE_DIARIO = 100;
+export const MENSAJE_TOPE = "Llegaste al máximo de pedidos de hoy, avisale a Diego";
+export const MAX_TOKENS = 4000;
 const MAX_CAMPO = 300;
+// Las notas llevan alergias e indicaciones para la niñera: con 300 caracteres una alergia quedaba
+// cortada a mitad de frase (prueba del 21/10/2026).
+export const MAX_NOTAS = 1000;
 
 // Lo que el modelo tiene que devolver (salida estructurada: se valida contra este esquema).
 export const RespuestaModelo = z.object({
@@ -32,7 +45,7 @@ export const RespuestaModelo = z.object({
   chicos_cantidad: z.number().int().nullable().describe("Cuántos chicos, si lo dicen."),
   chicos_edades: z.string().nullable().describe("Edades como las dicen, por ejemplo '2 y 5 años'."),
   zona: z.string().nullable().describe("Barrio o dirección si lo mencionan."),
-  notas: z.string().nullable().describe("Otro dato útil para la niñera, en una frase."),
+  notas: z.string().nullable().describe("Datos útiles para la niñera (primero salud y alergias), en pocas frases."),
   dudas: z.array(z.string()).describe("Lo que falta o no queda claro, en frases cortas. Vacío si está todo."),
 });
 export type Respuesta = z.infer<typeof RespuestaModelo>;
@@ -78,7 +91,7 @@ function fechaValida(f: string | null): f is string {
   const d = new Date(f + "T12:00:00Z");
   return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === f;
 }
-const recortar = (s: string | null) => (s == null ? null : s.trim().slice(0, MAX_CAMPO) || null);
+const recortar = (s: string | null, max = MAX_CAMPO) => (s == null ? null : s.trim().slice(0, max) || null);
 
 export type Ticket = {
   tipo: Respuesta["tipo"];
@@ -128,7 +141,7 @@ export function validarRespuesta(r: Respuesta, familias: Familia[], elegida: Fam
     chicos_cantidad: cantidad,
     chicos_edades: recortar(r.chicos_edades),
     zona: recortar(r.zona),
-    notas: recortar(r.notas),
+    notas: recortar(r.notas, MAX_NOTAS),
     dudas,
   };
 }
@@ -138,9 +151,43 @@ export type ResultadoModelo = {
   motivo?: "rechazo" | "cortado" | "sin_formato";
   uso?: { entrada: number; salida: number };
 };
+// Prueba interna (index.ts): con la clave del cron (app_secrets 'cron_push_secret') y solo con
+// probar: true, así esa clave nunca puede guardar pedidos. Comparación en tiempo constante, como
+// en enviar-push-urgentes.
+export function mismoSecreto(recibido: string | null, esperado: string | null | undefined): boolean {
+  if (!esperado || !recibido) return false;
+  const a = new TextEncoder().encode(recibido), b = new TextEncoder().encode(esperado);
+  if (a.length !== b.length) return false;
+  let dif = 0;
+  for (let i = 0; i < a.length; i++) dif |= a[i] ^ b[i];
+  return dif === 0;
+}
+export function accesoInterno(recibido: string | null, esperado: string | null | undefined, probar: unknown):
+  { ok: true } | { ok: false; status: number; error: string } {
+  if (!mismoSecreto(recibido, esperado)) return { ok: false, status: 401, error: "Clave interna incorrecta" };
+  if (probar !== true) return { ok: false, status: 403, error: "Con la clave interna solo se puede probar (probar: true)" };
+  return { ok: true };
+}
+
+// Lo que se le manda al modelo, salvo el formato de salida (lo agrega index.ts con el SDK).
+// Esfuerzo bajo: es sacar datos de un mensaje corto.
+export function parametrosModelo(sistema: string, mensaje: string) {
+  return {
+    model: MODELO,
+    max_tokens: MAX_TOKENS,
+    system: sistema,
+    output_config: { effort: "low" as const },
+    messages: [{ role: "user" as const, content: mensaje }],
+  };
+}
+
 export type Dependencias = {
   hoy: () => { fecha: string; diaSemana: string };
   familias: () => Promise<Familia[]>;
+  // Anota una llamada al modelo si hoy no se llegó al tope y devuelve su id; si se llegó, null.
+  reservarLlamada: (creadoPor: string, probar: boolean, tope: number) => Promise<string | null>;
+  // Guarda los tokens que usó esa llamada (si falla no se pierde el ticket).
+  anotarUso: (id: string, uso: { entrada: number; salida: number }) => Promise<void>;
   pedirAlModelo: (sistema: string, mensaje: string) => Promise<ResultadoModelo>;
   // Cobro y pago con la tarifa de la familia y las reglas de siempre (precio_sitting en la base).
   precio: (familiaId: string, fecha: string, ini: string, fin: string) => Promise<{ cobro: number | null; pago: number | null } | null>;
@@ -166,7 +213,13 @@ export async function procesarPedido(deps: Dependencias, entrada: Entrada): Prom
   const elegida = elegidaId ? familias.find(f => f.id === elegidaId) ?? null : null;
   if (elegidaId && !elegida) return { ok: false, status: 400, error: "La familia elegida no existe." };
 
+  // El tope se cuenta recién acá: lo que se rechaza antes no llegó al modelo y no cuesta.
+  const reserva = await deps.reservarLlamada(entrada.creado_por, entrada.probar === true, TOPE_DIARIO);
+  if (!reserva) return { ok: false, status: 429, error: MENSAJE_TOPE };
   const respuesta = await deps.pedirAlModelo(SISTEMA, armarMensaje(texto, familias, deps.hoy(), elegida));
+  if (respuesta.uso) {
+    try { await deps.anotarUso(reserva, respuesta.uso); } catch (e) { console.error("pedido-whatsapp: no se anotaron los tokens", e); }
+  }
   if (!respuesta.salida) return { ok: false, status: 422, error: MOTIVOS[respuesta.motivo || "sin_formato"] };
   const ticket = validarRespuesta(respuesta.salida, familias, elegida);
 
