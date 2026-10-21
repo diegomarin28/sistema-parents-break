@@ -1138,6 +1138,32 @@ $function$;
 revoke execute on function public.minutos_fin_cobro(integer) from public, anon, authenticated;
 
 
+-- Montos sin centavos (21/10/2026, regla de Paulina y Delfina). Pago a la niñera: ,5 o menos
+-- baja (600,5 -> 600; 600,6 -> 601). Cobro a la familia: ,5 o más sube (600,5 -> 601;
+-- 600,4 -> 600). Primero se lleva a centavos para que una hora como 50/60 (0,8333...) no
+-- deje el ,5 en ,4999... Con negativos redondea igual sobre el valor absoluto. Son las mismas
+-- reglas que redondearPago() y redondearCobro() en js/core.js: si cambia una, cambia la otra.
+create or replace function public.redondear_pago(p numeric)
+returns numeric
+language sql
+immutable
+set search_path to ''
+as $function$
+  select sign(p) * ceil(abs(round(p, 2)) - 0.5)
+$function$;
+revoke execute on function public.redondear_pago(numeric) from public, anon, authenticated;
+
+create or replace function public.redondear_cobro(p numeric)
+returns numeric
+language sql
+immutable
+set search_path to ''
+as $function$
+  select round(round(p, 2))
+$function$;
+revoke execute on function public.redondear_cobro(numeric) from public, anon, authenticated;
+
+
 -- Fijos automáticos (06/10/2026). El proceso. Lo corre pg_cron todos los días a las 03:00 de Montevideo (lo programa
 --    _ACTIVAR) y la app lo llama después de cada cambio en un fijo, para que la ventana
 --    quede al día enseguida. Hace, en orden:
@@ -1206,13 +1232,14 @@ begin
            end as horas_cobro
       from dias
   )
+  -- Montos sin centavos (21/10/2026): el cobro con redondear_cobro y el pago con redondear_pago.
   select c.id as asignacion_id, c.dia as fecha, c.familia_id, c.fam_nombre as familia_nombre,
          c.ninera_id, c.ninera_nombre, c.tipo_fijo as tipo, c.hora_inicio, c.hora_fin,
          c.cruza as termina_dia_siguiente,
          case when c.tipo_fijo = 'traslado' then coalesce(c.cobro_traslado, t.cobro_familia, 0)
-              else round(coalesce(c.horas_cobro, c.horas, 0) * coalesce(c.fam_cobro_hora, 0)) end as cobro_familia,
+              else public.redondear_cobro(coalesce(c.horas_cobro, c.horas, 0) * coalesce(c.fam_cobro_hora, 0)) end as cobro_familia,
          case when c.tipo_fijo = 'traslado' then coalesce(c.pago_traslado, t.pago_ninera, 0)
-              else round(coalesce(c.horas, 0) * coalesce(c.fam_pago_hora, 0)) end as pago_ninera
+              else public.redondear_pago(coalesce(c.horas, 0) * coalesce(c.fam_pago_hora, 0)) end as pago_ninera
     from con_horas c
     -- Un traslado no se cobra por hora: el precio cargado en el fijo o, si no tiene, el del
     -- último traslado de ese fijo o de esa familia (lo mismo que precarga la app).

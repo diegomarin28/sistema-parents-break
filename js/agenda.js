@@ -464,7 +464,7 @@ function actualizarAgendaTotal(){
   const horas = horasSitting(hi, hf, cruza, familia, document.getElementById('agenda-nueva-fecha')?.value);
   if(!horas){ el.textContent = !cruza ? 'La hora de fin tiene que ser después de la de inicio (o marcá "Termina al día siguiente").' : ''; return; }
   const finCobro = textoFinCobrado(hf, horas);
-  el.textContent = `Total estimado: $${Math.round(tarifa*horas.cobro).toLocaleString('es-UY')} (${horas.cobro.toFixed(1).replace('.0','')} h)${finCobro ? ' · '+finCobro : ''}`;
+  el.textContent = `Total estimado: $${redondearCobro(tarifa*horas.cobro).toLocaleString('es-UY')} (${horas.cobro.toFixed(1).replace('.0','')} h)${finCobro ? ' · '+finCobro : ''}`;
 }
 let agendaModoNueva = 'puntual';
 function onAgendaModoChange(modo){
@@ -590,7 +590,7 @@ async function guardarSolicitudPuntual(){
     cobroFinal = cobroTraslado ? Number(cobroTraslado) : null;
   } else if(tarifa && horaFin){
     const horas = horasSitting(horaInicio, horaFin, cruza, fam, fecha);
-    cobroFinal = horas ? Math.round(Number(tarifa)*horas.cobro) : Number(tarifa);
+    cobroFinal = horas ? redondearCobro(Number(tarifa)*horas.cobro) : Number(tarifa);
   } else if(tarifa){
     cobroFinal = Number(tarifa);
   }
@@ -710,7 +710,7 @@ async function abrirModalAsignar(solicitudId){
       let mf = agendaMinutos(s.hora_fin);
       if(s.termina_dia_siguiente) mf += 24*60;
       const horasFrac = Math.max(0, mf-mi)/60;
-      pagoSugerido = Math.round(horasFrac*pagoHora);
+      pagoSugerido = redondearPago(horasFrac*pagoHora);
     }
   }
   const filaSel = (n, sub) => `
@@ -1036,7 +1036,7 @@ async function registrarSittingFijoDeHoy(id){
   const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
   const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
   const tipo = tipoAsignacion(a);
-  let cobro = Math.round(horas.cobro*cobroHora), pago = Math.round(horas.real*pagoHora);
+  let cobro = redondearCobro(horas.cobro*cobroHora), pago = redondearPago(horas.real*pagoHora);
   if(tipo==='traslado'){
     const cobroTxt = document.getElementById('agenda-fija-cobro')?.value ?? '';
     const pagoTxt = document.getElementById('agenda-fija-pago')?.value ?? '';
@@ -1195,7 +1195,7 @@ async function confirmarReemplazoFijoHoy(id){
   const cobroHora = familia ? Number(familia.cobro_hora)||0 : 0;
   const pagoHora = familia ? Number(familia.pago_hora)||0 : 0;
   const nineraSel = agendaReemplazoNineraSel && normaliza(agendaReemplazoNineraSel.nombre)===normaliza(nineraTxt) ? agendaReemplazoNineraSel : null;
-  let cobro = Math.round(horas.cobro*cobroHora), pago = Math.round(horas.real*pagoHora);
+  let cobro = redondearCobro(horas.cobro*cobroHora), pago = redondearPago(horas.real*pagoHora);
   if(tipoAsignacion(a)==='traslado'){
     const cobroTxt = document.getElementById('agenda-fija-rcobro')?.value ?? '';
     const pagoTxt = document.getElementById('agenda-fija-rpago')?.value ?? '';
@@ -1567,8 +1567,8 @@ async function filaDeHoySegunFijo(aHoy, r){
     const { data: fam, error } = await leerFamiliasConTerminos('cobro_hora,pago_hora', q=>q.eq('id', aHoy.familia_id).maybeSingle());
     if(error) throw error;
     const horas = horasSitting(hi, hf, cruza, fam, todayISO()) || { real: 0, cobro: 0 };
-    fila.cobro_familia = Math.round(horas.cobro * (Number(fam?.cobro_hora) || 0));
-    fila.pago_ninera = Math.round(horas.real * (Number(fam?.pago_hora) || 0));
+    fila.cobro_familia = redondearCobro(horas.cobro * (Number(fam?.cobro_hora) || 0));
+    fila.pago_ninera = redondearPago(horas.real * (Number(fam?.pago_hora) || 0));
   }
   return fila;
 }

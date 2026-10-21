@@ -329,9 +329,10 @@ async function generarVistaPreviaHistorialPDF(){
 }
 // Total a pagar del PDF de la familia: lo que todavía no se cobró de los registros y de los
 // gastos a su cargo, más el saldo pendiente (negativo = a favor de la familia).
+// Sin centavos, con la regla del cobro (redondearCobro, 21/10/2026).
 let exphistTotal = { total:0, lineas:[] }, exphistCuenta = '';
 function totalAPagarHistorial(items, gastos, saldoPend){
-  const f = n => '$'+Math.round(n).toLocaleString('es-UY');
+  const f = n => '$'+redondearCobro(n).toLocaleString('es-UY');
   const servicios = items.filter(r=>!r.cobrado).reduce((t,r)=>t+(Number(r.cobro_familia)||0),0);
   const yaPagado = items.filter(r=>r.cobrado).reduce((t,r)=>t+(Number(r.cobro_familia)||0),0);
   const gastosFam = (gastos||[]).filter(g=>gastoACargoFamilia(g) && !g.cobrado).reduce((t,g)=>t+(Number(g.monto)||0),0);
@@ -339,7 +340,7 @@ function totalAPagarHistorial(items, gastos, saldoPend){
   if(gastosFam) lineas.push(`Gastos extra: ${f(gastosFam)}`);
   if(saldoPend) lineas.push(`Saldo ${saldoPend<0 ? 'a favor de la familia' : 'pendiente de la familia'}: ${saldoPend<0?'−':'+'}${f(Math.abs(saldoPend))}`);
   if(yaPagado) lineas.push(`Ya pagado de este período (no se suma): ${f(yaPagado)}`);
-  return { total: Math.max(0, servicios + gastosFam + saldoPend), lineas };
+  return { total: redondearCobro(Math.max(0, servicios + gastosFam + saldoPend)), lineas };
 }
 async function leerCuentaCobro(){
   const { data } = await sb.from('app_config').select('valor').eq('id', 'cuenta_cobro').maybeSingle();
@@ -416,7 +417,7 @@ async function descargarHistorialPDF(desde, hasta){
     doc.setFontSize(10);
     exphistTotal.lineas.forEach(l=>{ doc.text(l, 14, y); y += 6; });
     doc.setFontSize(13);
-    doc.text(`Total a pagar: $${Math.round(exphistTotal.total).toLocaleString('es-UY')}`, 14, y + 2);
+    doc.text(`Total a pagar: $${exphistTotal.total.toLocaleString('es-UY')}`, 14, y + 2);
     if(cuenta){ doc.setFontSize(10); doc.text(`Transferir a: ${cuenta}`, 14, y + 10); }
   }
   // Los tickets, uno por página (el bucket es privado: link firmado que vence enseguida).
@@ -1351,8 +1352,8 @@ function actualizarCobroPagoPorHorario(){
   const horas = pintarFinCobroSit();
   if(!horas) return; // horario todavía inválido/incompleto, no calcula nada raro
   // Cobro con el fin redondeado si la familia aceptó los términos; pago, con la hora real.
-  if(cobroH) cobroInput.value = Math.round(cobroH*horas.cobro);
-  if(pagoH && !sitPagoModoHora) pagoInput.value = Math.round(pagoH*horas.real);
+  if(cobroH) cobroInput.value = redondearCobro(cobroH*horas.cobro);
+  if(pagoH && !sitPagoModoHora) pagoInput.value = redondearPago(pagoH*horas.real);
   if(sitPagoModoHora) onSitPagoHoraInput(); // si cambió el horario, recalcula el total con el valor por hora ya tipeado
   calcSitMargen();
 }
@@ -1410,7 +1411,7 @@ function onSitPagoHoraInput(){
   if(cruza) mf += 24*60;
   if(mf<=mi) return;
   const horasFrac = (mf-mi)/60;
-  pagoInput.value = Math.round(horaVal*horasFrac);
+  pagoInput.value = redondearPago(horaVal*horasFrac);
   calcSitMargen();
 }
 async function guardarTarifaFamiliaDesdeSitting(){

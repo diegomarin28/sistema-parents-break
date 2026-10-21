@@ -54,7 +54,8 @@ test.describe('Por pagar: copiar cuenta y monto', () => {
     await expect(toasts(page).last()).toContainText('Monto copiado');
     const carla = porPagar(page).locator('.agendarow', { hasText: 'Carla Ejemplo' });
     await carla.locator('button', { hasText: 'Copiar monto' }).click();
-    expect(await copiado(page)).toEqual(['0099887766', '750', '600,5']);
+    // 600,5 se copia sin centavos con la regla del pago: ,5 baja (21/10/2026).
+    expect(await copiado(page)).toEqual(['0099887766', '750', '600']);
     // Copiar no escribe nada en la base.
     expect(e.escrituras).toHaveLength(0);
     verificarLimpio(e);
@@ -101,13 +102,14 @@ test.describe('resumen: Por pagar a niñeras como la lista', () => {
   test('las semanas que no cierran van aparte y se aclara lo de meses anteriores', async ({ page }) => {
     const e = await abrirApp(page, { datos: datos(), ahora: AHORA });
     await irAModulo(page, 'finanzas');
-    // Octubre ya pagable: 750 (semana del 12) + 600,5 (Carla). Septiembre en la lista: 750 + 250.
-    await expect(page.locator('#fin-porpagar')).toHaveText('$1.351');
+    // Octubre ya pagable: 750 (semana del 12) + 600,5 (Carla), sin centavos con la regla del
+    // pago (,5 baja). Septiembre en la lista: 750 + 250.
+    await expect(page.locator('#fin-porpagar')).toHaveText('$1.350');
     await expect(page.locator('#fin-porpagar-semanas')).toHaveText('Más $1.550 de semanas que todavía no cierran.');
     await expect(page.locator('#fin-porpagar-futuro')).toHaveText('Sin contar $999 de días que todavía no pasaron.');
     await expect(page.locator('#fin-porpagar-previos')).toHaveText('En la lista de Por pagar hay $1.000 más de meses anteriores.');
     // Mes de octubre + meses anteriores = el total de la lista.
-    await expect(porPagar(page).locator('h2 + .helper')).toContainText('$2.350,5');
+    await expect(porPagar(page).locator('h2 + .helper')).toContainText('$2.350');
     verificarLimpio(e);
   });
 
