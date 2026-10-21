@@ -14,7 +14,7 @@ ficticios de los tests y las cifras son conteos o porcentajes, nunca montos de u
 6. Hoy nuevo: una lista de tarjetas de acción, cada una con un botón que resuelve en un toque (elegir niñera, cerrar el día de ayer, registrar tal cual, ver cobros, pagar). Deja lugar al pedido que llega por WhatsApp, con las niñeras sugeridas en orden.
 7. Un sistema de componentes chico (tarjeta, fila, chip, botón de 44 px, hoja, estado vacío/cargando/error, toast con Deshacer) en `core.js` e `index.html`, con clases alias para no romper los 629 selectores por id de los tests.
 8. Analytics que deciden, con datos que ya existen: concentración de facturado por familia (3 familias = 60 %), niñeras que trabajan de verdad (20 de 92), pedidos que no se concretan (7 confirmados de 22), días de cobro (hace falta `cobrado_at`/`pagado_at`), familias que dejaron de pedir.
-9. Orden decidido: errores de plata (PR aparte) → base de componentes → Pedido desde WhatsApp → Hoy → Plata → Registros → Agenda → Familias y Niñeras → el resto. La base espera a que Paulina y Delfina vean las maquetas. Riesgo alto en Plata y Registros (plata y muchos tests); bajo en lo demás.
+9. Orden decidido: errores de plata (PR aparte) → red de tests de plata → base de componentes → Pedido desde WhatsApp → Hoy → Plata → Registros → Agenda → Familias y Niñeras → el resto. La base espera a que Paulina y Delfina vean las maquetas, y nada se migra sin la red de tests de 4.10 (la versión nueva va detrás de `?nuevo=1` hasta que la aprueben). Riesgo alto en Plata y Registros (plata y muchos tests); bajo en lo demás.
 10. Decisiones tomadas el 21/10/2026 en la sección 6: todas las recomendadas, salvo la campanita, que se mantiene en el celular. Maquetas en `local/maquetas/` (hoy, sittings, finanzas), para abrir en el celular.
 
 ## 1. Cómo se hizo
@@ -243,7 +243,10 @@ Lo que ya está bien y se conserva: paleta y tipografías (Baloo 2, Inter, IBM P
 
 ### 4.2 Navegación nueva
 
-Celular (hasta 760 px): barra fija abajo con 5 pestañas. Compu: el menú lateral de siempre, agrupado igual.
+Celular y tablet (hasta 1023 px): barra fija abajo con 5 pestañas. Compu (desde 1024 px): la barra
+de arriba ocupa todo el ancho y debajo, a la izquierda, un menú lateral fijo con las **mismas 5
+secciones** (no los 12 módulos de hoy), en el mismo orden. Es un solo menú: el CSS lo pone abajo o al
+costado según el ancho.
 
 | Pestaña | Contiene | Clave actual |
 |---|---|---|
@@ -253,7 +256,7 @@ Celular (hasta 760 px): barra fija abajo con 5 pestañas. Compu: el menú latera
 | Plata | Pagar · Cobrar · Números (incluye gastos, revisar meses, conciliar) | `finanzas` |
 | Más | Familias, Niñeras, Postulantes, Intermediaciones, Notificaciones, Marketing, Contratos, Juguetes, ajustes (Face ID, zonas, tarifa de traslado, cerrar sesión) | el resto |
 
-Puntitos de aviso en Hoy (urgente del día) y Plata (hay para pagar o cobrar). La campanita sigue arriba a la derecha, en el celular y en la compu (decisión 10). Un botón "+" flotante en Hoy, Agenda y Registros que abre una hoja con tres opciones: nuevo registro, nuevo pedido desde WhatsApp (entra justo después de la base), nuevo fijo. La barra se arma en `renderApp()` con los mismos `MODULOS` y `setModulo(k)`; `renderSidebar()` queda para la compu. Contratos y Juguetes tienen 0 filas y Marketing 9: van al final de "Más" (decisión 5).
+Puntitos de aviso en Hoy (urgente del día) y Plata (hay para pagar o cobrar). La campanita sigue arriba a la derecha, en el celular y en la compu (decisión 10). En el celular, un botón "+" flotante en Hoy, Agenda y Registros abre una hoja con tres opciones: nuevo registro, nuevo pedido desde WhatsApp (entra justo después de la base), nuevo fijo. En la compu el "+" no flota (tapaba el panel de Registros y los botones de la columna derecha de Hoy): es un botón "+ Nuevo" arriba del menú lateral, con las mismas tres opciones. El menú se arma en `renderApp()` con los mismos `MODULOS` y `setModulo(k)`; `renderSidebar()` pasa a pintar ese menú único en vez de la lista de 12 módulos. Contratos y Juguetes tienen 0 filas y Marketing 9: van al final de "Más" (decisión 5).
 
 ### 4.3 Hoy nuevo
 
@@ -270,6 +273,11 @@ Una lista de **tarjetas de acción**, ordenadas por urgencia, cada una con una f
 | La carga nocturna no anduvo | solo si pasó | "Cargarlos ahora" | `cargarFijosAhora` |
 | Datos que faltan | siempre que haya, plegado | "Completar" | `abrirFichaDesdeHoy` |
 
+En la compu (desde 1024 px), Hoy va en dos columnas: las tarjetas de acción a la izquierda (`1,3fr`) y
+"Hoy en la agenda", "Esta semana" (sus datos en 2 columnas) y "Datos que faltan" a la derecha (`1fr`),
+pegajosa al hacer scroll para que la agenda del día quede a la vista mientras se resuelven las
+tarjetas.
+
 Reemplaza la revisión de 14 días por **el cierre de ayer** (y, a la mañana, el de hoy si ya terminó): una pregunta concreta en vez de un "Bien" sin consecuencia. "Sí a todos" para los días que ya quedaron atrás. Lo que no se cierra en 7 días se da por revisado solo (decisión 3).
 
 Una sola función `cargarAccionesHoy()` alimenta las tarjetas, el puntito de Hoy, la campanita y el push. Los datos salen de una función de la base `resumen_hoy()` (un pedido) que devuelve: pedidos sin asignar hasta mañana, fijos de ayer sin revisar, puntuales sin registrar, cobros vencidos (conteo y total), pagos listos (conteo y total), datos que faltan, estado de la carga nocturna. Hoy pasa de 33 pedidos a 4 o 5.
@@ -278,18 +286,26 @@ Una sola función `cargarAccionesHoy()` alimenta las tarjetas, el puntito de Hoy
 
 Vive en `core.js` (helpers que devuelven HTML) e `index.html` (CSS). Scripts clásicos y handlers inline como hoy; nada de módulos. Nombres en español como el resto del código.
 
+Regla de nombres (21/10/2026): **una clase es de un solo componente.** Las variantes llevan el nombre
+del componente como prefijo (`chip-aviso`, `aviso-atencion`, `btn-primario`, `fila-pasado`,
+`accion-urgente`), nunca una palabra suelta. En la primera maqueta el chip "aviso" (`.chip.aviso`)
+heredaba el padding y el tamaño del bloque `.aviso`, porque `aviso` era a la vez un componente y una
+variante de otro. `tests/estatico.spec.js` controla que ningún nombre de componente se use como
+variante de otro.
+
 Tokens (CSS en `:root`, los colores de siempre): `--sp-1..6` (4 a 32 px), `--r-sm/md/lg` (8/12/16), `--tap: 44px`, `--f-display/body/mono`. Sin modo oscuro por ahora (la paleta tiene contraste suficiente; se puede sumar después con las mismas variables).
 
 | Componente | Helper | Reemplaza a |
 |---|---|---|
 | Tarjeta | `uiTarjeta({titulo, cuerpo, acciones, plegable})` | `.card` con headers a mano, `cardHeaderConColapso` |
 | Tarjeta de acción | `uiAccion({nivel, eyebrow, titulo, detalle, botones})` | tarjetas de Hoy, `pendbanner`, `warnbox` con botón |
-| Fila | `uiFila({izquierda, principal, meta, derecha, botones, onclick})` | `agendarow`, `autoconf-fila`, `pago-fila`, `agenda-ninerarow`, `notifcfg-row`, `conc-fila`, `person-row`, `candlist .item`, filas de movimientos y fijos |
+| Fila | `uiFila({izquierda, principal, meta, derecha, botones, onclick})`. En el celular los botones bajan a una segunda línea; en la compu van en la misma línea que el monto | `agendarow`, `autoconf-fila`, `pago-fila`, `agenda-ninerarow`, `notifcfg-row`, `conc-fila`, `person-row`, `candlist .item`, filas de movimientos y fijos |
 | Lista | `uiLista(filas, {grupos})` con encabezados de grupo pegajosos | tablas `asigtable` (lista del mes, historial, margen) |
-| Chip | `uiChip(texto, 'ok'/'aviso'/'mal'/'neutro'/'marca'/'sin')` | `.badge` con 5 variantes y estilos inline |
-| Botón | `.btn` (44 px) con `.primario/.suave/.bueno/.peligro/.chico` (36 px, solo en listas densas) y `.ancho` | `.btn.primary`, `.smallbtn`, `.btn.ghost`, `.btn.danger`, `.createbtn`, `.extratoggle`, `.durbtn`, `.pillbtn`, `.tipobtn`, `.daybtn` |
+| Chip | `uiChip(texto, 'ok'/'aviso'/'mal'/'neutro'/'marca'/'sin')`, que emite `class="chip chip-ok"` | `.badge` con 5 variantes y estilos inline |
+| Aviso | `uiAviso(texto, 'atencion'/'ok'/'info'/'error')`: bloque de texto de ancho completo, emite `class="aviso aviso-atencion"` | `.warnbox`, `.okbox`, `.helper` coloreados a mano |
+| Botón | `.btn` (44 px) con `.btn-primario/-suave/-bueno/-peligro/-chico` (36 px, solo en listas densas) y `.btn-ancho` | `.btn.primary`, `.smallbtn`, `.btn.ghost`, `.btn.danger`, `.createbtn`, `.extratoggle`, `.durbtn`, `.pillbtn`, `.tipobtn`, `.daybtn` |
 | Segmentos y filtros | `uiSegmentos([...])`, `uiFiltros([...])` | `subtab`, `pillfilters`, `tiporow`, `fin-vistas` pintado a mano |
-| Hoja | `abrirHoja(html, {titulo, pie})`: en celular sube desde abajo con pie pegajoso (Cancelar/Guardar); en compu es el modal de hoy | `abrirModal` (se mantiene como alias) |
+| Hoja | `abrirHoja(html, {titulo, pie, panel})`: en el celular sube desde abajo con pie pegajoso (Cancelar/Guardar). En la compu, si la pantalla tiene panel lateral (`panel: true`, Registros) se abre al costado de la lista sin tapar nada; si no, como el modal centrado de hoy | `abrirModal` (se mantiene como alias) |
 | Estados | `uiVacio(texto, accion)`, `uiCargando()`, `uiError(e, reintentar)` | 13 `.empty`, 4 "Cargando", `errBox`, `errorConReintentoHtml` |
 | Toast con deshacer | `toast(msg, tipo, {deshacer: fn})` | `toast` de hoy (se extiende) |
 | Plata y fechas | `fmtPlata(n)`, `fmtFechaCorta(iso)`, `fmtHorario(ini, fin, cruza)` | `fmt` ×4, `plata`, `plataFin`, `fmtF` ×2, 27 `toLocaleString` sueltos |
@@ -298,10 +314,11 @@ Tokens (CSS en `:root`, los colores de siempre): `--sp-1..6` (4 a 32 px), `--r-s
 Cómo migrar sin romper los tests:
 
 1. Los tests usan 629 selectores por id (`#editmodal`, `#sit-cobro`, `#fin-porpagar-wrap`, `#confirm-si`…) y 149 por clase (`.toast`, `.agendarow` ×29, `.autocomplete-item`, `.daybtn`, `.fin-semana-en-curso`, `.statnum`, `.spinner`, `.autoconf-card`). **Los ids se conservan todos.** Las clases que miran los tests quedan como alias en el componente nuevo (`uiFila` emite `class="fila agendarow"`, el spinner conserva `.spinner`, el toast `.toast .good/.bad`).
-2. `abrirModal` sigue existiendo y sigue creando `#editmodal` con `.confirmoverlay.show` (el Realtime y `esperarQuieta` dependen de eso); `abrirHoja` es la misma función con otra presentación en celular.
-3. `tests/estatico.spec.js` suma dos controles: que ningún archivo nuevo use `style="` inline salvo una lista blanca que se achica PR a PR, y que las clases alias no desaparezcan.
-4. Cada PR corre `humo`, `exploratorio` y los del módulo tocado, y saca capturas a 390 px con el harness para comparar antes y después.
-5. Orden: primero el PR de base (CSS + helpers, sin cambiar pantallas), después cada módulo migra sus filas y botones al componente. No se borra CSS viejo hasta que `grep` diga que nadie lo usa.
+2. `abrirModal` sigue existiendo y sigue creando `#editmodal` con `.confirmoverlay.show` (el Realtime y `esperarQuieta` dependen de eso); `abrirHoja` es la misma función con otra presentación. El panel lateral de Registros en la compu también es `#editmodal` con `.confirmoverlay.show` y una clase de panel que lo pone al costado sin fondo oscuro: los tests (que corren a 1280 px) lo siguen encontrando igual, y el Realtime sigue esperando a que se cierre.
+3. Los tests corren con un solo proyecto, `escritorio` a 1280×900: con el diseño nuevo ven la versión de compu. El PR 0 suma un proyecto `celular` (390×844) que corre `humo` y `exploratorio`, para que la barra de abajo, el "+" flotante y las hojas también tengan test.
+4. `tests/estatico.spec.js` suma tres controles: que ningún archivo nuevo use `style="` inline salvo una lista blanca que se achica PR a PR, que las clases alias no desaparezcan y que ningún nombre de componente se use como variante de otro.
+5. Cada PR corre `humo`, `exploratorio` y los del módulo tocado, y saca capturas a 390 px y a 1280 px con el harness para comparar antes y después.
+6. Orden: primero el PR de base (CSS + helpers, sin cambiar pantallas), después cada módulo migra sus filas y botones al componente. No se borra CSS viejo hasta que `grep` diga que nadie lo usa.
 
 ### 4.5 Analytics que sirven para decidir
 
@@ -369,17 +386,67 @@ Finanzas, el PDF y la Agenda lo traten como cobrable: hoy un registro cancelado 
 
 ### 4.8 Maquetas
 
-En `local/maquetas/` (ignorado por git): `hoy.html`, `sittings.html`, `finanzas.html` y `maquetas.css`. Se abren directo en el celular (o en la compu, donde se ven como un teléfono centrado). Datos ficticios. Muestran: la barra de pestañas, las tarjetas de acción de Hoy con el lugar del pedido de WhatsApp y las sugeridas, la lista de registros con filtros y la hoja de registro nuevo con el desglose de precio, y Plata con Pagar/Cobrar/Números y el toast con Deshacer.
+En `local/maquetas/` (ignorado por git): `hoy.html`, `sittings.html`, `finanzas.html` y `maquetas.css`. Se abren directo en el celular o en la compu: hasta 599 px ocupan la pantalla, de 600 a 1023 px se ven como un teléfono centrado y desde 1024 px muestran la versión de compu (4.9). Datos ficticios. Muestran: la barra de pestañas, las tarjetas de acción de Hoy con el lugar del pedido de WhatsApp y las sugeridas, la lista de registros con filtros y la hoja de registro nuevo con el desglose de precio, y Plata con Pagar/Cobrar/Números y el toast con Deshacer.
+
+### 4.9 Celular y compu, pantalla por pantalla
+
+Decidido el 21/10/2026. Las maquetas muestran las dos versiones.
+
+| Pantalla | Celular (hasta 1023 px) | Compu (desde 1024 px) |
+|---|---|---|
+| Marco | barra de arriba con el nombre y la campanita; barra de 5 pestañas abajo; "+" flotante | barra de arriba a todo el ancho; menú lateral fijo con las mismas 5 secciones y "+ Nuevo" arriba; contenido hasta 1.240 px de ancho |
+| Hoy | una columna: tarjetas de acción, después agenda del día, semana y datos que faltan | dos columnas: acciones a la izquierda (`1,3fr`); agenda del día, "Esta semana" (en 2 columnas) y "Datos que faltan" a la derecha (`1fr`), pegajosa al hacer scroll |
+| Registros | lista por día con filtros; el registro nuevo o editado se abre en una hoja que sube desde abajo | la lista a la izquierda y la hoja de registro como panel al costado (420 px, pegajoso, con su propio scroll y el pie Cancelar/Guardar fijo abajo), no un modal encima: se puede mirar la lista mientras se carga |
+| Plata | Pagar · Cobrar · Números en segmentos; cada fila con el monto a la derecha y los botones en una segunda línea | una sola columna ancha (hasta 920 px); cada fila con monto, Copiar cuenta, Copiar monto y Pagado en la misma línea; "Semana en curso" plegada abajo |
+| Agenda, Más y fichas | se definen en su PR con estas mismas reglas: listas con `uiFila`; donde hay formulario al lado de una lista, panel al costado en la compu | |
+
+### 4.10 Red de tests antes de migrar
+
+Condición de Diego (21/10/2026): **no se migra a la versión nueva hasta tener una red de tests
+grande.** Lo que manda es que cada flujo esté cubierto, no el número; la meta orientativa es más de
+2.500 casos contando los generados.
+
+1. **Ningún test existente se borra ni se debilita** durante el rediseño. Si un test mira algo que
+   cambia de lugar (un id, una clase, un texto, una pantalla), se adapta para comprobar lo mismo en
+   el lugar nuevo, y la descripción del PR lo lista: qué test, qué miraba, qué mira ahora.
+2. **Equivalencia de plata con un generador de casos.** Antes de tocar una función que calcula
+   plata, su versión actual se congela como oráculo (`tests/support/oraculo-plata.js`, copia exacta
+   con fecha). Un generador con semilla fija arma miles de combinaciones y compara la función nueva
+   con el oráculo: tienen que dar exactamente lo mismo, salvo donde una regla cambia a propósito
+   (el redondeo de montos), y ahí el oráculo es la regla escrita. Un caso que falla imprime sus
+   datos para reproducirlo. Datos ficticios, nunca reales. Va en su propio PR, antes del PR 0 y
+   después de que entren redondeo-montos y los errores de plata, para que el oráculo ya tenga las
+   reglas nuevas.
+3. **Cada PR de pantalla trae su lista de tests**: cada acción (caso normal, base que falla, sin
+   conexión, doble toque, datos raros), los estados vacío, cargando y error, y todo en 390 px y en
+   1280 px. El PR 0 suma el proyecto `celular` (390×844) a la configuración de Playwright.
+4. **La versión nueva convive con la vieja detrás de un interruptor** hasta que Paulina y Delfina
+   la aprueben. `?nuevo=1` la prende en ese dispositivo (queda guardado) y `?nuevo=0` la apaga; más
+   adelante, un ajuste por usuaria en Más. Las dos leen y escriben las mismas tablas con las mismas
+   funciones: solo cambia la pantalla. La vieja se apaga en un PR aparte, y en ese PR cada test de la
+   vieja se adapta a la nueva (regla 1), ninguno se borra.
+
+Cuántos tests hay y cuántos casos suma cada punto (estimación del 21/10/2026):
+
+| | Qué | Casos |
+|---|---|---|
+| Hoy | Playwright: 421 tests en 26 archivos. En curso: 10 de errores de plata y 15 de redondeo-montos (PR #52). Además 3 pruebas SQL en Postgres local | ~446 |
+| 1 | Los existentes se conservan; se adaptan los que miran algo que se mueve | ~446 (no suma, no resta) |
+| 2 | Generador de plata: horario (inicio cada 30 min, fin cada 7 min hasta 12 h después, con y sin fin al día siguiente, con y sin términos) ~1.500; cobro y pago por horas con el redondeo de cobro y de pago, tres tarifas y bordes de ,5 ~800; totales de un grupo de Por cobrar / Por pagar (puntuales y fijos, semana cerrada o en curso, gastos que pagó la niñera o la familia, `absorbe_pb`, saldo a favor positivo y negativo) ~600; los mismos horarios contra la base (`minutos_fin_cobro`, `generar_previstos_fijos`, redondeo en SQL) en Postgres local ~200 | ~3.100 |
+| 3 | Listas por pantalla: PR 0 ~25, Pedido desde WhatsApp ~35, Hoy ~40, Plata ~60, Registros ~50, Agenda ~35, Familias y Niñeras ~20, Más ~15 | ~280 |
+| 4 | Interruptor: ~5 tests propios, y `humo` y `exploratorio` corridos también con la versión nueva y a 390 px | ~140 corridas más |
+| Total | | ~3.970 casos: ~870 tests y corridas de pantalla y ~3.100 generados |
 
 ## 5. Plan por etapas
 
 Un PR por módulo, en el orden que decidió Diego el 21/10/2026. Cada uno con sus tests nuevos, capturas a 390 px, y la descripción del PR con el estado. Los que llevan migración esperan el OK de Diego para aplicarla.
 
-Antes de todo, en un PR aparte: los cinco errores de plata de la auditoría (CLAUDE.md → Pendientes → "Errores encontrados en la auditoría"), con un test que reproduce cada uno. El PR 0 no arranca hasta que Paulina y Delfina vean las maquetas.
+Antes de todo, en un PR aparte: los cinco errores de plata de la auditoría (CLAUDE.md → Pendientes → "Errores encontrados en la auditoría"), con un test que reproduce cada uno. Después, el PR T con la red de plata (4.10, punto 2). El PR 0 no arranca hasta que Paulina y Delfina vean las maquetas. Cada pantalla nueva entra detrás del interruptor (4.10, punto 4) y trae su lista de tests (punto 3).
 
 | # | PR | Qué entra | Riesgo | Tests que toca | Base |
 |---|---|---|---|---|---|
-| 0 | `claude/base-componentes` | tokens, componentes de 4.4, barra de pestañas (celular) con los mismos `setModulo`, caché de sesión, control estático de estilos inline. Ninguna pantalla cambia de contenido | **Medio**: CSS global; se verifica con capturas de todos los módulos antes y después | `estatico`, `humo`, `arranque`, `exploratorio` | no |
+| T | `claude/red-plata` | oráculo de las funciones de plata actuales y generador de casos (4.10, punto 2). No cambia nada de la app | **Bajo**: solo tests | nuevos (~3.100 casos) | prueba SQL en Postgres local, nunca en producción |
+| 0 | `claude/base-componentes` | tokens, componentes de 4.4, interruptor `?nuevo=1`, menú nuevo (barra abajo en el celular, lateral en la compu) solo con el interruptor prendido, caché de sesión, proyecto de tests a 390 px, control estático de estilos inline. Con el interruptor apagado no cambia nada | **Medio**: CSS global; se verifica con capturas de todos los módulos antes y después | `estatico`, `humo`, `arranque`, `exploratorio` | no |
 | W | Pedido desde WhatsApp | la tarea de CLAUDE.md → Próximas tareas, con el diseño nuevo: tarjeta de Hoy (`uiAccion`) con el ticket y las niñeras sugeridas (`chip-elegir`), y hoja "Nuevo pedido" en el "+" | **Medio**: llamada a Claude Haiku y lógica de sugerencias; se define en su propia propuesta | nuevos | a definir |
 | 1 | `claude/hoy-acciones` | Hoy nuevo (4.3), cierre de ayer, registrar tal cual, asignar desde Hoy; `resumen_hoy()`; campanita alimentada por lo mismo | **Medio**: lógica nueva y una función SQL; el test de fijos automáticos y mejoras-hoy cambian | `mejoras-hoy`, `fijos-automaticos`, `humo`, `fechas` | migración: función `resumen_hoy()`, índice `solicitudes(estado, fecha)` |
 | 2 | `claude/plata` | Plata con Pagar/Cobrar/Números, `finanzas_pendientes()`, confirmación en cobrar, Deshacer, editar movimiento con desglose, refresco liviano tras pagar, `cobrado_at`/`pagado_at` | **Alto**: es la plata y son 9 archivos de tests; se hace en dos PRs si crece (2a listas y pagos, 2b números y migración) | `finanzas`, `pagos`, `saldo`, `gastos-extra`, `revisar-meses`, `por-pagar-en-curso`, `intermediaciones-finanzas`, `finanzas-arreglos`, `conciliacion` | migración: `cobrado_at`, `pagado_at`, `marcado_por` + trigger; función `finanzas_pendientes()` |
@@ -388,6 +455,7 @@ Antes de todo, en un PR aparte: los cinco errores de plata de la auditoría (CLA
 | 5 | `claude/personas` | Familias y Niñeras con la misma lista y ficha, alta con menos campos, saldo a favor desde la misma hoja que Plata | **Bajo-medio** | `alta-ninera`, `terminos`, `escape` | no |
 | 6 | `claude/mas` | Postulantes, Intermediaciones, Notificaciones, Marketing, Contratos, Juguetes en "Más"; Contratos y Juguetes al fondo | **Bajo** | `entrevista*`, `intermediaciones` | no |
 | 7 | `claude/uso-app` | tabla `uso_app` y la lista "Qué decidir" completa (embudo, días de cobro) | Bajo | `finanzas` | migración: `uso_app` |
+| 8 | `claude/apagar-version-vieja` | cuando Paulina y Delfina aprueban: la versión nueva pasa a ser la única; se borra el código viejo y cada test de la vieja se adapta a la nueva | **Medio**: muchos tests se adaptan; ninguno se borra | todos | no |
 
 Relación con lo que viene:
 
@@ -411,6 +479,7 @@ Las tomó Diego sobre esta propuesta. Todas las recomendadas, salvo la 10.
 | 8 | Selector de hora | Reloj nativo del iPhone (`<input type="time">`) |
 | 9 | Deshacer | Toast con "Deshacer" 8 s para cobrado, pagado, revisado, "no fue" y cancelar pedido |
 | 10 | Campanita en celular | **Se mantiene** también en el celular, alimentada por lo mismo que Hoy |
+| 11 | Red de tests | No se migra a la versión nueva sin la red de 4.10: ningún test se borra ni se debilita, generador de plata, lista de tests por pantalla en 390 y 1280 px, versión nueva detrás de un interruptor hasta que la aprueben |
 
 Pendiente antes del PR 0: que Paulina y Delfina vean las maquetas.
 

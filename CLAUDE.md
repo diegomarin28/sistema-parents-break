@@ -405,6 +405,11 @@ descartado (19/10/2026): no proponerlo de nuevo.
 - Rediseño del panel (21/10/2026): auditoría, decisiones y plan en `docs/rediseno-panel.md`. Orden:
   errores de plata (abajo) → PR 0 base de componentes (espera a que Paulina y Delfina vean las
   maquetas) → Pedido desde WhatsApp → Hoy → Plata → Registros → Agenda → Familias y Niñeras → Más.
+  No se migra sin red de tests (21/10/2026, `docs/rediseno-panel.md` 4.10): ningún test se borra ni
+  se debilita (si mira algo que se mueve, se adapta y el PR lo dice); antes del PR 0, un generador
+  de casos de plata compara las funciones nuevas con las actuales; cada PR de pantalla trae sus
+  tests (cada acción, vacío / cargando / error, 390 y 1280 px); la versión nueva va detrás de
+  `?nuevo=1` hasta que Paulina y Delfina la aprueben, y la vieja se apaga en un PR aparte.
 - Cobros atrasados en Hoy (19/10/2026), EN PAUSA (20/10/2026: la propuesta no convenció a las
   chicas, retomar con sus cambios): lista de familias que deben, con días de atraso y monto, y
   un botón que abra WhatsApp con el recordatorio ya escrito (link de WhatsApp, sin la API).
