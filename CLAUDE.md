@@ -195,6 +195,12 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   resultado).
 - `tests/guardados.spec.js`: doble toque, base que falla o sin conexión, cerrar el modal a mitad
   del guardado, terminar un fijo desde una fecha.
+- `tests/red-plata.spec.js`: red de plata del rediseño (21/10/2026): con una semilla fija compara la
+  app con el oráculo (`tests/support/oraculo-plata.js`, copia congelada de las funciones de plata) y
+  con la regla escrita: ~2.000 horarios (con barridos minuto a minuto), 1.600 montos y precios, 400
+  meses de resumen y 400 bases chicas de Por cobrar / Por pagar en miércoles, sábado, domingo y lunes,
+  y 60 pantallas de Finanzas. La base, contra el mismo oráculo: `supabase/pruebas/paridad_plata.sql`
+  (2.880 minutos, 800 montos y 450 días de fijos; Postgres local).
 - `tests/errores-plata.spec.js`: errores de plata de la auditoría del 21/10/2026: "Termina al día
   siguiente" mal marcado (Sittings, Agenda, día de un fijo y reemplazo), editar un movimiento sin
   pisar cobrado / pagado de la otra, asignar un pedido que ya asignó otra o cuando falla guardar,
@@ -228,7 +234,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   año, pausas entre semanas, cambios desde una fecha), `fijos_automaticos_bordes.sql`
   (nunca en producción). Si no hay Postgres instalado: PGlite (`npm i @electric-sql/pglite` en
   una carpeta fuera del repo), creando antes los roles anon/authenticated/service_role y
-  esquemas auth, storage y cron de mentira, y sacando los `create extension` de schema.sql.
+  esquemas auth, storage y cron de mentira (con `auth.uid()`, `cron.schedule()`, `net.http_post()` y
+  la publicación `supabase_realtime`), y sacando los `create extension` de schema.sql.
 - `tests/saldo.spec.js`: saldo a favor (ajustes) en Por pagar / Por cobrar, al marcar pagado o
   cobrado, en la ficha, en el PDF y con la base sin la tabla.
 - `tests/gastos-extra.spec.js`: gastos extra con ticket en el formulario, en Por cobrar / Por
@@ -266,6 +273,10 @@ reporte.
   doble toque, datos vacíos o raros, base sin la migración nueva, celular de 390px) y que el
   usuario vea un aviso claro y no un éxito falso.
 - Bug arreglado: primero un test que lo reproduce y falla, después el arreglo.
+- Plata (21/10/2026): todo cambio que toque un cálculo de plata pasa `tests/red-plata.spec.js`. Si la
+  regla cambia a propósito, en el mismo PR se vuelve a congelar el oráculo (`node
+  scripts/congelar-oraculo-plata.js`) y la prueba SQL (`node scripts/paridad-plata-sql.js`), y la
+  descripción del PR lo dice. Una función de plata nueva se suma a la lista del script del oráculo.
 - Consultas a la base, lo más livianas posible:
   - pedí solo las columnas que usás (nada de `select('*')` en tablas grandes) y filtrá en
     la base (fecha, familia, estado), no en el navegador;
@@ -437,8 +448,8 @@ descartado (19/10/2026): no proponerlo de nuevo.
   errores de plata (abajo) → PR 0 base de componentes (espera a que Paulina y Delfina vean las
   maquetas) → Pedido desde WhatsApp → Hoy → Plata → Registros → Agenda → Familias y Niñeras → Más.
   No se migra sin red de tests (21/10/2026, `docs/rediseno-panel.md` 4.10): ningún test se borra ni
-  se debilita (si mira algo que se mueve, se adapta y el PR lo dice); antes del PR 0, un generador
-  de casos de plata compara las funciones nuevas con las actuales; cada PR de pantalla trae sus
+  se debilita (si mira algo que se mueve, se adapta y el PR lo dice); la red de plata
+  (`tests/red-plata.spec.js`, 21/10/2026) compara las funciones nuevas con las actuales; cada PR de pantalla trae sus
   tests (cada acción, vacío / cargando / error, 390 y 1280 px); la versión nueva va detrás de
   `?nuevo=1` hasta que Paulina y Delfina la aprueben, y la vieja se apaga en un PR aparte.
   Fidelidad a las maquetas (21/10/2026): la app nueva replica las maquetas de `local/maquetas/`

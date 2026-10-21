@@ -477,10 +477,17 @@ Cuántos tests hay y cuántos casos suma cada punto (estimación del 21/10/2026)
 |---|---|---|
 | Hoy | Playwright: 421 tests en 26 archivos. En curso: 10 de errores de plata y 15 de redondeo-montos (PR #52). Además 3 pruebas SQL en Postgres local | ~446 |
 | 1 | Los existentes se conservan; se adaptan los que miran algo que se mueve | ~446 (no suma, no resta) |
-| 2 | Generador de plata: horario (inicio cada 30 min, fin cada 7 min hasta 12 h después, con y sin fin al día siguiente, con y sin términos) ~1.500; cobro y pago por horas con el redondeo de cobro y de pago, tres tarifas y bordes de ,5 ~800; totales de un grupo de Por cobrar / Por pagar (puntuales y fijos, semana cerrada o en curso, gastos que pagó la niñera o la familia, `absorbe_pb`, saldo a favor positivo y negativo) ~600; los mismos horarios contra la base (`minutos_fin_cobro`, `generar_previstos_fijos`, redondeo en SQL) en Postgres local ~200 | ~3.100 |
+| 2 | **Hecho (PR T, 21/10/2026).** En la app (`tests/red-plata.spec.js`, 12 tests, 8 s): 1.960 horarios (barridos minuto a minuto de una tarde y de la madrugada, y 1.000 al azar), 1.600 montos y precios, 400 meses de resumen y 400 bases chicas de Por cobrar / Por pagar (miércoles, sábado, domingo y lunes), y 60 pantallas de Finanzas. En la base (`supabase/pruebas/paridad_plata.sql`, Postgres local): 2.880 minutos de `minutos_fin_cobro`, 800 montos en `redondear_pago` y `redondear_cobro`, y 450 días creados por `generar_previstos_fijos` | ~4.400 en la app y ~4.900 en la base |
 | 3 | Listas por pantalla: PR 0 ~25, Pedido desde WhatsApp ~35, Hoy ~40, Plata ~60, Registros ~50, Agenda ~35, Familias y Niñeras ~20, Más ~15 | ~280 |
 | 4 | Interruptor: ~5 tests propios, y `humo` y `exploratorio` corridos también con la versión nueva y a 390 px | ~140 corridas más |
-| Total | | ~3.970 casos: ~870 tests y corridas de pantalla y ~3.100 generados |
+| Total | | ~10.000 casos: ~870 tests y corridas de pantalla (estimado) y ~9.300 generados (hechos) |
+
+Cómo se sabe que la red atrapa errores: se metieron a propósito ocho errores chicos en la app (el
+cobro con ,5 hacia abajo, 6 minutos de tolerancia, la semana que cierra un día después, las fijas
+sin finde que cierran el domingo, por cobrar mirando "pagado", un descuento sin tope, pagos de días
+futuros, un gasto absorbido que se cobra) y tres en la prueba SQL. Cada uno hizo fallar al menos un
+test. El de la semana recién se atrapó al sumar el lunes como "hoy". La app, la base y el oráculo
+coinciden en todos los casos generados.
 
 ## 5. Plan por etapas
 
@@ -490,7 +497,7 @@ Antes de todo, en un PR aparte: los cinco errores de plata de la auditoría (CLA
 
 | # | PR | Qué entra | Riesgo | Tests que toca | Base |
 |---|---|---|---|---|---|
-| T | `claude/red-plata` | oráculo de las funciones de plata actuales y generador de casos (4.10, punto 2). No cambia nada de la app | **Bajo**: solo tests | nuevos (~3.100 casos) | prueba SQL en Postgres local, nunca en producción |
+| T | `claude/red-plata` (hecho) | oráculo de las funciones de plata actuales y generador de casos (4.10, punto 2). No cambia nada de la app | **Bajo**: solo tests | nuevos (~9.300 casos) | prueba SQL en Postgres local, nunca en producción |
 | 0 | `claude/base-componentes` | tokens, componentes de 4.4, interruptor `?nuevo=1`, menú nuevo (barra abajo en el celular, lateral en la compu) solo con el interruptor prendido, caché de sesión, proyecto de tests a 390 px, control estático de estilos inline. Con el interruptor apagado no cambia nada | **Medio**: CSS global; se verifica con capturas de todos los módulos antes y después | `estatico`, `humo`, `arranque`, `exploratorio` | no |
 | W | Pedido desde WhatsApp | la tarea de CLAUDE.md → Próximas tareas, con el diseño nuevo: tarjeta de Hoy (`uiAccion`) con el ticket y las niñeras sugeridas (`chip-elegir`), y hoja "Nuevo pedido" en el "+" | **Medio**: llamada a Claude Haiku y lógica de sugerencias; se define en su propia propuesta | nuevos | a definir |
 | 1 | `claude/hoy-acciones` | Hoy nuevo (4.3), cierre de ayer, registrar tal cual, asignar desde Hoy; `resumen_hoy()`; campanita alimentada por lo mismo | **Medio**: lógica nueva y una función SQL; el test de fijos automáticos y mejoras-hoy cambian | `mejoras-hoy`, `fijos-automaticos`, `humo`, `fechas` | migración: función `resumen_hoy()`, índice `solicitudes(estado, fecha)` |
