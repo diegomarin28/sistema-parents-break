@@ -305,6 +305,10 @@ Tokens (CSS en `:root`, los colores de siempre): `--sp-1..6` (4 a 32 px), `--r-s
 | Aviso | `uiAviso(texto, 'atencion'/'ok'/'info'/'error')`: bloque de texto de ancho completo, emite `class="aviso aviso-atencion"` | `.warnbox`, `.okbox`, `.helper` coloreados a mano |
 | Botón | `.btn` (44 px) con `.btn-primario/-suave/-bueno/-peligro/-chico` (36 px, solo en listas densas) y `.btn-ancho` | `.btn.primary`, `.smallbtn`, `.btn.ghost`, `.btn.danger`, `.createbtn`, `.extratoggle`, `.durbtn`, `.pillbtn`, `.tipobtn`, `.daybtn` |
 | Segmentos y filtros | `uiSegmentos([...])`, `uiFiltros([...])` | `subtab`, `pillfilters`, `tiporow`, `fin-vistas` pintado a mano |
+| Lista con panel | `uiListaPanel(lista, panel)`: en el celular la hoja sube desde abajo; en la compu va al costado de la lista, pegajosa y con su propio scroll. La usan Registros, Niñeras y Postulantes | el modal encima de la lista |
+| Buscador | `uiBuscar({placeholder})`: campo con lupa, filtra en la base | los `input` de filtro sueltos de Familias y Niñeras |
+| Bloque plegable | `uiBloque({titulo, estado, abierto})`: `details` con un chip de estado (Completo, Faltan 2, Opcional) | `cardHeaderConColapso` y los bloques de la Entrevista |
+| Puntaje | `uiPuntaje(nombre, valor)`: escala de 1 a 5 en botones de 36 px; si falta, el nombre en ámbar | `.scorebar` / `.scorebtn` |
 | Hoja | `abrirHoja(html, {titulo, pie, panel})`: en el celular sube desde abajo con pie pegajoso (Cancelar/Guardar). En la compu, si la pantalla tiene panel lateral (`panel: true`, Registros) se abre al costado de la lista sin tapar nada; si no, como el modal centrado de hoy | `abrirModal` (se mantiene como alias) |
 | Estados | `uiVacio(texto, accion)`, `uiCargando()`, `uiError(e, reintentar)` | 13 `.empty`, 4 "Cargando", `errBox`, `errorConReintentoHtml` |
 | Toast con deshacer | `toast(msg, tipo, {deshacer: fn})` | `toast` de hoy (se extiende) |
@@ -386,7 +390,29 @@ Finanzas, el PDF y la Agenda lo traten como cobrable: hoy un registro cancelado 
 
 ### 4.8 Maquetas
 
-En `local/maquetas/` (ignorado por git): `hoy.html`, `sittings.html`, `finanzas.html` y `maquetas.css`. Se abren directo en el celular o en la compu: hasta 599 px ocupan la pantalla, de 600 a 1023 px se ven como un teléfono centrado y desde 1024 px muestran la versión de compu (4.9). Datos ficticios. Muestran: la barra de pestañas, las tarjetas de acción de Hoy con el lugar del pedido de WhatsApp y las sugeridas, la lista de registros con filtros y la hoja de registro nuevo con el desglose de precio, y Plata con Pagar/Cobrar/Números y el toast con Deshacer.
+En `local/maquetas/` del worktree principal (ignorada por git, datos ficticios):
+
+| Archivo | Pantalla |
+|---|---|
+| `hoy.html` | Hoy: tarjetas de acción, pedido de WhatsApp con sugeridas, agenda del día, semana, datos que faltan |
+| `sittings.html` | Registros: lista por día con filtros y la hoja de registro nuevo con el desglose de precio |
+| `finanzas.html` | Plata: Pagar, Cobrar y Números, con el toast "Deshacer" |
+| `mas.html` | Más: Personas, Operación, Se usa poco y Ajustes |
+| `ninieras.html` | Niñeras: reparto de quién trabajó, buscador, filtros, lista y ficha al costado |
+| `postulantes.html` | Postulantes: Por revisar / Entrevistas / Guardadas y la entrevista por bloques con puntajes |
+| `celular.html` | solo para mirar: cualquier maqueta dentro de un marco de 390 px (`celular.html#ninieras.html`) |
+| `maquetas.css` | los tokens y componentes que comparten todas |
+
+Se abren directo en el navegador: hasta 599 px ocupan la pantalla, de 600 a 1023 px se ven como un
+teléfono centrado y desde 1024 px muestran la versión de compu (4.9). En la compu, arriba a la
+derecha, "Ver cómo queda en el celular" abre la misma pantalla en `celular.html`. Lo que se ve
+debajo de un separador ("Al tocar una niñera: su ficha") es una anotación de la maqueta: muestra la
+hoja que en la app sube al tocar.
+
+**Fidelidad (regla de Diego, 21/10/2026).** La app nueva replica las maquetas lo más fiel posible,
+en celular y en compu: mismos textos, orden, componentes, espaciado y comportamiento. Si algo de una
+maqueta no se puede hacer o choca con un test, no se cambia por cuenta propia: se le avisa a Diego
+antes. Cada PR de pantalla trae capturas a 390 px y a 1280 px al lado de la maqueta.
 
 ### 4.9 Celular y compu, pantalla por pantalla
 
@@ -398,7 +424,26 @@ Decidido el 21/10/2026. Las maquetas muestran las dos versiones.
 | Hoy | una columna: tarjetas de acción, después agenda del día, semana y datos que faltan | dos columnas: acciones a la izquierda (`1,3fr`); agenda del día, "Esta semana" (en 2 columnas) y "Datos que faltan" a la derecha (`1fr`), pegajosa al hacer scroll |
 | Registros | lista por día con filtros; el registro nuevo o editado se abre en una hoja que sube desde abajo | la lista a la izquierda y la hoja de registro como panel al costado (420 px, pegajoso, con su propio scroll y el pie Cancelar/Guardar fijo abajo), no un modal encima: se puede mirar la lista mientras se carga |
 | Plata | Pagar · Cobrar · Números en segmentos; cada fila con el monto a la derecha y los botones en una segunda línea | una sola columna ancha (hasta 920 px); cada fila con monto, Copiar cuenta, Copiar monto y Pagado en la misma línea; "Semana en curso" plegada abajo |
-| Agenda, Más y fichas | se definen en su PR con estas mismas reglas: listas con `uiFila`; donde hay formulario al lado de una lista, panel al costado en la compu | |
+| Más | cuatro grupos: Personas (Familias, Niñeras, Postulantes y entrevistas), Operación (Intermediaciones, Notificaciones), Se usa poco (Marketing, Contratos, Juguetes) y Ajustes (Zonas y tarifa de traslado, Face ID, Cerrar sesión en rojo con la versión). Cada fila: ícono, nombre, un dato y flecha; un chip avisa lo que falta ("30 sin tarifa", "69 sin cuenta") | los mismos cuatro grupos en dos columnas: Personas y Operación a la izquierda, Se usa poco y Ajustes a la derecha |
+| Niñeras | "‹ Más", título con activas e inactivas y "+ Niñera nueva". Arriba, el reparto "Trabajaron en los últimos 3 meses: 20 de 92" (barra con las 3 que hacen 1 de cada 3 sittings, las demás que trabajaron y las que no), que reemplaza la tarjeta de conteo. Buscador por nombre, zona o teléfono; filtros Trabajaron hace poco, Todas, Sin cuenta, Sin teléfono, Inactivas. Cada fila: zona, sittings en 3 meses y el último, chip Activa o Sin cuenta. La ficha sube como hoja: edad y desde cuándo, chips (cuida bebés, tiene auto, idiomas), datos en dos columnas (teléfono, zona, cuenta, semana de pago, disponibilidad, cédula con "Falta" en ámbar), sittings en 3 meses y lo que se le pagó en el mes, "Familias a las que fue" (fijo, veces, reseña), pie WhatsApp / Editar | lista con panel: la lista a la izquierda (la niñera elegida resaltada) y la ficha al costado |
+| Postulantes | "‹ Más", título con el total y las que ya trabajan. Segmentos Por revisar (37) · Entrevistas (3) · Guardadas. Lista agrupada: Entrevista agendada (botón "Empezar"), Postularon esta semana y Esperando hace más de 15 días (botón "Agendar"). La entrevista sube como hoja: "Abrir el Meet" y "Se guarda sola mientras escribís", progreso "4 de 7 bloques completos", bloques plegables con su chip de estado (Datos personales, Experiencia con chicos, Disponibilidad y zonas, Referencias, Primeros auxilios y situaciones, Puntajes, Notas opcional), puntajes de 1 a 5 con los que faltan en ámbar, el aviso "Para guardarla faltan…", "Descartar candidata" (queda en Guardadas como descartada, no se borra) y el pie Guardar y seguir después / Contratar | lista con panel: la lista a la izquierda y la entrevista al costado |
+| Agenda y Familias | todavía sin maqueta: se dibujan antes de su PR, con estas mismas reglas (listas con `uiFila`; formulario al lado de una lista, panel al costado en la compu) | |
+
+Lo que muestran las maquetas de Más, Niñeras y Postulantes y hoy la app no tiene o no sabe (para
+resolver con Diego antes del PR de cada pantalla, según la regla de fidelidad):
+
+- **"Abrir el Meet"**: la app no crea ni guarda links de Meet. Es parte del proyecto grande
+  (entrevistas con Meet), todavía sin construir.
+- **"Se guarda sola mientras escribís"**: es el autoguardado de la Entrevista, que en CLAUDE.md
+  figura como ofrecido y sin respuesta. La maqueta lo da por decidido.
+- **"Descartar candidata" sin borrar**: hoy "Descartar" borra la fila (está en Pendientes). La
+  maqueta pide el estado `descartada`, que ya existe en la base.
+- **"94 activas" en Familias**: las familias no tienen un campo de activa. Hay que definir qué es
+  una familia activa (por ejemplo, con algún sitting en los últimos 3 meses).
+- **Cédula de la niñera**: hoy solo existe en `carsitting_datos` (vacía). Falta decidir dónde se
+  guarda para las demás.
+- **Intermediaciones "Animación, limpieza y eventos"**: hoy son colocaciones de la Agencia Enrique
+  y eventos empresariales. El texto de la maqueta no coincide con lo que hay.
 
 ### 4.10 Red de tests antes de migrar
 
@@ -480,6 +525,7 @@ Las tomó Diego sobre esta propuesta. Todas las recomendadas, salvo la 10.
 | 9 | Deshacer | Toast con "Deshacer" 8 s para cobrado, pagado, revisado, "no fue" y cancelar pedido |
 | 10 | Campanita en celular | **Se mantiene** también en el celular, alimentada por lo mismo que Hoy |
 | 11 | Red de tests | No se migra a la versión nueva sin la red de 4.10: ningún test se borra ni se debilita, generador de plata, lista de tests por pantalla en 390 y 1280 px, versión nueva detrás de un interruptor hasta que la aprueben |
+| 12 | Fidelidad a las maquetas | La app nueva replica las maquetas (textos, orden, componentes, espaciado, comportamiento) en celular y compu; lo que no se pueda o choque con un test se consulta antes; cada PR de pantalla con capturas a 390 y 1280 px al lado de la maqueta |
 
 Pendiente antes del PR 0: que Paulina y Delfina vean las maquetas.
 
