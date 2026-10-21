@@ -197,7 +197,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   del guardado, terminar un fijo desde una fecha.
 - `tests/errores-plata.spec.js`: errores de plata de la auditoría del 21/10/2026: "Termina al día
   siguiente" mal marcado (Sittings, Agenda, día de un fijo y reemplazo), editar un movimiento sin
-  pisar cobrado / pagado de la otra, y asignar un pedido que ya asignó otra o cuando falla guardar.
+  pisar cobrado / pagado de la otra, asignar un pedido que ya asignó otra o cuando falla guardar,
+  pedido sin hora de fin (sin total, registro en $0, traslados con su cobro) y precio puesto a mano
+  que no se pisa al tocar la hora.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
 - `tests/por-pagar-en-curso.spec.js`: semana en curso de las fijas en Por pagar (cuándo cierra,
   sin botón, el día que cierra y el siguiente, fija con finde, saldo a favor, 390px).
@@ -315,6 +317,10 @@ reporte.
 - "Termina al día siguiente" (21/10/2026): con la casilla, el fin va antes que el inicio (o igual:
   24 h). Si no, `cruceMedianocheMalMarcado()` (core.js) avisa y no deja guardar, y `horasSitting()`
   devuelve null; antes se sumaban 24 h y se cobraban 26 horas.
+- Precio de un sitting (21/10/2026): lo tipeado a mano no se pisa al cambiar la hora o la familia;
+  se muestra el calculado con "Usar estos montos" (`precioSegunHorario`, sittings.js). Al editar,
+  un precio igual a horas × tarifa se sigue recalculando. Un pedido sin hora de fin no tiene total
+  (`cobro_familia` vacío) y su registro va en $0 hasta que se carga la hora de fin.
 - Fijos: nunca se borran. "Terminar desde [fecha]" completa `vigente_hasta` con el día
   anterior (`abrirModalTerminarFijo`, agenda.js).
 - No repintar la app entera ante eventos de auth ni al volver de segundo plano: ya causó
@@ -472,12 +478,6 @@ descartado (19/10/2026): no proponerlo de nuevo.
   carsitting-recordatorio).
 
 ### Errores encontrados en la auditoría (21/10/2026)
-De plata (van juntos en un PR, antes del PR 0 del rediseño):
-- Pedido puntual sin hora de fin: `guardarSolicitudPuntual` (agenda.js) guarda la tarifa por hora
-  como cobro total y `guardarAsignacionDirecta` la copia al registro.
-- `actualizarCobroPagoPorHorario` (sittings.js) pisa el precio puesto a mano al tocar la hora o la
-  familia: no mira `tocadoManual`, como sí hace el precio de traslados.
-Otros:
 - "Editar horarios futuros" (`guardarHorarioAsignacionFija`) no permite fijos que cruzan medianoche.
 - Semana de los fijos: el margen cierra en domingo (`filtrarFijosSemanaIncompleta`) y el resumen y
   Por pagar en sábado o domingo según la niñera; un sábado no cuadran.

@@ -462,6 +462,7 @@ function actualizarAgendaTotal(){
   const hf = leerHora('agenda-hora-fin');
   const cruza = document.getElementById('agenda-cruza-medianoche')?.checked;
   if(cruceMedianocheMalMarcado(hi, hf, cruza)){ el.textContent = AVISO_CRUCE_MEDIANOCHE; return; }
+  if(tarifa && hi && !hf){ el.textContent = 'Sin hora de fin: el total se calcula cuando se cargue a qué hora terminó.'; return; }
   if(!tarifa || !hi || !hf){ el.textContent=''; return; }
   const familia = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(document.getElementById('agenda-familia')?.value||''));
   const horas = horasSitting(hi, hf, cruza, familia, document.getElementById('agenda-nueva-fecha')?.value);
@@ -594,10 +595,11 @@ async function guardarSolicitudPuntual(){
     cobroFinal = cobroTraslado ? Number(cobroTraslado) : null;
   } else if(tarifa && horaFin){
     const horas = horasSitting(horaInicio, horaFin, cruza, fam, fecha);
-    cobroFinal = horas ? redondearCobro(Number(tarifa)*horas.cobro) : Number(tarifa);
-  } else if(tarifa){
-    cobroFinal = Number(tarifa);
+    cobroFinal = horas ? redondearCobro(Number(tarifa)*horas.cobro) : null;
   }
+  // Sin hora de fin no hay total: la tarifa por hora no es lo que se cobra. Antes se guardaba la
+  // tarifa como cobro total y pasaba así al registro al asignar (auditoría, 21/10/2026). El total
+  // se calcula cuando se carga la hora de fin en Sittings & traslados.
   const { error } = await sb.from('solicitudes').insert({
     familia_id: fam ? fam.id : null,
     familia_nombre: familiaTxt,
@@ -783,20 +785,25 @@ async function guardarAsignacionDirecta(solicitudId){
     return;
   }
   // Se carga directo el registro real en Sittings & traslados -- ya no hace falta un paso
-  // aparte de "Cargar sitting" después de asignar.
+  // aparte de "Cargar sitting" después de asignar. Un sitting sin hora de fin va en $0 y se
+  // calcula al cargarla: un pedido viejo puede traer la tarifa por hora guardada como total. Un
+  // traslado no tiene hora de fin: lleva su cobro total.
+  const faltaFin = s.tipo!=='traslado' && !s.hora_fin;
+  const cobroRegistro = faltaFin ? 0 : (Number(s.cobro_familia)||0);
   const { error: e2 } = await sb.from('sittings_traslados').insert({
     tipo: s.tipo, registrado_por: registradoPorUsuario(),
     familia_id: familia?.id || s.familia_id || null, familia_nombre: s.familia_nombre,
     ninera_id: sel.value, ninera_nombre: sel.dataset.nombre,
     fecha: s.fecha, hora_inicio: s.hora_inicio, hora_fin: s.hora_fin,
     termina_dia_siguiente: !!s.termina_dia_siguiente,
-    cobro_familia: Number(s.cobro_familia)||0, pago_ninera: pago,
+    cobro_familia: cobroRegistro, pago_ninera: pago,
     cobrado: false, pagado: false, notas: 'Asignado desde Agenda',
   });
   cerrarModal();
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
   if(e2) toast('Quedó asignado, pero no se pudo cargar en Sittings & traslados: '+e2.message, 'bad');
+  else if(faltaFin) toast('Asignado. Falta la hora de fin: el cobro se calcula cuando la cargues en Sittings & traslados.');
   else toast('Asignado — ya quedó cargado en Sittings & traslados.');
 }
 function abrirModalSolicitud(id){
