@@ -402,6 +402,9 @@ descartado (19/10/2026): no proponerlo de nuevo.
 - Niñeras que dicen que no (20/10/2026): va a la app de niñeras, como un contador.
 
 ### Próximas tareas (pedidas por Paulina y Delfina)
+- Rediseño del panel (21/10/2026): auditoría, decisiones y plan en `docs/rediseno-panel.md`. Orden:
+  errores de plata (abajo) → PR 0 base de componentes (espera a que Paulina y Delfina vean las
+  maquetas) → Pedido desde WhatsApp → Hoy → Plata → Registros → Agenda → Familias y Niñeras → Más.
 - Cobros atrasados en Hoy (19/10/2026), EN PAUSA (20/10/2026: la propuesta no convenció a las
   chicas, retomar con sus cambios): lista de familias que deben, con días de atraso y monto, y
   un botón que abra WhatsApp con el recordatorio ya escrito (link de WhatsApp, sin la API).
@@ -416,7 +419,8 @@ descartado (19/10/2026): no proponerlo de nuevo.
   por defecto: 1) ya fue a esa casa, 2) la madre la pidió antes, 3) cuidó chicos de esa edad,
   4) puede en esa zona, 5) favorita (estrella que marcan las admin), 6) cuidó varios chicos a la
   vez; el orden se cambia desde la app. Botón "Copiar mensaje para niñeras" (lista de difusión).
-  Son 4 a 6 pedidos por semana: por ahora no hace falta la API de WhatsApp.
+  Son 4 a 6 pedidos por semana: por ahora no hace falta la API de WhatsApp. Va después del PR 0
+  del rediseño, como tarjeta de Hoy y en el "+" (`docs/rediseno-panel.md`, 4.3 y 5).
 - Mensajes editables (20/10/2026): todo mensaje que se copia o abre WhatsApp tiene "Editar" antes
   de mandarlo y la opción de guardarlo como plantilla.
 - Mercado Pago automático (20/10/2026): van a usar todo Mercado Pago (cobros y pagos). Objetivo:
@@ -436,6 +440,39 @@ descartado (19/10/2026): no proponerlo de nuevo.
   WhatsApp con el mensaje y el link al formulario (editable); cuando llega la respuesta, sale sola
   de la lista. Jubilar el recordatorio por mail (Apps Script recordatorio_carsitting +
   carsitting-recordatorio).
+
+### Errores encontrados en la auditoría (21/10/2026)
+De plata (van juntos en un PR, antes del PR 0 del rediseño):
+- Pedido puntual sin hora de fin: `guardarSolicitudPuntual` (agenda.js) guarda la tarifa por hora
+  como cobro total y `guardarAsignacionDirecta` la copia al registro.
+- `actualizarCobroPagoPorHorario` (sittings.js) pisa el precio puesto a mano al tocar la hora o la
+  familia: no mira `tocadoManual`, como sí hace el precio de traslados.
+- `horasSitting` (core.js): con "termina al día siguiente" y fin > inicio suma 24 h sin avisar
+  (20:00 a 22:00 da 26 horas).
+- `guardarMovimientoSitting` (finanzas.js) pisa cobrado/pagado sin condición del estado previo: si
+  la otra admin marcó mientras tanto, se desmarca.
+- `guardarAsignacionDirecta` (agenda.js) no verifica que el pedido siga sin asignar y escribe 3
+  tablas sin transacción: dos admins a la vez dejan dos niñeras y dos registros.
+Otros:
+- "Editar horarios futuros" (`guardarHorarioAsignacionFija`) no permite fijos que cruzan medianoche.
+- Semana de los fijos: el margen cierra en domingo (`filtrarFijosSemanaIncompleta`) y el resumen y
+  Por pagar en sábado o domingo según la niñera; un sábado no cuadran.
+- Finanzas: el balance termina siempre en el mes actual aunque se navegue a otro, y el subtítulo
+  del margen no cambia de mes.
+- Solicitudes: nadie escribe el estado `pendiente_confirmar`; sobran la leyenda, el botón "Agregar
+  otra niñera" y la notificación.
+- `chequearFijoNuevoContraTodo` corre dentro de un loop por día (fijo con horario por día);
+  `abrirModalAsignar` lee toda la historia de registros cada vez que se abre.
+- Editar un registro de una niñera inactiva deja `ninera_id` nulo (`cargarSitBase` trae solo activas).
+- Crear un fijo desde la ficha de la familia guarda `ninera_id` nulo (`ninierasItems` sin id):
+  revisar en producción cuántas asignaciones quedaron así.
+- Borrar una familia borra sus fijos en cascada (FK `ON DELETE CASCADE`) y "Descartar" una
+  candidata es un DELETE físico: conviene baja lógica.
+- "Vaciar formulario" de la Entrevista no pide confirmación.
+- `asignaciones.cobro_hora/pago_hora` se guardan pero solo `sospechasDelMes` las usa: decidir una
+  sola fuente del precio del fijo.
+- Sittings no está en `RT_RECARGA_LIVIANA` (agenda.js): el propio guardado reconstruye el módulo y
+  pierde los filtros del historial.
 
 ### WhatsApp y automatización de mensajes
 - Línea de WhatsApp Business + API de Meta (Coexistence): bloqueado. Es la base del flujo de

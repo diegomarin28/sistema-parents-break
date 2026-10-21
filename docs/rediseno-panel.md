@@ -1,7 +1,7 @@
 # Rediseño del panel de administración
 
-Auditoría y propuesta, 21/10/2026. Sin código todavía: este documento es para que Diego, Paulina y
-Delfina decidan. No tiene datos reales (el repo es público): los nombres de los ejemplos son los
+Auditoría y propuesta, 21/10/2026. Sin código todavía. Las decisiones ya están tomadas (sección 6,
+21/10/2026) y el orden de trabajo está en la sección 5. No tiene datos reales (el repo es público): los nombres de los ejemplos son los
 ficticios de los tests y las cifras son conteos o porcentajes, nunca montos de una familia o niñera.
 
 ## Resumen en 10 líneas
@@ -14,8 +14,8 @@ ficticios de los tests y las cifras son conteos o porcentajes, nunca montos de u
 6. Hoy nuevo: una lista de tarjetas de acción, cada una con un botón que resuelve en un toque (elegir niñera, cerrar el día de ayer, registrar tal cual, ver cobros, pagar). Deja lugar al pedido que llega por WhatsApp, con las niñeras sugeridas en orden.
 7. Un sistema de componentes chico (tarjeta, fila, chip, botón de 44 px, hoja, estado vacío/cargando/error, toast con Deshacer) en `core.js` e `index.html`, con clases alias para no romper los 629 selectores por id de los tests.
 8. Analytics que deciden, con datos que ya existen: concentración de facturado por familia (3 familias = 60 %), niñeras que trabajan de verdad (20 de 92), pedidos que no se concretan (7 confirmados de 22), días de cobro (hace falta `cobrado_at`/`pagado_at`), familias que dejaron de pedir.
-9. Plan: 7 PRs, uno por módulo, de mayor a menor impacto: base de componentes → Hoy → Plata → Registros → Agenda → Familias y Niñeras → el resto. Riesgo alto en Plata y Registros (plata y muchos tests); bajo en lo demás.
-10. Decisiones para Diego al final (9), cada una con la recomendación primero. Maquetas en `local/maquetas/` (hoy, sittings, finanzas), para abrir en el celular.
+9. Orden decidido: errores de plata (PR aparte) → base de componentes → Pedido desde WhatsApp → Hoy → Plata → Registros → Agenda → Familias y Niñeras → el resto. La base espera a que Paulina y Delfina vean las maquetas. Riesgo alto en Plata y Registros (plata y muchos tests); bajo en lo demás.
+10. Decisiones tomadas el 21/10/2026 en la sección 6: todas las recomendadas, salvo la campanita, que se mantiene en el celular. Maquetas en `local/maquetas/` (hoy, sittings, finanzas), para abrir en el celular.
 
 ## 1. Cómo se hizo
 
@@ -219,7 +219,7 @@ Intermediaciones: 5 pedidos por cada cambio de pestaña; el detalle relee lo que
 
 ### 3.9 Notificaciones (campanita y push)
 
-Cinco tipos (`TIPOS_NOTIF`): sin asignar hoy, sin registrar hoy, CV desactualizado, extracto sin subir, temporada de Punta. La campanita se recalcula con 6 a 7 pedidos al entrar y a cada cambio en tres tablas; "leído" es por usuaria. Lo que avisa la campanita es lo mismo que "Sin resolver" en Hoy y que el puntito de Agenda, calculado tres veces por separado. Con Hoy rediseñado como lista de acciones, la campanita se vuelve redundante en el celular: la propuesta la deja solo para el push y para la compu.
+Cinco tipos (`TIPOS_NOTIF`): sin asignar hoy, sin registrar hoy, CV desactualizado, extracto sin subir, temporada de Punta. La campanita se recalcula con 6 a 7 pedidos al entrar y a cada cambio en tres tablas; "leído" es por usuaria. Lo que avisa la campanita es lo mismo que "Sin resolver" en Hoy y que el puntito de Agenda, calculado tres veces por separado. Con Hoy rediseñado como lista de acciones, la campanita repite lo de Hoy, pero se mantiene también en el celular (decisión 10): pasa a leer de la misma `cargarAccionesHoy()` que las tarjetas, así deja de calcularse aparte.
 
 ### 3.10 Transversal: componentes e inconsistencias
 
@@ -253,7 +253,7 @@ Celular (hasta 760 px): barra fija abajo con 5 pestañas. Compu: el menú latera
 | Plata | Pagar · Cobrar · Números (incluye gastos, revisar meses, conciliar) | `finanzas` |
 | Más | Familias, Niñeras, Postulantes, Intermediaciones, Notificaciones, Marketing, Contratos, Juguetes, ajustes (Face ID, zonas, tarifa de traslado, cerrar sesión) | el resto |
 
-Puntitos de aviso en Hoy (urgente del día) y Plata (hay para pagar o cobrar). Un botón "+" flotante en Hoy, Agenda y Registros que abre una hoja con tres opciones: nuevo registro, nuevo pedido (más adelante, "desde WhatsApp"), nuevo fijo. La barra se arma en `renderApp()` con los mismos `MODULOS` y `setModulo(k)`; `renderSidebar()` queda para la compu. Contratos y Juguetes tienen 0 filas y Marketing 9: van al final de "Más" (decisión 5).
+Puntitos de aviso en Hoy (urgente del día) y Plata (hay para pagar o cobrar). La campanita sigue arriba a la derecha, en el celular y en la compu (decisión 10). Un botón "+" flotante en Hoy, Agenda y Registros que abre una hoja con tres opciones: nuevo registro, nuevo pedido desde WhatsApp (entra justo después de la base), nuevo fijo. La barra se arma en `renderApp()` con los mismos `MODULOS` y `setModulo(k)`; `renderSidebar()` queda para la compu. Contratos y Juguetes tienen 0 filas y Marketing 9: van al final de "Más" (decisión 5).
 
 ### 4.3 Hoy nuevo
 
@@ -272,7 +272,7 @@ Una lista de **tarjetas de acción**, ordenadas por urgencia, cada una con una f
 
 Reemplaza la revisión de 14 días por **el cierre de ayer** (y, a la mañana, el de hoy si ya terminó): una pregunta concreta en vez de un "Bien" sin consecuencia. "Sí a todos" para los días que ya quedaron atrás. Lo que no se cierra en 7 días se da por revisado solo (decisión 3).
 
-Una sola función `cargarAccionesHoy()` alimenta las tarjetas, el puntito de Hoy y el push. Los datos salen de una función de la base `resumen_hoy()` (un pedido) que devuelve: pedidos sin asignar hasta mañana, fijos de ayer sin revisar, puntuales sin registrar, cobros vencidos (conteo y total), pagos listos (conteo y total), datos que faltan, estado de la carga nocturna. Hoy pasa de 33 pedidos a 4 o 5.
+Una sola función `cargarAccionesHoy()` alimenta las tarjetas, el puntito de Hoy, la campanita y el push. Los datos salen de una función de la base `resumen_hoy()` (un pedido) que devuelve: pedidos sin asignar hasta mañana, fijos de ayer sin revisar, puntuales sin registrar, cobros vencidos (conteo y total), pagos listos (conteo y total), datos que faltan, estado de la carga nocturna. Hoy pasa de 33 pedidos a 4 o 5.
 
 ### 4.4 Sistema de componentes
 
@@ -325,7 +325,7 @@ Además, una analítica mínima de uso de la app (qué pantalla se abre, cuánta
 
 | Error | Cómo se evita |
 |---|---|
-| Precio que no coincide con las horas | El formulario muestra el desglose (`uiDesglosePrecio`) y recalcula al cambiar horas; los campos de cobro y pago dejan de ser inputs libres. "Ajustar precio" abre un paso con motivo (descuento, extra, otro) y marca el registro (`precio_manual = true`, nueva columna) con un chip "precio a mano" en la lista. Editar movimiento en Plata reutiliza la misma hoja (horas + desglose), no dos números sueltos |
+| Precio que no coincide con las horas | El formulario muestra el desglose (`uiDesglosePrecio`) y recalcula al cambiar horas; los campos de cobro y pago dejan de ser inputs libres. "Ajustar precio" abre un paso con motivo (tabla de abajo) y marca el registro (`precio_manual = true` y `precio_motivo`, columnas nuevas) con un chip "precio a mano" en la lista. Editar movimiento en Plata reutiliza la misma hoja (horas + desglose), no dos números sueltos |
 | Hora real distinta de la prevista en fijos | Cierre de ayer en Hoy pregunta la hora de fin; la hoja de "Otra hora" usa el reloj nativo del iPhone (`<input type="time">`) y atajos "+30 min", "+1 h" |
 | Registro sin hora de fin | Hora de fin obligatoria para sittings al guardar como hecho; se permite vacía solo con "todavía no terminó" |
 | Tarifa de familia vacía → $0 en silencio | Al asignar, registrar o generar: aviso bloqueante "esta familia no tiene tarifa" con el campo ahí mismo (ya existe `guardarTarifaFamiliaDesdeSitting`); el proceso nocturno deja esos días marcados "sin precio" y Hoy los lista |
@@ -343,6 +343,20 @@ Además, una analítica mínima de uso de la app (qué pantalla se abre, cuánta
 | Entrevista que se pierde | Confirmar "Vaciar formulario" y el cambio de pestaña con cambios sin guardar; autoguardado de borrador (ya ofrecido) |
 | Duplicados exactos | `nombreParecido` avisa también el nombre idéntico, y corre al editar y en el alta rápida desde Sittings |
 
+Motivos de "Ajustar precio" (decisión 4a, 21/10/2026). El desglose calculado queda a la vista y el
+ajuste se suma como una línea más, con su motivo:
+
+| Motivo | Qué cambia | Cómo se carga |
+|---|---|---|
+| Extra por llevarla a casa | sube el cobro y el pago | dos montos: cuánto más se cobra y cuánto más se le paga a la niñera |
+| Descuento | solo el cobro (el pago a la niñera no cambia) | un monto o un porcentaje |
+| Se cobra sin servicio | se cobra a la familia y a la niñera se le paga una parte | cobro a la familia (por defecto el del horario previsto) y la parte para la niñera (monto) |
+| Otro | lo que se ponga | texto obligatorio y los dos montos |
+
+"Se cobra sin servicio" es distinto de "no hubo servicio" (hoy `cancelado` deja todo en $0). En el
+PR 3 hay que definir cómo se guarda (cancelado con montos, o un estado propio) y revisar que
+Finanzas, el PDF y la Agenda lo traten como cobrable: hoy un registro cancelado no se cobra.
+
 ### 4.7 Consultas: menos viajes
 
 1. **Caché de sesión** en `core.js` para `familias`, `ninieras` activas, `asignaciones` + `asignaciones_pausas`, `app_config` (una lectura de todas las claves) y `zona_grupos` (ya está). Un solo select ancho por tabla, invalidado por el Realtime que ya está suscripto y después de cada escritura propia. Quita unas 15 lecturas repetidas por sesión y las 5 variantes de `familias`.
@@ -359,11 +373,14 @@ En `local/maquetas/` (ignorado por git): `hoy.html`, `sittings.html`, `finanzas.
 
 ## 5. Plan por etapas
 
-Un PR por módulo, de mayor a menor impacto. Cada uno con sus tests nuevos, capturas a 390 px, y la descripción del PR con el estado. Los que llevan migración esperan el OK de Diego para aplicarla.
+Un PR por módulo, en el orden que decidió Diego el 21/10/2026. Cada uno con sus tests nuevos, capturas a 390 px, y la descripción del PR con el estado. Los que llevan migración esperan el OK de Diego para aplicarla.
+
+Antes de todo, en un PR aparte: los cinco errores de plata de la auditoría (CLAUDE.md → Pendientes → "Errores encontrados en la auditoría"), con un test que reproduce cada uno. El PR 0 no arranca hasta que Paulina y Delfina vean las maquetas.
 
 | # | PR | Qué entra | Riesgo | Tests que toca | Base |
 |---|---|---|---|---|---|
 | 0 | `claude/base-componentes` | tokens, componentes de 4.4, barra de pestañas (celular) con los mismos `setModulo`, caché de sesión, control estático de estilos inline. Ninguna pantalla cambia de contenido | **Medio**: CSS global; se verifica con capturas de todos los módulos antes y después | `estatico`, `humo`, `arranque`, `exploratorio` | no |
+| W | Pedido desde WhatsApp | la tarea de CLAUDE.md → Próximas tareas, con el diseño nuevo: tarjeta de Hoy (`uiAccion`) con el ticket y las niñeras sugeridas (`chip-elegir`), y hoja "Nuevo pedido" en el "+" | **Medio**: llamada a Claude Haiku y lógica de sugerencias; se define en su propia propuesta | nuevos | a definir |
 | 1 | `claude/hoy-acciones` | Hoy nuevo (4.3), cierre de ayer, registrar tal cual, asignar desde Hoy; `resumen_hoy()`; campanita alimentada por lo mismo | **Medio**: lógica nueva y una función SQL; el test de fijos automáticos y mejoras-hoy cambian | `mejoras-hoy`, `fijos-automaticos`, `humo`, `fechas` | migración: función `resumen_hoy()`, índice `solicitudes(estado, fecha)` |
 | 2 | `claude/plata` | Plata con Pagar/Cobrar/Números, `finanzas_pendientes()`, confirmación en cobrar, Deshacer, editar movimiento con desglose, refresco liviano tras pagar, `cobrado_at`/`pagado_at` | **Alto**: es la plata y son 9 archivos de tests; se hace en dos PRs si crece (2a listas y pagos, 2b números y migración) | `finanzas`, `pagos`, `saldo`, `gastos-extra`, `revisar-meses`, `por-pagar-en-curso`, `intermediaciones-finanzas`, `finanzas-arreglos`, `conciliacion` | migración: `cobrado_at`, `pagado_at`, `marcado_por` + trigger; función `finanzas_pendientes()` |
 | 3 | `claude/registros` | lista por día con filtros, hoja de registro nuevo con desglose, sin "Registró", reloj nativo, `precio_manual` con motivo, hora de fin obligatoria | **Alto**: formulario central; los ids `#sit-*` se conservan, los selects de hora cambian a `<input type="time">` (los tests que los llenan se adaptan) | `gastos-total`, `terminos`, `escape`, `guardados`, `regresiones`, `humo`, `fijos` | migración: `precio_manual` boolean + `precio_motivo` |
@@ -374,43 +391,31 @@ Un PR por módulo, de mayor a menor impacto. Cada uno con sus tests nuevos, capt
 
 Relación con lo que viene:
 
-- **Pedido desde WhatsApp** (próxima tarea): entra como una tarjeta de Hoy (ya diseñada en 4.3) y una hoja "Nuevo pedido" en el "+" flotante. Necesita el PR 0 (componentes `uiAccion`, `chip-elegir`) y se beneficia del PR 1 (`resumen_hoy`). No depende de los PRs 2 a 6. Si se quiere antes del rediseño, se hace sobre el PR 0 solo.
+- **Pedido desde WhatsApp** (decidido: va después del PR 0 y antes del PR 1): entra como una tarjeta de Hoy (ya diseñada en 4.3) y una hoja "Nuevo pedido" en el "+" flotante. Usa los componentes del PR 0 (`uiAccion`, `chip-elegir`). Mientras no exista el Hoy nuevo, la tarjeta se muestra arriba del Hoy actual; el PR 1 la integra a la lista de acciones y a `resumen_hoy`.
 - **Capacitor**: nada del plan lo dificulta. Lo que ayuda: barra de pestañas y hojas (se sienten nativas), `env(safe-area-inset-*)` ya contemplado en el CSS de la maqueta, un solo `index.html`, sin `window.location` para navegar. Lo que hay que mirar al empaquetar: el service worker de push (en la app nativa es push nativo), `createSignedUrl` de los tickets y el login con passkeys dentro del WebView.
 - **Mercado Pago automático**: `cobrado_at`/`pagado_at` y `marcado_por` del PR 2 son la base para marcar solo y para auditar qué marcó la API.
 
-## 6. Decisiones para Diego (y para Paulina y Delfina)
+## 6. Decisiones tomadas (21/10/2026)
 
-Cada una con la recomendación primero.
+Las tomó Diego sobre esta propuesta. Todas las recomendadas, salvo la 10.
 
-1. **Navegación en celular**: (a) barra de 5 pestañas abajo, recomendado; (b) dejar el menú lateral y solo reordenar.
-2. **Hoy**: (a) lista de acciones y sacar las 3 tarjetas de conteo y el gráfico (pasan a Plata → Números), recomendado; (b) lista de acciones arriba y conteos abajo.
-3. **Revisión de fijos automáticos**: (a) "cierre de ayer" con hora de fin, y lo que no se cierra en 7 días se da por revisado solo, recomendado; (b) sacar la revisión del todo y confiar en Plata.
-4. **Precio a mano**: (a) desglose calculado y "Ajustar" con motivo y marca, recomendado; (b) dejar los dos campos libres como hoy pero con el desglose al lado.
-5. **Módulos sin uso** (Contratos 0 filas, Juguetes 0, Marketing 9): (a) al fondo de "Más", recomendado; (b) sacarlos del menú hasta que se usen (siguen en el código).
-6. **Migración `cobrado_at` / `pagado_at` / `marcado_por`** (PR 2): (a) sí, con relleno desde el historial, recomendado; (b) no por ahora (sin días de cobro ni auditoría para Mercado Pago).
-7. **Orden**: (a) base → Hoy → Plata → Registros → Agenda → Personas → Más, recomendado; (b) Plata antes que Hoy si lo que más urge es pagar más rápido.
-8. **Selector de hora**: (a) reloj nativo del iPhone (`<input type="time">`), recomendado; (b) mantener los dos selects. Afecta los tests que llenan horas (se adaptan en el PR 3).
-9. **Deshacer**: (a) toast con "Deshacer" 8 s para cobrado, pagado, revisado, "no fue" y cancelar pedido, recomendado; (b) confirmación previa en todo (más toques).
-10. **Campanita en celular**: (a) se saca (Hoy la reemplaza) y queda el push y la campanita de la compu, recomendado; (b) se mantiene.
+| # | Tema | Decisión |
+|---|---|---|
+| 1 | Navegación en celular | Barra de 5 pestañas abajo. Menú lateral solo en la compu |
+| 2 | Hoy | Lista de acciones. Las 3 tarjetas de conteo y el gráfico pasan a Plata → Números |
+| 3 | Revisión de fijos automáticos | "Cierre de ayer" con hora de fin; lo que no se cierra en 7 días se da por revisado solo |
+| 4 | Precio a mano | Desglose calculado y "Ajustar precio" con motivo y marca. Motivos: extra por llevarla a casa, descuento, se cobra sin servicio, otro con texto (detalle en 4.6) |
+| 5 | Contratos, Juguetes y Marketing | Al fondo de "Más" |
+| 6 | `cobrado_at`, `pagado_at`, `marcado_por` | Sí, con relleno desde el historial (PR 2) |
+| 7 | Orden | Errores de plata → PR 0 base → Pedido desde WhatsApp → PR 1 Hoy → PR 2 Plata → PR 3 Registros → Agenda → Personas → Más → uso de la app |
+| 8 | Selector de hora | Reloj nativo del iPhone (`<input type="time">`) |
+| 9 | Deshacer | Toast con "Deshacer" 8 s para cobrado, pagado, revisado, "no fue" y cancelar pedido |
+| 10 | Campanita en celular | **Se mantiene** también en el celular, alimentada por lo mismo que Hoy |
+
+Pendiente antes del PR 0: que Paulina y Delfina vean las maquetas.
 
 ## 7. Fuera de alcance y pendientes detectados
 
-Bugs y detalles encontrados que no son del rediseño (para `CLAUDE.md` → Pendientes cuando se decida):
-
-- Pedido puntual sin hora de fin guarda la tarifa por hora como cobro total (agenda.js:596-598) y se copia al registro al confirmar (774).
-- `guardarMovimientoSitting` pisa cobrado/pagado sin condición de estado previo (finanzas.js:1312).
-- `guardarAsignacionDirecta` no verifica que el pedido siga sin asignar y escribe 3 tablas sin transacción (agenda.js:747-782).
-- "Editar horarios futuros" no permite fijos que cruzan medianoche (agenda.js:965).
-- El margen cierra la semana en domingo y el resumen/Por pagar en sábado o domingo (finanzas.js:340 vs 318-335).
-- El balance de Finanzas siempre termina en el mes actual aunque se navegue a otro (finanzas.js:640); el subtítulo del margen no cambia de mes.
-- Estado `pendiente_confirmar`: nadie lo escribe; leyenda, botón y notificación sobran.
-- `chequearFijoNuevoContraTodo` dentro de un loop por día (agenda.js:640-645).
-- `abrirModalAsignar` lee toda la historia de registros en cada apertura (agenda.js:668).
-- `actualizarCobroPagoPorHorario` pisa el precio puesto a mano al tocar la hora (sittings.js:1315-1360); "termina al día siguiente" con fin > inicio suma 24 h sin aviso (core.js:1346).
-- Editar un registro de una niñera inactiva deja `ninera_id` nulo (sittings.js:495, 1469).
-- Crear un fijo desde la ficha de la familia guarda `ninera_id` nulo (familias.js:105, 497-498): conviene revisar en producción cuántas asignaciones quedaron así.
-- Borrar una familia borra sus fijos en cascada (schema.sql:662); "Descartar" una candidata es un DELETE físico (postulantes.js:206).
-- "Vaciar formulario" de la entrevista no confirma (postulantes.js:337, 613-617).
-- `asignaciones.cobro_hora/pago_hora` se guardan pero solo `sospechasDelMes` las usa: decidir una sola fuente del precio del fijo.
-- Sittings no está en `RT_RECARGA_LIVIANA`: el propio guardado reconstruye el módulo y pierde los filtros (agenda.js:1745).
-- `temporada-ninera` y los advisors de seguridad: sin cambios, siguen como están anotados en CLAUDE.md.
+Los errores que encontró la auditoría y no son del rediseño pasaron a `CLAUDE.md` → Pendientes →
+"Errores encontrados en la auditoría (21/10/2026)". Esa lista es la fuente de verdad: cada uno se
+borra de ahí en el PR que lo arregla.
