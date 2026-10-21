@@ -1396,7 +1396,8 @@ function pintarFinCobroSit(){
   const horaFin = leerHora('sit-horafin');
   const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
   const horas = sitTipo==='sitting' ? horasSitting(leerHora('sit-horaini'), horaFin, cruza, sitFamiliaSel, document.getElementById('sit-fecha')?.value) : null;
-  if(box) box.textContent = textoFinCobrado(horaFin, horas);
+  const cruceMal = sitTipo==='sitting' && cruceMedianocheMalMarcado(leerHora('sit-horaini'), horaFin, cruza);
+  if(box){ box.textContent = cruceMal ? AVISO_CRUCE_MEDIANOCHE : textoFinCobrado(horaFin, horas); box.style.color = cruceMal ? 'var(--bad)' : ''; }
   return horas;
 }
 function onSitPagoHoraInput(){
@@ -1406,6 +1407,7 @@ function onSitPagoHoraInput(){
   const horaFin = leerHora('sit-horafin');
   if(!pagoInput || !horaIni || !horaFin) return;
   const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
+  if(cruceMedianocheMalMarcado(horaIni, horaFin, cruza)) return; // serían más de 24 h: lo avisa pintarFinCobroSit
   const mi = agendaMinutos(horaIni);
   let mf = agendaMinutos(horaFin);
   if(cruza) mf += 24*60;
@@ -1486,6 +1488,7 @@ async function guardarSitting(){
       toast('La hora de fin tiene que ser después de la de inicio. Si termina pasada la medianoche, marcá "Termina al día siguiente".', 'bad');
       return;
     }
+    if(cruceMedianocheMalMarcado(horaIni, horaFin, cruza)){ toast(AVISO_CRUCE_MEDIANOCHE, 'bad'); return; }
     registro.hora_inicio = horaIni || null;
     registro.hora_fin = horaFin || null;
     registro.termina_dia_siguiente = cruza;

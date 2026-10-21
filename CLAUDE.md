@@ -123,6 +123,9 @@ worktree), la regla es: **un worktree = una tarea = una rama = un PR**.
   `git fetch origin` y `git diff --name-only origin/main...origin/<rama>` para cada rama
   abierta). Si lo hay, avisale a Diego antes de seguir: dos tareas en paralelo sobre el
   mismo archivo terminan en conflicto.
+- Tests con otro worktree trabajando (21/10/2026): Playwright reutiliza el servidor que ya esté
+  en el puerto 4173, aunque sea el de otro worktree, y prueba el código de esa carpeta (o se corta
+  a la mitad si el otro lo apaga). Corré con un puerto propio: `PUERTO_TESTS=4191 npx playwright test`.
 - Migraciones en paralelo: el nombre lleva la fecha y una descripción única, así dos worktrees
   no generan el mismo archivo. Si al rebasar choca `schema.sql`, resolvelo vos dejando los dos
   cambios, y volvé a probar la migración.
@@ -192,6 +195,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   resultado).
 - `tests/guardados.spec.js`: doble toque, base que falla o sin conexión, cerrar el modal a mitad
   del guardado, terminar un fijo desde una fecha.
+- `tests/errores-plata.spec.js`: errores de plata de la auditoría del 21/10/2026: "Termina al día
+  siguiente" mal marcado (Sittings, Agenda, día de un fijo y reemplazo), editar un movimiento sin
+  pisar cobrado / pagado de la otra, y asignar un pedido que ya asignó otra o cuando falla guardar.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
 - `tests/por-pagar-en-curso.spec.js`: semana en curso de las fijas en Por pagar (cuándo cierra,
   sin botón, el día que cierra y el siguiente, fija con finde, saldo a favor, 390px).
@@ -302,6 +308,13 @@ reporte.
   un paso secundario falla, el aviso dice qué faltó). Todo botón que escribe en la base va
   con `conGuardado(this, ()=>guardarX())` (core.js): deshabilitado y con ruedita mientras
   guarda, sin doble insert por doble toque. Lo controla `tests/estatico.spec.js`.
+- Lo que dos admins pueden cambiar a la vez (21/10/2026): el estado de un pedido y las marcas de
+  cobrado / pagado se escriben con la condición del valor que tenían al abrir (`.eq(campo, antes)`
+  y `.select('id')`); si no se actualizó ninguna fila, se avisa que lo cambió alguien más y no se
+  guarda nada. Modelo: `marcarGrupoResuelto`, `guardarMovimientoSitting`, `guardarAsignacionDirecta`.
+- "Termina al día siguiente" (21/10/2026): con la casilla, el fin va antes que el inicio (o igual:
+  24 h). Si no, `cruceMedianocheMalMarcado()` (core.js) avisa y no deja guardar, y `horasSitting()`
+  devuelve null; antes se sumaban 24 h y se cobraban 26 horas.
 - Fijos: nunca se borran. "Terminar desde [fecha]" completa `vigente_hasta` con el día
   anterior (`abrirModalTerminarFijo`, agenda.js).
 - No repintar la app entera ante eventos de auth ni al volver de segundo plano: ya causó
@@ -464,12 +477,6 @@ De plata (van juntos en un PR, antes del PR 0 del rediseño):
   como cobro total y `guardarAsignacionDirecta` la copia al registro.
 - `actualizarCobroPagoPorHorario` (sittings.js) pisa el precio puesto a mano al tocar la hora o la
   familia: no mira `tocadoManual`, como sí hace el precio de traslados.
-- `horasSitting` (core.js): con "termina al día siguiente" y fin > inicio suma 24 h sin avisar
-  (20:00 a 22:00 da 26 horas).
-- `guardarMovimientoSitting` (finanzas.js) pisa cobrado/pagado sin condición del estado previo: si
-  la otra admin marcó mientras tanto, se desmarca.
-- `guardarAsignacionDirecta` (agenda.js) no verifica que el pedido siga sin asignar y escribe 3
-  tablas sin transacción: dos admins a la vez dejan dos niñeras y dos registros.
 Otros:
 - "Editar horarios futuros" (`guardarHorarioAsignacionFija`) no permite fijos que cruzan medianoche.
 - Semana de los fijos: el margen cierra en domingo (`filtrarFijosSemanaIncompleta`) y el resumen y
