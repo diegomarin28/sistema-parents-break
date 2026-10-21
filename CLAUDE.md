@@ -276,6 +276,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/modo-claro.spec.js`: con el aparato en modo oscuro, Hoy, Postulantes y Finanzas se ven claros.
 - `tests/cierre-fijos.spec.js`: "Cierre de los fijos" en Hoy (Sí, terminó / Otra hora con entrada y fin que
   recalcula con la tarifa y los términos, medianoche, ya cobrado, otra admin, base que falla, traslado, 390 px).
+- `tests/ninieras-lista.spec.js`: lista de Niñeras por fecha de entrevista (sin entrevista al
+  final), sittings y traslados de cada una en su fila, una sola fecha de nacimiento al editar.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -386,6 +388,10 @@ reporte.
   Nunca pisar la niñera de una asignación con historia: cerrarla y abrir otra desde una
   fecha. Lo que se registra desde un fijo lleva `asignacion_id`. Para saber si un fijo
   corre un día, usar `asignacionVigenteEn(a, fecha)` (core.js).
+- Lista de Niñeras (21/10/2026): ordenada por la fecha de la entrevista, de la más nueva a la más
+  vieja, y las de antes de la app (sin entrevista) al final (`ordenarNinierasPorEntrevista`). Cada
+  fila dice cuántos sittings y traslados hizo (sin cancelados ni previstos), de la misma lectura
+  que el panel de utilización.
 - Temporada en el filtro de Niñeras (21/10/2026, regla de Paulina y Delfina): quien tiene solo
   zonas de afuera (Punta del Este) y no cargó temporada está ahí todo el año; con temporada, solo
   en las quincenas marcadas. "Dijo que no va" (temporada sin quincenas): sin meses aparece con esa
