@@ -14,7 +14,7 @@ ficticios de los tests y las cifras son conteos o porcentajes, nunca montos de u
 6. Hoy nuevo: una lista de tarjetas de acción, cada una con un botón que resuelve en un toque (elegir niñera, cerrar el día de ayer, registrar tal cual, ver cobros, pagar). Deja lugar al pedido que llega por WhatsApp, con las niñeras sugeridas en orden.
 7. Un sistema de componentes chico (tarjeta, fila, chip, botón de 44 px, hoja, estado vacío/cargando/error, toast con Deshacer) en `core.js` e `index.html`, con clases alias para no romper los 629 selectores por id de los tests.
 8. Analytics que deciden, con datos que ya existen: concentración de facturado por familia (3 familias = 60 %), niñeras que trabajan de verdad (20 de 92), pedidos que no se concretan (7 confirmados de 22), días de cobro (hace falta `cobrado_at`/`pagado_at`), familias que dejaron de pedir.
-9. Orden decidido: errores de plata (PR aparte) → base de componentes → Pedido desde WhatsApp → Hoy → Plata → Registros → Agenda → Familias y Niñeras → el resto. La base espera a que Paulina y Delfina vean las maquetas. Riesgo alto en Plata y Registros (plata y muchos tests); bajo en lo demás.
+9. Orden decidido: errores de plata (PR aparte) → red de tests de plata → base de componentes → Pedido desde WhatsApp → Hoy → Plata → Registros → Agenda → Familias y Niñeras → el resto. La base espera a que Paulina y Delfina vean las maquetas, y nada se migra sin la red de tests de 4.10 (la versión nueva va detrás de `?nuevo=1` hasta que la aprueben). Riesgo alto en Plata y Registros (plata y muchos tests); bajo en lo demás.
 10. Decisiones tomadas el 21/10/2026 en la sección 6: todas las recomendadas, salvo la campanita, que se mantiene en el celular. Maquetas en `local/maquetas/` (hoy, sittings, finanzas), para abrir en el celular.
 
 ## 1. Cómo se hizo
@@ -400,15 +400,53 @@ Decidido el 21/10/2026. Las maquetas muestran las dos versiones.
 | Plata | Pagar · Cobrar · Números en segmentos; cada fila con el monto a la derecha y los botones en una segunda línea | una sola columna ancha (hasta 920 px); cada fila con monto, Copiar cuenta, Copiar monto y Pagado en la misma línea; "Semana en curso" plegada abajo |
 | Agenda, Más y fichas | se definen en su PR con estas mismas reglas: listas con `uiFila`; donde hay formulario al lado de una lista, panel al costado en la compu | |
 
+### 4.10 Red de tests antes de migrar
+
+Condición de Diego (21/10/2026): **no se migra a la versión nueva hasta tener una red de tests
+grande.** Lo que manda es que cada flujo esté cubierto, no el número; la meta orientativa es más de
+2.500 casos contando los generados.
+
+1. **Ningún test existente se borra ni se debilita** durante el rediseño. Si un test mira algo que
+   cambia de lugar (un id, una clase, un texto, una pantalla), se adapta para comprobar lo mismo en
+   el lugar nuevo, y la descripción del PR lo lista: qué test, qué miraba, qué mira ahora.
+2. **Equivalencia de plata con un generador de casos.** Antes de tocar una función que calcula
+   plata, su versión actual se congela como oráculo (`tests/support/oraculo-plata.js`, copia exacta
+   con fecha). Un generador con semilla fija arma miles de combinaciones y compara la función nueva
+   con el oráculo: tienen que dar exactamente lo mismo, salvo donde una regla cambia a propósito
+   (el redondeo de montos), y ahí el oráculo es la regla escrita. Un caso que falla imprime sus
+   datos para reproducirlo. Datos ficticios, nunca reales. Va en su propio PR, antes del PR 0 y
+   después de que entren redondeo-montos y los errores de plata, para que el oráculo ya tenga las
+   reglas nuevas.
+3. **Cada PR de pantalla trae su lista de tests**: cada acción (caso normal, base que falla, sin
+   conexión, doble toque, datos raros), los estados vacío, cargando y error, y todo en 390 px y en
+   1280 px. El PR 0 suma el proyecto `celular` (390×844) a la configuración de Playwright.
+4. **La versión nueva convive con la vieja detrás de un interruptor** hasta que Paulina y Delfina
+   la aprueben. `?nuevo=1` la prende en ese dispositivo (queda guardado) y `?nuevo=0` la apaga; más
+   adelante, un ajuste por usuaria en Más. Las dos leen y escriben las mismas tablas con las mismas
+   funciones: solo cambia la pantalla. La vieja se apaga en un PR aparte, y en ese PR cada test de la
+   vieja se adapta a la nueva (regla 1), ninguno se borra.
+
+Cuántos tests hay y cuántos casos suma cada punto (estimación del 21/10/2026):
+
+| | Qué | Casos |
+|---|---|---|
+| Hoy | Playwright: 421 tests en 26 archivos. En curso: 10 de errores de plata y 15 de redondeo-montos (PR #52). Además 3 pruebas SQL en Postgres local | ~446 |
+| 1 | Los existentes se conservan; se adaptan los que miran algo que se mueve | ~446 (no suma, no resta) |
+| 2 | Generador de plata: horario (inicio cada 30 min, fin cada 7 min hasta 12 h después, con y sin fin al día siguiente, con y sin términos) ~1.500; cobro y pago por horas con el redondeo de cobro y de pago, tres tarifas y bordes de ,5 ~800; totales de un grupo de Por cobrar / Por pagar (puntuales y fijos, semana cerrada o en curso, gastos que pagó la niñera o la familia, `absorbe_pb`, saldo a favor positivo y negativo) ~600; los mismos horarios contra la base (`minutos_fin_cobro`, `generar_previstos_fijos`, redondeo en SQL) en Postgres local ~200 | ~3.100 |
+| 3 | Listas por pantalla: PR 0 ~25, Pedido desde WhatsApp ~35, Hoy ~40, Plata ~60, Registros ~50, Agenda ~35, Familias y Niñeras ~20, Más ~15 | ~280 |
+| 4 | Interruptor: ~5 tests propios, y `humo` y `exploratorio` corridos también con la versión nueva y a 390 px | ~140 corridas más |
+| Total | | ~3.970 casos: ~870 tests y corridas de pantalla y ~3.100 generados |
+
 ## 5. Plan por etapas
 
 Un PR por módulo, en el orden que decidió Diego el 21/10/2026. Cada uno con sus tests nuevos, capturas a 390 px, y la descripción del PR con el estado. Los que llevan migración esperan el OK de Diego para aplicarla.
 
-Antes de todo, en un PR aparte: los cinco errores de plata de la auditoría (CLAUDE.md → Pendientes → "Errores encontrados en la auditoría"), con un test que reproduce cada uno. El PR 0 no arranca hasta que Paulina y Delfina vean las maquetas.
+Antes de todo, en un PR aparte: los cinco errores de plata de la auditoría (CLAUDE.md → Pendientes → "Errores encontrados en la auditoría"), con un test que reproduce cada uno. Después, el PR T con la red de plata (4.10, punto 2). El PR 0 no arranca hasta que Paulina y Delfina vean las maquetas. Cada pantalla nueva entra detrás del interruptor (4.10, punto 4) y trae su lista de tests (punto 3).
 
 | # | PR | Qué entra | Riesgo | Tests que toca | Base |
 |---|---|---|---|---|---|
-| 0 | `claude/base-componentes` | tokens, componentes de 4.4, barra de pestañas (celular) con los mismos `setModulo`, caché de sesión, control estático de estilos inline. Ninguna pantalla cambia de contenido | **Medio**: CSS global; se verifica con capturas de todos los módulos antes y después | `estatico`, `humo`, `arranque`, `exploratorio` | no |
+| T | `claude/red-plata` | oráculo de las funciones de plata actuales y generador de casos (4.10, punto 2). No cambia nada de la app | **Bajo**: solo tests | nuevos (~3.100 casos) | prueba SQL en Postgres local, nunca en producción |
+| 0 | `claude/base-componentes` | tokens, componentes de 4.4, interruptor `?nuevo=1`, menú nuevo (barra abajo en el celular, lateral en la compu) solo con el interruptor prendido, caché de sesión, proyecto de tests a 390 px, control estático de estilos inline. Con el interruptor apagado no cambia nada | **Medio**: CSS global; se verifica con capturas de todos los módulos antes y después | `estatico`, `humo`, `arranque`, `exploratorio` | no |
 | W | Pedido desde WhatsApp | la tarea de CLAUDE.md → Próximas tareas, con el diseño nuevo: tarjeta de Hoy (`uiAccion`) con el ticket y las niñeras sugeridas (`chip-elegir`), y hoja "Nuevo pedido" en el "+" | **Medio**: llamada a Claude Haiku y lógica de sugerencias; se define en su propia propuesta | nuevos | a definir |
 | 1 | `claude/hoy-acciones` | Hoy nuevo (4.3), cierre de ayer, registrar tal cual, asignar desde Hoy; `resumen_hoy()`; campanita alimentada por lo mismo | **Medio**: lógica nueva y una función SQL; el test de fijos automáticos y mejoras-hoy cambian | `mejoras-hoy`, `fijos-automaticos`, `humo`, `fechas` | migración: función `resumen_hoy()`, índice `solicitudes(estado, fecha)` |
 | 2 | `claude/plata` | Plata con Pagar/Cobrar/Números, `finanzas_pendientes()`, confirmación en cobrar, Deshacer, editar movimiento con desglose, refresco liviano tras pagar, `cobrado_at`/`pagado_at` | **Alto**: es la plata y son 9 archivos de tests; se hace en dos PRs si crece (2a listas y pagos, 2b números y migración) | `finanzas`, `pagos`, `saldo`, `gastos-extra`, `revisar-meses`, `por-pagar-en-curso`, `intermediaciones-finanzas`, `finanzas-arreglos`, `conciliacion` | migración: `cobrado_at`, `pagado_at`, `marcado_por` + trigger; función `finanzas_pendientes()` |
@@ -417,6 +455,7 @@ Antes de todo, en un PR aparte: los cinco errores de plata de la auditoría (CLA
 | 5 | `claude/personas` | Familias y Niñeras con la misma lista y ficha, alta con menos campos, saldo a favor desde la misma hoja que Plata | **Bajo-medio** | `alta-ninera`, `terminos`, `escape` | no |
 | 6 | `claude/mas` | Postulantes, Intermediaciones, Notificaciones, Marketing, Contratos, Juguetes en "Más"; Contratos y Juguetes al fondo | **Bajo** | `entrevista*`, `intermediaciones` | no |
 | 7 | `claude/uso-app` | tabla `uso_app` y la lista "Qué decidir" completa (embudo, días de cobro) | Bajo | `finanzas` | migración: `uso_app` |
+| 8 | `claude/apagar-version-vieja` | cuando Paulina y Delfina aprueban: la versión nueva pasa a ser la única; se borra el código viejo y cada test de la vieja se adapta a la nueva | **Medio**: muchos tests se adaptan; ninguno se borra | todos | no |
 
 Relación con lo que viene:
 
@@ -440,6 +479,7 @@ Las tomó Diego sobre esta propuesta. Todas las recomendadas, salvo la 10.
 | 8 | Selector de hora | Reloj nativo del iPhone (`<input type="time">`) |
 | 9 | Deshacer | Toast con "Deshacer" 8 s para cobrado, pagado, revisado, "no fue" y cancelar pedido |
 | 10 | Campanita en celular | **Se mantiene** también en el celular, alimentada por lo mismo que Hoy |
+| 11 | Red de tests | No se migra a la versión nueva sin la red de 4.10: ningún test se borra ni se debilita, generador de plata, lista de tests por pantalla en 390 y 1280 px, versión nueva detrás de un interruptor hasta que la aprueben |
 
 Pendiente antes del PR 0: que Paulina y Delfina vean las maquetas.
 
