@@ -1,0 +1,59 @@
+// Corre las pruebas SQL de supabase/pruebas/ en un Postgres en memoria (PGlite), sin instalar
+// Postgres y sin tocar ninguna base real. Carga supabase/schema.sql con lo mínimo de Supabase de
+// mentira (roles, auth.uid(), storage, cron.schedule(), net.http_post(), la publicación de
+// Realtime) y corre cada archivo en una base nueva. Si una prueba falla, muestra el caso.
+//
+// PGlite no es dependencia del repo: se instala en una carpeta aparte, una vez.
+//   mkdir -p /tmp/pglite && cd /tmp/pglite && npm init -y && npm i @electric-sql/pglite
+// y se corre desde la raíz del repo:
+//   PGLITE_DIR=/tmp/pglite node scripts/probar-sql.mjs supabase/pruebas/*.sql
+// Con --migracion <archivo> aplica antes esa migración (para probarla sobre el schema de main,
+// por ejemplo con git show origin/main:supabase/schema.sql > /tmp/schema-main.sql y --schema).
+import fs from 'fs';
+import path from 'path';
+import { pathToFileURL } from 'url';
+
+const args = process.argv.slice(2);
+const opcion = n => { const i = args.indexOf(n); if (i < 0) return null; const v = args[i + 1]; args.splice(i, 2); return v; };
+const schema = opcion('--schema') || 'supabase/schema.sql';
+const migracion = opcion('--migracion');
+const dir = process.env.PGLITE_DIR;
+if (!dir) { console.error('Falta PGLITE_DIR (la carpeta donde se instaló @electric-sql/pglite).'); process.exit(2); }
+if (!args.length) { console.error('Pasá al menos un archivo .sql de supabase/pruebas/.'); process.exit(2); }
+const { PGlite } = await import(pathToFileURL(path.join(dir, 'node_modules/@electric-sql/pglite/dist/index.js')).href);
+
+const SUPABASE_DE_MENTIRA = `
+create role anon; create role authenticated; create role service_role;
+create schema auth; create schema storage; create schema cron; create schema extensions; create schema net;
+create table auth.users (id uuid primary key);
+create function auth.uid() returns uuid language sql as $$ select null::uuid $$;
+create function auth.jwt() returns jsonb language sql as $$ select '{}'::jsonb $$;
+create function auth.role() returns text language sql as $$ select 'authenticated' $$;
+create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+create table storage.objects (id uuid default gen_random_uuid(), bucket_id text, name text, owner uuid);
+alter table storage.objects enable row level security;
+create table cron.job (jobid serial primary key, jobname text, schedule text, command text);
+create function cron.schedule(n text, s text, c text) returns bigint language sql as $$ insert into cron.job(jobname, schedule, command) values (n, s, c) returning jobid::bigint $$;
+create function cron.unschedule(n text) returns boolean language sql as $$ delete from cron.job where jobname = n returning true $$;
+create function net.http_post(url text, headers jsonb default '{}', body jsonb default '{}', params jsonb default '{}', timeout_milliseconds int default 1000) returns bigint language sql as $$ select 1::bigint $$;
+create publication supabase_realtime;
+`;
+const textoSchema = fs.readFileSync(schema, 'utf8').replace(/^create extension[^\n]*\n/gim, '');
+
+let fallas = 0;
+for (const archivo of args) {
+  const db = new PGlite(); // una base nueva por archivo
+  try {
+    await db.exec(SUPABASE_DE_MENTIRA);
+    await db.exec(textoSchema);
+    if (migracion) await db.exec(fs.readFileSync(migracion, 'utf8'));
+    await db.exec(fs.readFileSync(archivo, 'utf8'));
+    console.log(`OK     ${archivo}`);
+  } catch (e) {
+    fallas++;
+    console.log(`FALLA  ${archivo}: ${e.message}`);
+  } finally {
+    await db.close();
+  }
+}
+process.exit(fallas ? 1 : 0);
