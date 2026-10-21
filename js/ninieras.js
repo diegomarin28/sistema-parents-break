@@ -183,42 +183,60 @@ async function cargarConteoIncidentesNinieras(){
     ninIncidentesCount[key] = (ninIncidentesCount[key]||0) + 1;
   });
 }
+// Las zonas por las que se filtra: las marcadas, más una zona de afuera escrita tal cual en el
+// buscador ("Punta del Este", "José Ignacio"), que se busca igual que si se marcara, con la
+// misma regla de temporada (21/10/2026: escribiendo "Punta del Este" aparecía una niñera que
+// dijo que no va, porque lo tenía en los barrios).
+function zonasDelFiltroNin(textoBuscado){
+  const zonas = new Set(ninFiltroZonas);
+  const g = grupoDeZona(textoBuscado||'');
+  if(g?.fuera_de_montevideo) zonas.add(claveZona(g.nombre));
+  return { zonas, porTexto: !!g?.fuera_de_montevideo };
+}
+// "Dijo que no va" (21/10/2026): cargó la temporada sin ninguna quincena en una zona de afuera
+// que tiene en su zona y que está en el filtro. Sin meses elegidos aparece, con esta marca; con
+// meses, no aparece.
+function dijoQueNoVa(n, zonas){
+  if(!temporadaCargada(n)) return false;
+  return gruposFueraDeNinera(n).some(g=>zonas.has(claveZona(g.nombre)) && !quincenasDeGrupo(n.temporada, g.id).length);
+}
 function filtrarNinieras(){
   const grid = document.getElementById('ninierasgrid');
   if(!grid) return;
-  const fn = normaliza(document.getElementById('filt-nombre')?.value||'');
-  const hayZonas = ninFiltroZonas.size>0;
+  const textoBuscado = document.getElementById('filt-nombre')?.value||'';
+  const { zonas, porTexto } = zonasDelFiltroNin(textoBuscado);
+  const fn = porTexto ? '' : normaliza(textoBuscado);
+  const hayZonas = zonas.size>0;
   const ft = document.getElementById('filt-tipo')?.value||'';
   const qsFiltro = quincenasDeMeses(ninFiltroMeses);
   const filtraPeriodo = !!(hayZonas && qsFiltro.length);
   const cobertura = {}; // id -> 'todo' | 'parte' (solo con filtro de período)
-  let sinDatoOcultas = 0;
   const filtradas = ninierasItems.filter(n => {
     const cd = datosFichaCandidata(n.candidatas);
     const blob = normaliza([n.nombre, n.notas, cd.universidad, cd.idiomas, cd.experiencia, n.barrios].filter(Boolean).join(' '));
     const matchTexto = !fn || blob.includes(fn);
-    const matchZona = coincideFiltroZonas(n.zona, ninFiltroZonas);
+    const matchZona = coincideFiltroZonas(n.zona, zonas);
     const matchTipo = !ft || (n.tipo||'Niñera')===ft;
     if(!(matchTexto && matchZona && matchTipo)) return false;
     if(!filtraPeriodo) return true;
     // Solo las zonas marcadas que ella tiene (si marcaste Carrasco y Punta del Este y ella
     // es solo de Carrasco, se mira si está en Carrasco esos meses).
-    const suyas = zonasNormalizadas(n.zona).map(claveZona).filter(k=>ninFiltroZonas.has(k));
+    const suyas = zonasNormalizadas(n.zona).map(claveZona).filter(k=>zonas.has(k));
     const c = coberturaPeriodo(n, suyas, qsFiltro);
     cobertura[n.id] = c;
-    // Con un período elegido solo se muestran las que confirmaron estar ahí: las que no
-    // tienen temporada cargada se cuentan aparte (abajo del conteo) pero no se listan.
-    if(c==='desconocido'){ sinDatoOcultas++; return false; }
+    // Con un período elegido, las que no tienen temporada cargada (no se sabe si están) van
+    // aparte, al final, como "sin temporada cargada" (21/10/2026; antes no se mostraban).
     return c!=='nada';
   });
-  const zonaLabel = escaparHtml(nombresZonasFiltro(ninFiltroZonas).join(' o '));
-  const hayZonaAfuera = [...ninFiltroZonas].some(k=>grupoFueraDeZona(k));
+  const zonaLabel = escaparHtml(nombresZonasFiltro(zonas).join(' o '));
+  const hayZonaAfuera = [...zonas].some(k=>grupoFueraDeZona(k));
   const mesesTxt = [...ninFiltroMeses].sort((a,b)=>a-b).map(m=>TEMP_MESES_LARGO[m]).join(', ');
-  const completas = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]!=='parte') : filtradas;
+  const completas = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]==='todo') : filtradas;
   const parciales = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]==='parte') : [];
+  const sinDato = filtraPeriodo ? filtradas.filter(n=>cobertura[n.id]==='desconocido') : [];
   let countMsg;
   if(filtraPeriodo){
-    countMsg = `<div class="helper" style="margin:0 0 8px;">${completas.length} en ${zonaLabel} todo ${mesesTxt}${parciales.length?`, ${parciales.length} solo una parte`:''}.${sinDatoOcultas?(sinDatoOcultas===1?' Hay 1 más con esa zona que todavía no tiene temporada cargada: no se muestra hasta que la cargue.':` Hay ${sinDatoOcultas} más con esa zona que todavía no tienen temporada cargada: no se muestran hasta que la carguen.`):''}</div>`;
+    countMsg = `<div class="helper" style="margin:0 0 8px;">${completas.length} en ${zonaLabel} todo ${mesesTxt}${parciales.length?`, ${parciales.length} solo una parte`:''}${sinDato.length?`, ${sinDato.length} sin temporada cargada`:''}.</div>`;
   } else {
     countMsg = `<div class="helper" style="margin:0 0 8px;">${filtradas.length} de ${ninierasItems.length} niñeras${ninFiltroMeses.size && !hayZonas ? '. Elegí también una zona para filtrar por mes.' : ''}</div>`;
   }
@@ -237,6 +255,7 @@ function filtrarNinieras(){
         ${!n.candidatas?.fecha_nacimiento ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin fecha de nac.</span>` : ''}
         ${ninIncidentesCount[normaliza(n.nombre)] ? `<span class="badge bad" style="font-size:10px;padding:2px 8px;">${ninIncidentesCount[normaliza(n.nombre)]} incidente${ninIncidentesCount[normaliza(n.nombre)]===1?'':'s'}</span>` : ''}
         ${badgeTemporada(n)}
+        ${hayZonaAfuera && !filtraPeriodo && dijoQueNoVa(n, zonas) ? `<span class="badge warn ninera-no-va" style="font-size:10px;padding:2px 8px;">Dijo que no va</span>` : ''}
         ${n.telefono_pendiente ? `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Celular nuevo por confirmar</span>` : ''}
       </div>
       <div class="rowbtns">
@@ -247,7 +266,8 @@ function filtrarNinieras(){
       </div>
     </div>`;
   grid.innerHTML = countMsg + '<div class="person-list">' + completas.map(filaNinera).join('') + '</div>'
-    + (parciales.length ? `<div class="helper" style="margin:16px 0 8px;">Solo parte del período (la tira muestra en qué quincenas está en ${zonaLabel}${hayZonaAfuera?'':' — lo pintado es cuándo está afuera'})</div><div class="person-list">${parciales.map(filaNinera).join('')}</div>` : '');
+    + (parciales.length ? `<div class="helper" style="margin:16px 0 8px;">Solo parte del período (la tira muestra en qué quincenas está en ${zonaLabel}${hayZonaAfuera?'':' — lo pintado es cuándo está afuera'})</div><div class="person-list">${parciales.map(filaNinera).join('')}</div>` : '')
+    + (sinDato.length ? `<div class="helper" id="nin-sin-temporada" style="margin:16px 0 8px;">Sin temporada cargada: no sabemos si están en ${zonaLabel} esos meses</div><div class="person-list">${sinDato.map(filaNinera).join('')}</div>` : '');
 }
 // Sección "Datos de carsitting" reutilizable: busca por nombre (sin importar tildes/mayúsculas)
 // contra TODOS los registros de carsitting_datos, sin depender de si ya está en Niñeras o
@@ -893,11 +913,20 @@ function quincenasDeMeses(meses){ return [...meses].flatMap(m=>[m*2, m*2+1]).sor
 // true | false | null (no se sabe: sin temporada cargada)
 function nineraPresenteEnZona(n, zonaKey, q){
   const grupo = grupoFueraDeZona(zonaKey);
-  // Sin temporada cargada no se sabe (puede estar veraneando): se muestra igual, marcada.
-  if(!temporadaCargada(n)) return null;
+  if(!temporadaCargada(n)){
+    // Vive afuera (todas sus zonas son de afuera, por ejemplo solo Punta del Este): está ahí
+    // todo el año aunque no haya cargado la temporada (21/10/2026; 17 niñeras así quedaban
+    // fuera del filtro con meses). Si no, no se sabe (puede estar veraneando).
+    if(grupo && soloZonasDeAfuera(n)) return true;
+    return null;
+  }
   if(grupo) return quincenasDeGrupo(n.temporada, grupo.id).includes(q);
   // Zona de Montevideo/Canelones: está, salvo que esa quincena esté en alguna zona de afuera.
   return !gruposFueraDeNinera(n).some(g=>quincenasDeGrupo(n.temporada, g.id).includes(q));
+}
+function soloZonasDeAfuera(n){
+  const zs = zonasNormalizadas(n.zona);
+  return zs.length>0 && zs.every(z=>grupoFueraDeZona(claveZona(z)));
 }
 // Para el filtro: 'todo' | 'parte' | 'nada' | 'desconocido'
 // zonaKeys: una clave o una lista (está si está en CUALQUIERA de esas zonas esa quincena).
@@ -1010,7 +1039,7 @@ function limpiarFiltroMeses(){ ninFiltroMeses.clear(); pintarFiltroMeses(); filt
 /* ---- Badge en la fila de la lista ---- */
 function badgeTemporada(n){
   const est = estadoTemporada(n);
-  if(est==='sin') return `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin temporada</span>`;
+  if(est==='sin') return `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Sin temporada cargada</span>`;
   if(est==='vieja') return `<span class="badge warn" style="font-size:10px;padding:2px 8px;">Temporada sin actualizar</span>`;
   return '';
 }
