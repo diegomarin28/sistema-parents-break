@@ -543,6 +543,10 @@ descartado (19/10/2026): no proponerlo de nuevo.
   "Descartar" una candidata es un DELETE físico: decidido (21/10/2026) que pase al estado
   `descartada`; va en el PR de Postulantes del rediseño.
 - "Vaciar formulario" de la Entrevista no pide confirmación.
+- Test intermitente (21/10/2026): `regresiones.spec.js` "Ver ese sitting" al cargar uno repetido
+  falla 1 de cada 3 veces, también en main: el formulario ya muestra el registro pero `sitEditId`
+  sigue en null. Ver si la app lo asigna después de llenar el formulario (carrera real) o si el
+  test tiene que esperarlo.
 - `asignaciones.cobro_hora/pago_hora` se guardan pero solo `sospechasDelMes` las usa: decidir una
   sola fuente del precio del fijo.
 - Sittings no está en `RT_RECARGA_LIVIANA` (agenda.js): el propio guardado reconstruye el módulo y
