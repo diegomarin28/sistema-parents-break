@@ -441,6 +441,12 @@ descartado (19/10/2026): no proponerlo de nuevo.
   de casos de plata compara las funciones nuevas con las actuales; cada PR de pantalla trae sus
   tests (cada acción, vacío / cargando / error, 390 y 1280 px); la versión nueva va detrás de
   `?nuevo=1` hasta que Paulina y Delfina la aprueben, y la vieja se apaga en un PR aparte.
+  Fidelidad a las maquetas (21/10/2026): la app nueva replica las maquetas de `local/maquetas/`
+  (worktree principal, no se commitean) lo más fiel posible, en celular y en compu: mismos textos,
+  orden, componentes, espaciado y comportamiento. Si algo no se puede hacer o choca con un test, no
+  se cambia por cuenta propia: se le avisa a Diego antes. Cada PR de pantalla trae capturas a 390 y
+  a 1280 px al lado de la maqueta. Lo que las maquetas piden y la app no tiene está en
+  `docs/rediseno-panel.md`, 4.9.
 - Cobros atrasados en Hoy (19/10/2026), EN PAUSA (20/10/2026: la propuesta no convenció a las
   chicas, retomar con sus cambios): lista de familias que deben, con días de atraso y monto, y
   un botón que abra WhatsApp con el recordatorio ya escrito (link de WhatsApp, sin la API).
