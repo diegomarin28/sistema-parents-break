@@ -213,7 +213,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   que no se pisa al tocar la hora.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
 - `tests/por-pagar-en-curso.spec.js`: semana en curso de las fijas en Por pagar (cuándo cierra,
-  sin botón, el día que cierra y el siguiente, fija con finde, saldo a favor, 390px).
+  sin botón, fija con finde, saldo a favor, 390px) y el pago el mismo día que cierra: sábado
+  desde temprano, domingo después del último fijo, fijo que pasa la medianoche, día registrado
+  más largo, día sin registrar, resumen del mes y aparato en otra zona horaria.
 - `tests/arranque.spec.js`: pantalla de carga (símbolo latiendo), error si no carga supabase-js,
   "Entrando…", carga entre el login y Hoy, símbolo chico al cambiar de sección (> 300 ms).
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
@@ -444,8 +446,10 @@ reporte.
   sin centavos (registro, Agenda, editar en Finanzas).
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3). La semana de una
-  fija que todavía no cerró (sábado, o domingo si trabaja el finde) se ve aparte como "Semana
-  en curso, cierra el ..." con lo que lleva hasta hoy, sin botón y sin saldo a favor
+  fija se paga el mismo día que cierra (sábado, o domingo si tiene fijos el finde), cuando
+  terminó el último fijo de ese día (de sus fijos vigentes o de lo registrado ese día, lo que
+  termine más tarde; `cierreSemanaFijo`, 21/10/2026). Antes se ve aparte como "Semana en curso,
+  cierra hoy a las HH:MM" con lo que lleva hasta hoy, sin botón y sin saldo a favor
   (`porPagarEnCursoHtml`, 20/10/2026). El "Por pagar a niñeras" del resumen tampoco la cuenta: va
   aparte ("Más $X de semanas que todavía no cierran"), y en el mes actual se aclara cuánto de la
   lista es de meses anteriores (21/10/2026). Pagan de a una desde el celular: cada fila tiene
