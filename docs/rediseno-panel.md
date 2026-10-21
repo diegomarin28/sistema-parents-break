@@ -243,7 +243,10 @@ Lo que ya está bien y se conserva: paleta y tipografías (Baloo 2, Inter, IBM P
 
 ### 4.2 Navegación nueva
 
-Celular (hasta 760 px): barra fija abajo con 5 pestañas. Compu: el menú lateral de siempre, agrupado igual.
+Celular y tablet (hasta 1023 px): barra fija abajo con 5 pestañas. Compu (desde 1024 px): la barra
+de arriba ocupa todo el ancho y debajo, a la izquierda, un menú lateral fijo con las **mismas 5
+secciones** (no los 12 módulos de hoy), en el mismo orden. Es un solo menú: el CSS lo pone abajo o al
+costado según el ancho.
 
 | Pestaña | Contiene | Clave actual |
 |---|---|---|
@@ -253,7 +256,7 @@ Celular (hasta 760 px): barra fija abajo con 5 pestañas. Compu: el menú latera
 | Plata | Pagar · Cobrar · Números (incluye gastos, revisar meses, conciliar) | `finanzas` |
 | Más | Familias, Niñeras, Postulantes, Intermediaciones, Notificaciones, Marketing, Contratos, Juguetes, ajustes (Face ID, zonas, tarifa de traslado, cerrar sesión) | el resto |
 
-Puntitos de aviso en Hoy (urgente del día) y Plata (hay para pagar o cobrar). La campanita sigue arriba a la derecha, en el celular y en la compu (decisión 10). Un botón "+" flotante en Hoy, Agenda y Registros que abre una hoja con tres opciones: nuevo registro, nuevo pedido desde WhatsApp (entra justo después de la base), nuevo fijo. La barra se arma en `renderApp()` con los mismos `MODULOS` y `setModulo(k)`; `renderSidebar()` queda para la compu. Contratos y Juguetes tienen 0 filas y Marketing 9: van al final de "Más" (decisión 5).
+Puntitos de aviso en Hoy (urgente del día) y Plata (hay para pagar o cobrar). La campanita sigue arriba a la derecha, en el celular y en la compu (decisión 10). En el celular, un botón "+" flotante en Hoy, Agenda y Registros abre una hoja con tres opciones: nuevo registro, nuevo pedido desde WhatsApp (entra justo después de la base), nuevo fijo. En la compu el "+" no flota (tapaba el panel de Registros y los botones de la columna derecha de Hoy): es un botón "+ Nuevo" arriba del menú lateral, con las mismas tres opciones. El menú se arma en `renderApp()` con los mismos `MODULOS` y `setModulo(k)`; `renderSidebar()` pasa a pintar ese menú único en vez de la lista de 12 módulos. Contratos y Juguetes tienen 0 filas y Marketing 9: van al final de "Más" (decisión 5).
 
 ### 4.3 Hoy nuevo
 
@@ -270,6 +273,11 @@ Una lista de **tarjetas de acción**, ordenadas por urgencia, cada una con una f
 | La carga nocturna no anduvo | solo si pasó | "Cargarlos ahora" | `cargarFijosAhora` |
 | Datos que faltan | siempre que haya, plegado | "Completar" | `abrirFichaDesdeHoy` |
 
+En la compu (desde 1024 px), Hoy va en dos columnas: las tarjetas de acción a la izquierda (`1,3fr`) y
+"Hoy en la agenda", "Esta semana" (sus datos en 2 columnas) y "Datos que faltan" a la derecha (`1fr`),
+pegajosa al hacer scroll para que la agenda del día quede a la vista mientras se resuelven las
+tarjetas.
+
 Reemplaza la revisión de 14 días por **el cierre de ayer** (y, a la mañana, el de hoy si ya terminó): una pregunta concreta en vez de un "Bien" sin consecuencia. "Sí a todos" para los días que ya quedaron atrás. Lo que no se cierra en 7 días se da por revisado solo (decisión 3).
 
 Una sola función `cargarAccionesHoy()` alimenta las tarjetas, el puntito de Hoy, la campanita y el push. Los datos salen de una función de la base `resumen_hoy()` (un pedido) que devuelve: pedidos sin asignar hasta mañana, fijos de ayer sin revisar, puntuales sin registrar, cobros vencidos (conteo y total), pagos listos (conteo y total), datos que faltan, estado de la carga nocturna. Hoy pasa de 33 pedidos a 4 o 5.
@@ -278,18 +286,26 @@ Una sola función `cargarAccionesHoy()` alimenta las tarjetas, el puntito de Hoy
 
 Vive en `core.js` (helpers que devuelven HTML) e `index.html` (CSS). Scripts clásicos y handlers inline como hoy; nada de módulos. Nombres en español como el resto del código.
 
+Regla de nombres (21/10/2026): **una clase es de un solo componente.** Las variantes llevan el nombre
+del componente como prefijo (`chip-aviso`, `aviso-atencion`, `btn-primario`, `fila-pasado`,
+`accion-urgente`), nunca una palabra suelta. En la primera maqueta el chip "aviso" (`.chip.aviso`)
+heredaba el padding y el tamaño del bloque `.aviso`, porque `aviso` era a la vez un componente y una
+variante de otro. `tests/estatico.spec.js` controla que ningún nombre de componente se use como
+variante de otro.
+
 Tokens (CSS en `:root`, los colores de siempre): `--sp-1..6` (4 a 32 px), `--r-sm/md/lg` (8/12/16), `--tap: 44px`, `--f-display/body/mono`. Sin modo oscuro por ahora (la paleta tiene contraste suficiente; se puede sumar después con las mismas variables).
 
 | Componente | Helper | Reemplaza a |
 |---|---|---|
 | Tarjeta | `uiTarjeta({titulo, cuerpo, acciones, plegable})` | `.card` con headers a mano, `cardHeaderConColapso` |
 | Tarjeta de acción | `uiAccion({nivel, eyebrow, titulo, detalle, botones})` | tarjetas de Hoy, `pendbanner`, `warnbox` con botón |
-| Fila | `uiFila({izquierda, principal, meta, derecha, botones, onclick})` | `agendarow`, `autoconf-fila`, `pago-fila`, `agenda-ninerarow`, `notifcfg-row`, `conc-fila`, `person-row`, `candlist .item`, filas de movimientos y fijos |
+| Fila | `uiFila({izquierda, principal, meta, derecha, botones, onclick})`. En el celular los botones bajan a una segunda línea; en la compu van en la misma línea que el monto | `agendarow`, `autoconf-fila`, `pago-fila`, `agenda-ninerarow`, `notifcfg-row`, `conc-fila`, `person-row`, `candlist .item`, filas de movimientos y fijos |
 | Lista | `uiLista(filas, {grupos})` con encabezados de grupo pegajosos | tablas `asigtable` (lista del mes, historial, margen) |
-| Chip | `uiChip(texto, 'ok'/'aviso'/'mal'/'neutro'/'marca'/'sin')` | `.badge` con 5 variantes y estilos inline |
-| Botón | `.btn` (44 px) con `.primario/.suave/.bueno/.peligro/.chico` (36 px, solo en listas densas) y `.ancho` | `.btn.primary`, `.smallbtn`, `.btn.ghost`, `.btn.danger`, `.createbtn`, `.extratoggle`, `.durbtn`, `.pillbtn`, `.tipobtn`, `.daybtn` |
+| Chip | `uiChip(texto, 'ok'/'aviso'/'mal'/'neutro'/'marca'/'sin')`, que emite `class="chip chip-ok"` | `.badge` con 5 variantes y estilos inline |
+| Aviso | `uiAviso(texto, 'atencion'/'ok'/'info'/'error')`: bloque de texto de ancho completo, emite `class="aviso aviso-atencion"` | `.warnbox`, `.okbox`, `.helper` coloreados a mano |
+| Botón | `.btn` (44 px) con `.btn-primario/-suave/-bueno/-peligro/-chico` (36 px, solo en listas densas) y `.btn-ancho` | `.btn.primary`, `.smallbtn`, `.btn.ghost`, `.btn.danger`, `.createbtn`, `.extratoggle`, `.durbtn`, `.pillbtn`, `.tipobtn`, `.daybtn` |
 | Segmentos y filtros | `uiSegmentos([...])`, `uiFiltros([...])` | `subtab`, `pillfilters`, `tiporow`, `fin-vistas` pintado a mano |
-| Hoja | `abrirHoja(html, {titulo, pie})`: en celular sube desde abajo con pie pegajoso (Cancelar/Guardar); en compu es el modal de hoy | `abrirModal` (se mantiene como alias) |
+| Hoja | `abrirHoja(html, {titulo, pie, panel})`: en el celular sube desde abajo con pie pegajoso (Cancelar/Guardar). En la compu, si la pantalla tiene panel lateral (`panel: true`, Registros) se abre al costado de la lista sin tapar nada; si no, como el modal centrado de hoy | `abrirModal` (se mantiene como alias) |
 | Estados | `uiVacio(texto, accion)`, `uiCargando()`, `uiError(e, reintentar)` | 13 `.empty`, 4 "Cargando", `errBox`, `errorConReintentoHtml` |
 | Toast con deshacer | `toast(msg, tipo, {deshacer: fn})` | `toast` de hoy (se extiende) |
 | Plata y fechas | `fmtPlata(n)`, `fmtFechaCorta(iso)`, `fmtHorario(ini, fin, cruza)` | `fmt` ×4, `plata`, `plataFin`, `fmtF` ×2, 27 `toLocaleString` sueltos |
@@ -298,10 +314,11 @@ Tokens (CSS en `:root`, los colores de siempre): `--sp-1..6` (4 a 32 px), `--r-s
 Cómo migrar sin romper los tests:
 
 1. Los tests usan 629 selectores por id (`#editmodal`, `#sit-cobro`, `#fin-porpagar-wrap`, `#confirm-si`…) y 149 por clase (`.toast`, `.agendarow` ×29, `.autocomplete-item`, `.daybtn`, `.fin-semana-en-curso`, `.statnum`, `.spinner`, `.autoconf-card`). **Los ids se conservan todos.** Las clases que miran los tests quedan como alias en el componente nuevo (`uiFila` emite `class="fila agendarow"`, el spinner conserva `.spinner`, el toast `.toast .good/.bad`).
-2. `abrirModal` sigue existiendo y sigue creando `#editmodal` con `.confirmoverlay.show` (el Realtime y `esperarQuieta` dependen de eso); `abrirHoja` es la misma función con otra presentación en celular.
-3. `tests/estatico.spec.js` suma dos controles: que ningún archivo nuevo use `style="` inline salvo una lista blanca que se achica PR a PR, y que las clases alias no desaparezcan.
-4. Cada PR corre `humo`, `exploratorio` y los del módulo tocado, y saca capturas a 390 px con el harness para comparar antes y después.
-5. Orden: primero el PR de base (CSS + helpers, sin cambiar pantallas), después cada módulo migra sus filas y botones al componente. No se borra CSS viejo hasta que `grep` diga que nadie lo usa.
+2. `abrirModal` sigue existiendo y sigue creando `#editmodal` con `.confirmoverlay.show` (el Realtime y `esperarQuieta` dependen de eso); `abrirHoja` es la misma función con otra presentación. El panel lateral de Registros en la compu también es `#editmodal` con `.confirmoverlay.show` y una clase de panel que lo pone al costado sin fondo oscuro: los tests (que corren a 1280 px) lo siguen encontrando igual, y el Realtime sigue esperando a que se cierre.
+3. Los tests corren con un solo proyecto, `escritorio` a 1280×900: con el diseño nuevo ven la versión de compu. El PR 0 suma un proyecto `celular` (390×844) que corre `humo` y `exploratorio`, para que la barra de abajo, el "+" flotante y las hojas también tengan test.
+4. `tests/estatico.spec.js` suma tres controles: que ningún archivo nuevo use `style="` inline salvo una lista blanca que se achica PR a PR, que las clases alias no desaparezcan y que ningún nombre de componente se use como variante de otro.
+5. Cada PR corre `humo`, `exploratorio` y los del módulo tocado, y saca capturas a 390 px y a 1280 px con el harness para comparar antes y después.
+6. Orden: primero el PR de base (CSS + helpers, sin cambiar pantallas), después cada módulo migra sus filas y botones al componente. No se borra CSS viejo hasta que `grep` diga que nadie lo usa.
 
 ### 4.5 Analytics que sirven para decidir
 
@@ -369,7 +386,19 @@ Finanzas, el PDF y la Agenda lo traten como cobrable: hoy un registro cancelado 
 
 ### 4.8 Maquetas
 
-En `local/maquetas/` (ignorado por git): `hoy.html`, `sittings.html`, `finanzas.html` y `maquetas.css`. Se abren directo en el celular (o en la compu, donde se ven como un teléfono centrado). Datos ficticios. Muestran: la barra de pestañas, las tarjetas de acción de Hoy con el lugar del pedido de WhatsApp y las sugeridas, la lista de registros con filtros y la hoja de registro nuevo con el desglose de precio, y Plata con Pagar/Cobrar/Números y el toast con Deshacer.
+En `local/maquetas/` (ignorado por git): `hoy.html`, `sittings.html`, `finanzas.html` y `maquetas.css`. Se abren directo en el celular o en la compu: hasta 599 px ocupan la pantalla, de 600 a 1023 px se ven como un teléfono centrado y desde 1024 px muestran la versión de compu (4.9). Datos ficticios. Muestran: la barra de pestañas, las tarjetas de acción de Hoy con el lugar del pedido de WhatsApp y las sugeridas, la lista de registros con filtros y la hoja de registro nuevo con el desglose de precio, y Plata con Pagar/Cobrar/Números y el toast con Deshacer.
+
+### 4.9 Celular y compu, pantalla por pantalla
+
+Decidido el 21/10/2026. Las maquetas muestran las dos versiones.
+
+| Pantalla | Celular (hasta 1023 px) | Compu (desde 1024 px) |
+|---|---|---|
+| Marco | barra de arriba con el nombre y la campanita; barra de 5 pestañas abajo; "+" flotante | barra de arriba a todo el ancho; menú lateral fijo con las mismas 5 secciones y "+ Nuevo" arriba; contenido hasta 1.240 px de ancho |
+| Hoy | una columna: tarjetas de acción, después agenda del día, semana y datos que faltan | dos columnas: acciones a la izquierda (`1,3fr`); agenda del día, "Esta semana" (en 2 columnas) y "Datos que faltan" a la derecha (`1fr`), pegajosa al hacer scroll |
+| Registros | lista por día con filtros; el registro nuevo o editado se abre en una hoja que sube desde abajo | la lista a la izquierda y la hoja de registro como panel al costado (420 px, pegajoso, con su propio scroll y el pie Cancelar/Guardar fijo abajo), no un modal encima: se puede mirar la lista mientras se carga |
+| Plata | Pagar · Cobrar · Números en segmentos; cada fila con el monto a la derecha y los botones en una segunda línea | una sola columna ancha (hasta 920 px); cada fila con monto, Copiar cuenta, Copiar monto y Pagado en la misma línea; "Semana en curso" plegada abajo |
+| Agenda, Más y fichas | se definen en su PR con estas mismas reglas: listas con `uiFila`; donde hay formulario al lado de una lista, panel al costado en la compu | |
 
 ## 5. Plan por etapas
 
