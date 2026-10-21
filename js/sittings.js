@@ -1470,8 +1470,9 @@ async function guardarSitting(){
     ninera_id: sitNineraSel ? sitNineraSel.id : null,
     ninera_nombre: nineraNombre,
     fecha,
-    cobro_familia: Number(document.getElementById('sit-cobro').value)||0,
-    pago_ninera: Number(document.getElementById('sit-pago').value)||0,
+    // Lo tipeado a mano también va sin centavos (21/10/2026): 600,5 → cobro 601, pago 600.
+    cobro_familia: redondearCobro(document.getElementById('sit-cobro').value),
+    pago_ninera: redondearPago(document.getElementById('sit-pago').value),
     cancelado: document.getElementById('sit-cancelado')?.checked || false,
     notas: document.getElementById('sit-notas').value || null,
     hora_inicio: null, hora_fin: null, km: null, origen: null, destino: null,

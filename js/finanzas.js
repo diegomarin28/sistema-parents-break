@@ -1304,11 +1304,13 @@ async function guardarMovimientoSitting(id){
   const cobroTxt = document.getElementById('fin-mov-cobro').value;
   const pagoTxt = document.getElementById('fin-mov-pago').value;
   const warn = document.getElementById('fin-mov-warn');
-  const cobro = Number(cobroTxt), pago = Number(pagoTxt);
-  if(cobroTxt==='' || pagoTxt==='' || !isFinite(cobro) || !isFinite(pago) || cobro<0 || pago<0){
+  const cobroNum = Number(cobroTxt), pagoNum = Number(pagoTxt);
+  if(cobroTxt==='' || pagoTxt==='' || !isFinite(cobroNum) || !isFinite(pagoNum) || cobroNum<0 || pagoNum<0){
     if(warn) warn.innerHTML = '<div class="warnbox">Los montos tienen que ser números (0 o más).</div>';
     return;
   }
+  // Sin centavos aunque se tipeen (21/10/2026): 600,5 → cobro 601, pago 600.
+  const cobro = redondearCobro(cobroNum), pago = redondearPago(pagoNum);
   const cambios = {
     cobro_familia: cobro,
     pago_ninera: pago,

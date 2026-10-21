@@ -121,6 +121,66 @@ test.describe('registro en Sittings (por hora)', () => {
   });
 });
 
+// Lo tipeado a mano también se guarda sin centavos (pedido de Diego, 21/10/2026).
+test.describe('montos tipeados a mano', () => {
+  for (const [tipeado, cobro, pago] of [['600.5', 601, 600], ['600.4', 600, 600], ['600.6', 601, 601], ['600', 600, 600]]) {
+    test(`registro en Sittings: ${tipeado.replace('.', ',')} tipeado → cobro ${cobro}, pago ${pago}`, async ({ page }) => {
+      const e = await abrirApp(page);
+      await nuevoSitting(page, { ini: '14:00', fin: '17:00' });
+      await page.fill('#sit-cobro', tipeado);
+      await page.fill('#sit-pago', tipeado);
+      await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
+      await expect(page.locator('#editmodal')).toHaveCount(0);
+      expect(escrituras(e, 'sittings_traslados', 'POST')[0].cuerpo).toMatchObject({ cobro_familia: cobro, pago_ninera: pago });
+      verificarLimpio(e);
+    });
+  }
+
+  test('editar un movimiento en Finanzas: 600,5 → cobro 601, pago 600 (también en la confirmación)', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'finanzas');
+    await page.evaluate(async () => { finMes = '2026-09'; await cargarFinanzas(); });
+    await esperarQuieta(page);
+    await page.evaluate(i => editarMovimientoSitting(i), SIT_28);
+    await page.fill('#fin-mov-cobro', '600.5');
+    await page.fill('#fin-mov-pago', '600.5');
+    await page.check('#fin-mov-pagado');
+    await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
+    await expect(page.locator('#pago-total')).toHaveText('$600');
+    await page.locator('#pago-confirmar').click();
+    await expect(page.locator('#editmodal')).toHaveCount(0);
+    expect(escrituras(e, 'sittings_traslados', 'PATCH')[0].cuerpo).toMatchObject({ cobro_familia: 601, pago_ninera: 600, pagado: true });
+    verificarLimpio(e);
+  });
+
+  test('editar en Finanzas: un monto que no es número sigue avisando y no guarda', async ({ page }) => {
+    const e = await abrirApp(page);
+    await irAModulo(page, 'finanzas');
+    await page.evaluate(async () => { finMes = '2026-09'; await cargarFinanzas(); });
+    await esperarQuieta(page);
+    await page.evaluate(i => editarMovimientoSitting(i), SIT_28);
+    await page.fill('#fin-mov-pago', '');
+    await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
+    await expect(page.locator('#fin-mov-warn')).toContainText('Los montos tienen que ser números');
+    expect(e.escrituras).toEqual([]);
+    verificarLimpio(e);
+  });
+
+  test('Agenda: pago tipeado al asignar niñera, 600,5 → 600', async ({ page }) => {
+    const d = datosBase();
+    const e = await abrirApp(page, { datos: d });
+    await irAModulo(page, 'agenda');
+    await page.evaluate(id => abrirModalAsignar(id), d.solicitudes[0].id);
+    await page.locator('input[name="agenda-asignar-ninera"]').first().check();
+    await page.fill('#agenda-asignar-pago', '600.5');
+    await page.locator('#editmodal button', { hasText: /Asignar|Confirmar|Guardar/ }).last().click();
+    await expect.poll(() => escrituras(e, 'sittings_traslados', 'POST').length).toBe(1);
+    expect(escrituras(e, 'solicitud_ninieras', 'POST')[0].cuerpo).toMatchObject({ pago_ninera: 600 });
+    expect(escrituras(e, 'sittings_traslados', 'POST')[0].cuerpo).toMatchObject({ pago_ninera: 600 });
+    verificarLimpio(e);
+  });
+});
+
 test.describe('Agenda', () => {
   async function verAgendaDesde(page, fechaISO) {
     await page.evaluate(async f => { agendaAncla = f; await cargarAgendaSolicitudes(); }, fechaISO);

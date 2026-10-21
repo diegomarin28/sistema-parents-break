@@ -756,7 +756,7 @@ async function guardarAsignacionDirecta(solicitudId){
     const choqueFamilia = await chequearFamiliaYaCubierta(familia.id, s.fecha, s.hora_inicio, s.hora_fin, sel.dataset.nombre, null);
     if(!(await avisarSiFamiliaYaCubierta(choqueFamilia, s.familia_nombre, 'Sí, van dos'))) return;
   }
-  const pago = Number(document.getElementById('agenda-asignar-pago').value)||0;
+  const pago = redondearPago(document.getElementById('agenda-asignar-pago').value);
   const { error: e1 } = await sb.from('solicitud_ninieras').insert({
     solicitud_id: solicitudId, ninera_id: sel.value, ninera_nombre: sel.dataset.nombre,
     estado: 'confirmada', pago_ninera: pago,
@@ -1041,7 +1041,7 @@ async function registrarSittingFijoDeHoy(id){
     const cobroTxt = document.getElementById('agenda-fija-cobro')?.value ?? '';
     const pagoTxt = document.getElementById('agenda-fija-pago')?.value ?? '';
     if(cobroTxt==='' || pagoTxt===''){ if(warn) warn.innerHTML = '<div class="warnbox">Completá el cobro del traslado y el pago a la niñera.</div>'; return; }
-    cobro = Number(cobroTxt)||0; pago = Number(pagoTxt)||0;
+    cobro = redondearCobro(cobroTxt); pago = redondearPago(pagoTxt);
   }
   const choque = chequearDobleReservaAgenda(a.ninera_nombre, s.fecha, horaIni, horaFin, s.id);
   if(!(await avisarSiDobleReserva(choque, a.ninera_nombre, 'Registrar igual'))) return;
@@ -1200,7 +1200,7 @@ async function confirmarReemplazoFijoHoy(id){
     const cobroTxt = document.getElementById('agenda-fija-rcobro')?.value ?? '';
     const pagoTxt = document.getElementById('agenda-fija-rpago')?.value ?? '';
     if(cobroTxt==='' || pagoTxt===''){ if(warn) warn.innerHTML = '<div class="warnbox">Completá el cobro del traslado y el pago a la niñera.</div>'; return; }
-    cobro = Number(cobroTxt)||0; pago = Number(pagoTxt)||0;
+    cobro = redondearCobro(cobroTxt); pago = redondearPago(pagoTxt);
   }
   const choque = chequearDobleReservaAgenda(nineraTxt, s.fecha, horaIni, horaFin, s.id);
   if(!(await avisarSiDobleReserva(choque, nineraTxt, 'Registrar igual'))) return;

@@ -237,7 +237,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   (17:05, 17:06, 17:35, 17:36, medianoche), registro, Agenda, historial y PDF, base sin migrar.
   En la base: `supabase/pruebas/terminos_redondeo.sql`.
 - `tests/redondeo-montos.spec.js`: montos sin centavos (,4 ,5 ,6 y enteros para el pago y el cobro)
-  en el registro, la Agenda, Por pagar / Por cobrar, "Copiar monto", saldo a favor y PDF. En la
+  en el registro, la Agenda, Por pagar / Por cobrar, "Copiar monto", saldo a favor, PDF y montos
+  tipeados a mano. En la
   base: `supabase/pruebas/redondeo_montos.sql`.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
@@ -382,7 +383,8 @@ reporte.
   por `redondearCobro()`: ,5 o más sube (600,5 → 601; 600,4 → 600). Las dos en core.js; en la
   base, `redondear_pago()` y `redondear_cobro()` (generar_previstos_fijos): si cambia una regla,
   cambian las dos. Nunca `Math.round` para calcular lo que se cobra o se paga. El saldo a favor
-  se aplica completo; solo se redondea el total que queda.
+  se aplica completo; solo se redondea el total que queda. Lo tipeado a mano también se guarda
+  sin centavos (registro, Agenda, editar en Finanzas).
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3). La semana de una
   fija que todavía no cerró (sábado, o domingo si trabaja el finde) se ve aparte como "Semana
