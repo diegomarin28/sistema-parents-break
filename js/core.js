@@ -1354,11 +1354,22 @@ function familiaRedondeaFin(familia, fechaISO){
   const desde = familia?.terminos_aceptados_el;
   return !!desde && (!fechaISO || fechaISO >= desde);
 }
+/* "Termina al día siguiente" con la hora de fin DESPUÉS de la de inicio (20:00 a 22:00) sumaba
+   24 h sin avisar y se cobraban 26 horas (auditoría, 21/10/2026). Con la casilla, el fin tiene
+   que ser antes que el inicio (20:00 a 01:00) o igual (24 h justas). Cada pantalla con la casilla
+   muestra este aviso y no deja guardar; horasSitting devuelve null. */
+const AVISO_CRUCE_MEDIANOCHE = 'Marcaste "Termina al día siguiente", pero la hora de fin es después de la de inicio: serían más de 24 horas. Si termina el mismo día, desmarcá la casilla.';
+function cruceMedianocheMalMarcado(horaIni, horaFin, cruza){
+  if(!cruza || !horaIni || !horaFin) return false;
+  return agendaMinutos(String(horaFin).slice(0,5)) > agendaMinutos(String(horaIni).slice(0,5));
+}
 // Horas de un sitting: las reales (pago a la niñera) y las que se le cobran a la familia,
-// y hasta qué hora se cobra si no es la real. null si el horario está incompleto o el fin no
-// es después del inicio. Todo cobro por hora pasa por acá.
+// y hasta qué hora se cobra si no es la real. null si el horario está incompleto, el fin no
+// es después del inicio o la casilla del día siguiente está mal marcada. Todo cobro por hora
+// pasa por acá.
 function horasSitting(horaIni, horaFin, cruza, familia, fechaISO){
   if(!horaIni || !horaFin) return null;
+  if(cruceMedianocheMalMarcado(horaIni, horaFin, cruza)) return null;
   const mi = agendaMinutos(String(horaIni).slice(0,5));
   const mf = agendaMinutos(String(horaFin).slice(0,5)) + (cruza ? 24*60 : 0);
   if(mf<=mi) return null;

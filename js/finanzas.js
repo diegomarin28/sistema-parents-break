@@ -1289,8 +1289,8 @@ function editarMovimientoSitting(id){
     <div class="grid2">
       <div class="field"><label>Cobro a la familia</label><input type="number" id="fin-mov-cobro" value="${Number(r.cobro_familia)||0}"></div>
       <div class="field"><label>Pago a la niñera</label><input type="number" id="fin-mov-pago" value="${Number(r.pago_ninera)||0}"></div>
-      <label class="chk"><input type="checkbox" id="fin-mov-cobrado" ${r.cobrado?'checked':''}> Ya se cobró</label>
-      <label class="chk"><input type="checkbox" id="fin-mov-pagado" ${r.pagado?'checked':''}> Ya se le pagó</label>
+      <label class="chk"><input type="checkbox" id="fin-mov-cobrado" data-antes="${r.cobrado?'1':'0'}" ${r.cobrado?'checked':''}> Ya se cobró</label>
+      <label class="chk"><input type="checkbox" id="fin-mov-pagado" data-antes="${r.pagado?'1':'0'}" ${r.pagado?'checked':''}> Ya se le pagó</label>
     </div>
     <div class="helper" style="margin-top:10px;">Marcar cobrado o pagado no cambia el resultado del mes: solo indica si la plata ya entró o ya salió.</div>
     <div id="fin-mov-warn"></div>
@@ -1311,16 +1311,26 @@ async function guardarMovimientoSitting(id){
   }
   // Sin centavos aunque se tipeen (21/10/2026): 600,5 → cobro 601, pago 600.
   const cobro = redondearCobro(cobroNum), pago = redondearPago(pagoNum);
-  const cambios = {
-    cobro_familia: cobro,
-    pago_ninera: pago,
-    cobrado: document.getElementById('fin-mov-cobrado').checked,
-    pagado: document.getElementById('fin-mov-pagado').checked,
-  };
-  const antes = finSitsTodosDelMes.find(x=>x.id===id);
-  if(cambios.pagado && !antes?.pagado && !(await confirmarPagoSittings([id], {[id]: pago}))) return;
-  const { error } = await sb.from('sittings_traslados').update(cambios).eq('id', id);
+  // Cobrado y pagado se mandan solo si se tocaron, y con la condición de que sigan como estaban
+  // al abrir el formulario: si la otra admin los cambió mientras tanto, no se pisan. Antes se
+  // mandaban siempre y se desmarcaba un cobro que la otra acababa de marcar (auditoría, 21/10/2026).
+  const cambios = { cobro_familia: cobro, pago_ninera: pago };
+  const marcas = ['cobrado', 'pagado'].map(campo=>{
+    const chk = document.getElementById('fin-mov-'+campo);
+    return { campo, antes: chk.dataset.antes==='1', ahora: chk.checked };
+  }).filter(m=>m.antes!==m.ahora);
+  marcas.forEach(m=>{ cambios[m.campo] = m.ahora; });
+  if(cambios.pagado===true && !(await confirmarPagoSittings([id], {[id]: pago}))) return;
+  let consulta = sb.from('sittings_traslados').update(cambios).eq('id', id);
+  marcas.forEach(m=>{ consulta = consulta.eq(m.campo, m.antes); });
+  const { data, error } = await consulta.select('id');
   if(error){ if(warn) warn.innerHTML = errBox(error); return; }
+  if(!data || !data.length){
+    if(warn) warn.innerHTML = `<div class="warnbox">${marcas.length
+      ? 'No se guardó nada: mientras lo editabas, alguien más cambió si estaba cobrado o pagado. Cerrá y volvé a abrirlo para ver cómo quedó.'
+      : 'No se guardó: este registro ya no existe. Actualizá la pantalla.'}</div>`;
+    return;
+  }
   cerrarModal();
   toast('Movimiento actualizado.');
   refrescarFinanzasCompleto();

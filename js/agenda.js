@@ -345,7 +345,9 @@ function pintarFinCobroAgenda(){
     if(!box) return;
     const familia = agendaFamilias.find(f=>f.id===box.dataset.familia);
     const horas = horasSitting(leerHora(hi), leerHora(hf), document.getElementById(cruza)?.checked, familia, box.dataset.fecha);
-    box.textContent = textoFinCobrado(leerHora(hf), horas);
+    const cruceMal = cruceMedianocheMalMarcado(leerHora(hi), leerHora(hf), document.getElementById(cruza)?.checked);
+    box.textContent = cruceMal ? AVISO_CRUCE_MEDIANOCHE : textoFinCobrado(leerHora(hf), horas);
+    box.style.color = cruceMal ? 'var(--bad)' : '';
   });
 }
 function selectHora(idPrefix, valHH='', valMM=''){
@@ -459,6 +461,8 @@ function actualizarAgendaTotal(){
   const hi = leerHora('agenda-hora-inicio');
   const hf = leerHora('agenda-hora-fin');
   const cruza = document.getElementById('agenda-cruza-medianoche')?.checked;
+  if(cruceMedianocheMalMarcado(hi, hf, cruza)){ el.textContent = AVISO_CRUCE_MEDIANOCHE; return; }
+  if(tarifa && hi && !hf){ el.textContent = 'Sin hora de fin: el total se calcula cuando se cargue a qué hora terminó.'; return; }
   if(!tarifa || !hi || !hf){ el.textContent=''; return; }
   const familia = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(document.getElementById('agenda-familia')?.value||''));
   const horas = horasSitting(hi, hf, cruza, familia, document.getElementById('agenda-nueva-fecha')?.value);
@@ -581,6 +585,7 @@ async function guardarSolicitudPuntual(){
     warn.innerHTML = '<div class="warnbox">La hora de fin tiene que ser después de la de inicio. Si termina pasada la medianoche, marcá "Termina al día siguiente".</div>';
     return;
   }
+  if(cruceMedianocheMalMarcado(horaInicio, horaFin, cruza)){ warn.innerHTML = `<div class="warnbox">${escaparHtml(AVISO_CRUCE_MEDIANOCHE)}</div>`; return; }
   const fam = agendaFamilias.find(f=>normaliza(f.nombre)===normaliza(familiaTxt));
   let cobroFinal = null;
   if(tipo==='traslado'){
@@ -590,10 +595,11 @@ async function guardarSolicitudPuntual(){
     cobroFinal = cobroTraslado ? Number(cobroTraslado) : null;
   } else if(tarifa && horaFin){
     const horas = horasSitting(horaInicio, horaFin, cruza, fam, fecha);
-    cobroFinal = horas ? redondearCobro(Number(tarifa)*horas.cobro) : Number(tarifa);
-  } else if(tarifa){
-    cobroFinal = Number(tarifa);
+    cobroFinal = horas ? redondearCobro(Number(tarifa)*horas.cobro) : null;
   }
+  // Sin hora de fin no hay total: la tarifa por hora no es lo que se cobra. Antes se guardaba la
+  // tarifa como cobro total y pasaba así al registro al asignar (auditoría, 21/10/2026). El total
+  // se calcula cuando se carga la hora de fin en Sittings & traslados.
   const { error } = await sb.from('solicitudes').insert({
     familia_id: fam ? fam.id : null,
     familia_nombre: familiaTxt,
@@ -757,29 +763,48 @@ async function guardarAsignacionDirecta(solicitudId){
     if(!(await avisarSiFamiliaYaCubierta(choqueFamilia, s.familia_nombre, 'Sí, van dos'))) return;
   }
   const pago = redondearPago(document.getElementById('agenda-asignar-pago').value);
+  // Primero se toma el pedido, con la condición de que siga sin asignar: si otra admin lo asignó
+  // (o lo canceló) mientras se elegía, no se carga una segunda niñera ni un segundo registro
+  // (auditoría, 21/10/2026). Si las dos guardan a la vez, la base deja pasar a una sola.
+  const estadoAntes = s?.estado || 'sin_asignar';
+  const { data: tomada, error: e0 } = await sb.from('solicitudes').update({estado:'confirmada'})
+    .eq('id', solicitudId).in('estado', ['sin_asignar','pendiente_confirmar']).select('id');
+  if(e0){ warn.innerHTML = errBox(e0); return; }
+  if(!tomada || !tomada.length){
+    warn.innerHTML = '<div class="warnbox">No se cargó nada: mientras elegías, alguien más ya asignó este pedido (o lo canceló). Cerrá para ver cómo quedó.</div>';
+    return;
+  }
   const { error: e1 } = await sb.from('solicitud_ninieras').insert({
     solicitud_id: solicitudId, ninera_id: sel.value, ninera_nombre: sel.dataset.nombre,
     estado: 'confirmada', pago_ninera: pago,
   });
-  if(e1){ warn.innerHTML = errBox(e1); return; }
-  const okSolicitud = await sbGuardar(sb.from('solicitudes').update({estado:'confirmada'}).eq('id', solicitudId), 'la solicitud');
+  if(e1){
+    // El pedido vuelve a como estaba, así se puede reintentar sin que quede "confirmado" sin niñera.
+    const { error: eVuelta } = await sb.from('solicitudes').update({estado: estadoAntes}).eq('id', solicitudId).eq('estado', 'confirmada');
+    warn.innerHTML = errBox(e1) + (eVuelta ? '<div class="warnbox">Además, el pedido quedó como confirmado sin niñera: avisale a Diego.</div>' : '');
+    return;
+  }
   // Se carga directo el registro real en Sittings & traslados -- ya no hace falta un paso
-  // aparte de "Cargar sitting" después de asignar.
+  // aparte de "Cargar sitting" después de asignar. Un sitting sin hora de fin va en $0 y se
+  // calcula al cargarla: un pedido viejo puede traer la tarifa por hora guardada como total. Un
+  // traslado no tiene hora de fin: lleva su cobro total.
+  const faltaFin = s.tipo!=='traslado' && !s.hora_fin;
+  const cobroRegistro = faltaFin ? 0 : (Number(s.cobro_familia)||0);
   const { error: e2 } = await sb.from('sittings_traslados').insert({
     tipo: s.tipo, registrado_por: registradoPorUsuario(),
     familia_id: familia?.id || s.familia_id || null, familia_nombre: s.familia_nombre,
     ninera_id: sel.value, ninera_nombre: sel.dataset.nombre,
     fecha: s.fecha, hora_inicio: s.hora_inicio, hora_fin: s.hora_fin,
     termina_dia_siguiente: !!s.termina_dia_siguiente,
-    cobro_familia: Number(s.cobro_familia)||0, pago_ninera: pago,
+    cobro_familia: cobroRegistro, pago_ninera: pago,
     cobrado: false, pagado: false, notas: 'Asignado desde Agenda',
   });
   cerrarModal();
   await cargarAgendaSolicitudes();
   actualizarAgendaBadge();
-  // Si la solicitud no quedó como confirmada, sbGuardar ya avisó: no se tapa con un "listo".
   if(e2) toast('Quedó asignado, pero no se pudo cargar en Sittings & traslados: '+e2.message, 'bad');
-  else if(okSolicitud) toast('Asignado — ya quedó cargado en Sittings & traslados.');
+  else if(faltaFin) toast('Asignado. Falta la hora de fin: el cobro se calcula cuando la cargues en Sittings & traslados.');
+  else toast('Asignado — ya quedó cargado en Sittings & traslados.');
 }
 function abrirModalSolicitud(id){
   const s = agendaSolicitudes.find(x=>x.id===id);
@@ -1027,6 +1052,7 @@ async function registrarSittingFijoDeHoy(id){
   const cruza = document.getElementById('agenda-fija-cruza')?.checked || false;
   const warn = document.getElementById('agenda-fija-horario-warn');
   if(!horaIni || !horaFin){ if(warn) warn.innerHTML = '<div class="warnbox">Completá las dos horas.</div>'; return; }
+  if(cruceMedianocheMalMarcado(horaIni, horaFin, cruza)){ if(warn) warn.innerHTML = `<div class="warnbox">${escaparHtml(AVISO_CRUCE_MEDIANOCHE)}</div>`; return; }
   const mi = agendaMinutos(horaIni);
   let mf = agendaMinutos(horaFin);
   if(cruza) mf += 24*60;
@@ -1186,6 +1212,7 @@ async function confirmarReemplazoFijoHoy(id){
   const horaFin = leerHora('agenda-fija-rhf');
   const cruza = document.getElementById('agenda-fija-rcruza')?.checked || false;
   if(!horaIni || !horaFin){ if(warn) warn.innerHTML = '<div class="warnbox">Completá las dos horas.</div>'; return; }
+  if(cruceMedianocheMalMarcado(horaIni, horaFin, cruza)){ if(warn) warn.innerHTML = `<div class="warnbox">${escaparHtml(AVISO_CRUCE_MEDIANOCHE)}</div>`; return; }
   const mi = agendaMinutos(horaIni);
   let mf = agendaMinutos(horaFin);
   if(cruza) mf += 24*60;

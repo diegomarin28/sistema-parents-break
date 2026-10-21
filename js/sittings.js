@@ -560,6 +560,7 @@ function sitFormHTML(){
         </div>
       </div>
     </div>
+    <div id="sit-precio-sugerido"></div>
     <div id="sit-sin-tarifa-box"></div>
     <div id="sit-gastos-box" style="margin-top:12px;"></div>
     <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="sit-notas"></textarea></div>
@@ -682,10 +683,13 @@ async function abrirModalSitForm(id=null){
       document.getElementById('sit-fecha').value = r.fecha || '';
       document.getElementById('sit-cobro').value = r.cobro_familia || 0;
       document.getElementById('sit-pago').value = r.pago_ninera || 0;
-      // Ya tienen un precio real guardado -- que no se los pise una sugerencia nueva si se
-      // toca el horario o los km durante la edición (ver actualizarPrecioSugeridoTraslado).
-      document.getElementById('sit-cobro').dataset.tocadoManual = '1';
-      document.getElementById('sit-pago').dataset.tocadoManual = '1';
+      // Lo que no es horas × tarifa se puso a mano: no se pisa si se toca el horario (aparece el
+      // calculado para usarlo con un toque). Si coincide, cambiar la hora lo sigue recalculando.
+      // Un traslado guardado nunca se pisa con el sugerido por km (actualizarPrecioSugeridoTraslado).
+      const calc = r.tipo==='sitting' ? precioSegunHorario(sitFamiliaSel, r.hora_inicio, r.hora_fin, !!r.termina_dia_siguiente, r.fecha) : {};
+      [['sit-cobro', r.cobro_familia, calc.cobro], ['sit-pago', r.pago_ninera, calc.pago]].forEach(([campo, guardado, calculado])=>{
+        if(r.tipo!=='sitting' || (Number(guardado) && Number(guardado)!==calculado)) document.getElementById(campo).dataset.tocadoManual = '1';
+      });
       document.getElementById('sit-cancelado').checked = !!r.cancelado;
       if(r.cancelado) onSitCanceladoChange();
       document.getElementById('sit-notas').value = r.notas || '';
@@ -1350,11 +1354,47 @@ function actualizarCobroPagoPorHorario(){
     sinTarifaBox.innerHTML = '';
   }
   const horas = pintarFinCobroSit();
-  if(!horas) return; // horario todavía inválido/incompleto, no calcula nada raro
-  // Cobro con el fin redondeado si la familia aceptó los términos; pago, con la hora real.
-  if(cobroH) cobroInput.value = redondearCobro(cobroH*horas.cobro);
-  if(pagoH && !sitPagoModoHora) pagoInput.value = redondearPago(pagoH*horas.real);
+  if(!horas){ pintarSugerenciaPrecioSit({}); return; } // horario todavía inválido/incompleto, no calcula nada raro
+  // Cobro con el fin redondeado si la familia aceptó los términos; pago, con la hora real. Lo
+  // puesto a mano no se pisa (auditoría, 21/10/2026: al corregir un minuto de la hora, el precio
+  // acordado volvía a horas × tarifa sin avisar): se ofrece el calculado con "Usar estos montos".
+  const calc = precioSegunHorario(sitFamiliaSel, horaIni, horaFin, document.getElementById('sit-cruza-medianoche')?.checked || false, document.getElementById('sit-fecha')?.value);
+  if(sitPagoModoHora) calc.pago = null;
+  if(calc.cobro!=null && !cobroInput.dataset.tocadoManual) cobroInput.value = calc.cobro;
+  if(calc.pago!=null && !pagoInput.dataset.tocadoManual) pagoInput.value = calc.pago;
+  pintarSugerenciaPrecioSit(calc);
   if(sitPagoModoHora) onSitPagoHoraInput(); // si cambió el horario, recalcula el total con el valor por hora ya tipeado
+  calcSitMargen();
+}
+// Cobro y pago de un sitting según el horario y la tarifa de la familia (null si no se puede).
+function precioSegunHorario(familia, horaIni, horaFin, cruza, fechaISO){
+  const horas = horasSitting(horaIni, horaFin, cruza, familia, fechaISO);
+  const cobroH = Number(familia?.cobro_hora)||0, pagoH = Number(familia?.pago_hora)||0;
+  return {
+    cobro: horas && cobroH ? redondearCobro(cobroH*horas.cobro) : null,
+    pago: horas && pagoH ? redondearPago(pagoH*horas.real) : null,
+  };
+}
+// Si lo puesto a mano no coincide con el horario, se muestra el calculado con un botón para usarlo.
+function pintarSugerenciaPrecioSit(calc){
+  const box = document.getElementById('sit-precio-sugerido');
+  if(!box) return;
+  const plata = n => '$'+Number(n).toLocaleString('es-UY');
+  const difiere = (id, n) => { const el = document.getElementById(id); return n!=null && !!el?.dataset.tocadoManual && Number(el.value)!==n; };
+  const partes = [difiere('sit-cobro', calc.cobro) ? `cobro ${plata(calc.cobro)}` : '', difiere('sit-pago', calc.pago) ? `pago ${plata(calc.pago)}` : ''].filter(Boolean);
+  if(!partes.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="warnbox" style="margin:0 0 10px;">Con este horario y la tarifa de la familia: ${partes.join(' y ')}. Lo que pusiste a mano no se cambió.
+    <div style="margin-top:6px;"><button type="button" class="smallbtn" onclick="usarPrecioCalculadoSit(${argJs(difiere('sit-cobro', calc.cobro) ? calc.cobro : null)}, ${argJs(difiere('sit-pago', calc.pago) ? calc.pago : null)})">Usar estos montos</button></div></div>`;
+}
+function usarPrecioCalculadoSit(cobro, pago){
+  [['sit-cobro', cobro], ['sit-pago', pago]].forEach(([id, n])=>{
+    const el = document.getElementById(id);
+    if(!el || n==null) return;
+    el.value = n;
+    delete el.dataset.tocadoManual;
+  });
+  const box = document.getElementById('sit-precio-sugerido');
+  if(box) box.innerHTML = '';
   calcSitMargen();
 }
 /* Toggle "pago por hora" vs "pago total" para ESTE sitting puntual. El campo de pago total
@@ -1396,7 +1436,8 @@ function pintarFinCobroSit(){
   const horaFin = leerHora('sit-horafin');
   const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
   const horas = sitTipo==='sitting' ? horasSitting(leerHora('sit-horaini'), horaFin, cruza, sitFamiliaSel, document.getElementById('sit-fecha')?.value) : null;
-  if(box) box.textContent = textoFinCobrado(horaFin, horas);
+  const cruceMal = sitTipo==='sitting' && cruceMedianocheMalMarcado(leerHora('sit-horaini'), horaFin, cruza);
+  if(box){ box.textContent = cruceMal ? AVISO_CRUCE_MEDIANOCHE : textoFinCobrado(horaFin, horas); box.style.color = cruceMal ? 'var(--bad)' : ''; }
   return horas;
 }
 function onSitPagoHoraInput(){
@@ -1406,6 +1447,7 @@ function onSitPagoHoraInput(){
   const horaFin = leerHora('sit-horafin');
   if(!pagoInput || !horaIni || !horaFin) return;
   const cruza = document.getElementById('sit-cruza-medianoche')?.checked || false;
+  if(cruceMedianocheMalMarcado(horaIni, horaFin, cruza)) return; // serían más de 24 h: lo avisa pintarFinCobroSit
   const mi = agendaMinutos(horaIni);
   let mf = agendaMinutos(horaFin);
   if(cruza) mf += 24*60;
@@ -1486,6 +1528,7 @@ async function guardarSitting(){
       toast('La hora de fin tiene que ser después de la de inicio. Si termina pasada la medianoche, marcá "Termina al día siguiente".', 'bad');
       return;
     }
+    if(cruceMedianocheMalMarcado(horaIni, horaFin, cruza)){ toast(AVISO_CRUCE_MEDIANOCHE, 'bad'); return; }
     registro.hora_inicio = horaIni || null;
     registro.hora_fin = horaFin || null;
     registro.termina_dia_siguiente = cruza;

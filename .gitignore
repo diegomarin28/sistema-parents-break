@@ -1,4 +1,6 @@
 node_modules
+# Archivos que crea macOS en cada carpeta: no son del proyecto.
+.DS_Store
 test-results/
 playwright-report/
 
