@@ -21,6 +21,8 @@ sistema o se para?
 - Lo que sale hacia familias o niñeras (mensajes, cobros, recordatorios) pasa por una
   confirmación de ellas, salvo que decidan lo contrario para ese caso puntual.
 - Lo usan sobre todo desde el iPhone: pensá cada pantalla primero para el celular.
+- Siempre con fondo blanco, nunca modo oscuro (21/10/2026), aunque el celular o la compu estén
+  en oscuro: `color-scheme: only light` en `index.html`. Nada de colores para `prefers-color-scheme: dark`.
 
 ## Stack
 - HTML/CSS/JS vanilla, sin build ni framework. GitHub Pages publica desde `main`.
@@ -269,6 +271,7 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/filtro-punta.spec.js`: filtro de Niñeras por Punta del Este y por meses (vive en Punta sin
   temporada, temporada por quincenas, "Dijo que no va", Montevideo sin temporada aparte, la zona
   escrita en el buscador, 390 px).
+- `tests/modo-claro.spec.js`: con el aparato en modo oscuro, Hoy, Postulantes y Finanzas se ven claros.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -484,9 +487,12 @@ descartado (19/10/2026): no proponerlo de nuevo.
 - Niñeras que dicen que no (20/10/2026): va a la app de niñeras, como un contador.
 
 ### Próximas tareas (pedidas por Paulina y Delfina)
-- Rediseño del panel (21/10/2026): auditoría, decisiones y plan en `docs/rediseno-panel.md`. Orden:
-  errores de plata (abajo) → PR 0 base de componentes (espera a que Paulina y Delfina vean las
-  maquetas) → Pedido desde WhatsApp → Hoy → Plata → Registros → Agenda → Familias y Niñeras → Más.
+- Rediseño del panel: EN PAUSA (21/10/2026, Paulina y Delfina después de ver las maquetas). No se
+  hace el PR 0 ni la barra de abajo: prefieren la navegación actual. Lo que sirve del rediseño se
+  mete de a una pieza en las pantallas actuales, sin cambiar la navegación. Auditoría y plan
+  original en `docs/rediseno-panel.md`; lo que sigue abajo vale para cuando se retome.
+  Orden original: errores de plata → PR 0 base de componentes → Pedido desde WhatsApp → Hoy →
+  Plata → Registros → Agenda → Familias y Niñeras → Más.
   No se migra sin red de tests (21/10/2026, `docs/rediseno-panel.md` 4.10): ningún test se borra ni
   se debilita (si mira algo que se mueve, se adapta y el PR lo dice); la red de plata
   (`tests/red-plata.spec.js`, 21/10/2026) compara las funciones nuevas con las actuales; cada PR de pantalla trae sus

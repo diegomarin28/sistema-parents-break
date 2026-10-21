@@ -1,5 +1,12 @@
 # Rediseño del panel de administración
 
+> **EN PAUSA (21/10/2026, decisión de Paulina y Delfina después de ver las maquetas).** No se hace
+> el rediseño completo: ni el PR 0 (base de componentes) ni la barra de pestañas de abajo. Prefieren
+> la navegación actual, y la app se sigue viendo parecida a la de hoy. Lo que sirve de este documento
+> (pedido desde WhatsApp, tarjetas de Hoy, errores de plata, consultas más livianas, etc.) se mete de
+> a una pieza en las pantallas actuales, sin cambiar la navegación. Regla nueva del mismo día: la app
+> siempre con fondo blanco, nunca modo oscuro (las maquetas tienen modo oscuro: eso no se hace).
+
 Auditoría y propuesta, 21/10/2026. Sin código todavía. Las decisiones ya están tomadas (sección 6,
 21/10/2026) y el orden de trabajo está en la sección 5. No tiene datos reales (el repo es público): los nombres de los ejemplos son los
 ficticios de los tests y las cifras son conteos o porcentajes, nunca montos de una familia o niñera.
