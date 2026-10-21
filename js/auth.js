@@ -44,7 +44,7 @@ async function boot(){
 async function arrancar(){
   if(new URLSearchParams(window.location.search).get('acceso') === 'temporal'){
     esAccesoTemporal = true;
-    window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); });
+    window.addEventListener('beforeunload', ()=>{ sb.auth.signOut({ scope: 'local' }); });
     // Limpiamos el ?acceso=temporal de la URL visible, sin recargar la página.
     window.history.replaceState({}, '', window.location.pathname);
   }
@@ -64,6 +64,9 @@ async function arrancar(){
   session = data.session;
   const yaPintadaConEstaSesion = !!(sesionGuardada && session && session.user?.id === sesionGuardada.user?.id);
   sb.auth.onAuthStateChange((event, s) => {
+    // Sesión cerrada (vencida, o cerrada desde otro dispositivo): lo que se estaba escribiendo
+    // queda en su borrador antes de pasar al login, y se ofrece al volver a entrar (21/10/2026).
+    if(event === 'SIGNED_OUT'){ guardarBorradoresPendientes(); marcarSinCambios('entrevista'); }
     const mismaSesionQueAntes = !!(session && s && session.user?.id === s.user?.id);
     session = s;
     // INITIAL_SESSION llega apenas se suscribe este listener, con la MISMA sesión que ya
@@ -189,7 +192,10 @@ async function login(){
     document.getElementById('loginwarn').innerHTML = `<div class="warnbox">${error.message==='Invalid login credentials' ? 'Mail o contraseña incorrectos.' : escaparHtml(error.message)}</div>`;
     return;
   }
-  if(!recordar){ window.addEventListener('beforeunload', ()=>{ sb.auth.signOut(); }); }
+  // scope 'local' (21/10/2026): solo este dispositivo. Sin eso supabase-js cierra la sesión de
+  // esa cuenta en TODOS lados, y cerrar esta pestaña sacaba del sistema a la compu donde se
+  // estaba haciendo una entrevista (que se perdía al pasar al login).
+  if(!recordar){ window.addEventListener('beforeunload', ()=>{ sb.auth.signOut({ scope: 'local' }); }); }
   // Mientras se revisa Face ID / contraseña pendiente (va a la base), el logo con la ruedita.
   mostrarPantallaCarga('Entrando…');
   await continuarPostLogin();
@@ -301,7 +307,7 @@ async function confirmarLoginBiometria(){
 }
 function cancelarBiometria(){
   limpiarPostLoginPendiente();
-  sb.auth.signOut();
+  sb.auth.signOut({ scope: 'local' }); // solo este dispositivo (ver login)
 }
 async function registrarPasskeyDispositivo(){
   const { error } = await sb.auth.registerPasskey();
@@ -504,5 +510,7 @@ async function guardarNuevaContrasena(){
   toast('Contraseña actualizada.');
   renderRoot();
 }
-async function logout(){ limpiarPostLoginPendiente(); await sb.auth.signOut(); }
+// Cerrar sesión cierra solo este dispositivo (21/10/2026): antes cerraba la cuenta en todos lados
+// y cortaba lo que se estuviera haciendo en otra compu o en el celular.
+async function logout(){ limpiarPostLoginPendiente(); await sb.auth.signOut({ scope: 'local' }); }
 

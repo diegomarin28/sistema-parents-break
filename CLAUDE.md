@@ -226,6 +226,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   "Datos que faltan"; fotos más livianas al subirlas.
 - `tests/entrevista.spec.js`: bloques del formulario en la entrevista y datos corregidos en la
   ficha de la niñera.
+- `tests/entrevista-sin-perdidas.spec.js`: lo escrito en la entrevista vuelve después de recargar,
+  cerrar y abrir la pestaña, quedarse sin internet, sesión cerrada, "Actualizar", cambiar de pestaña
+  o de sección y Realtime; el borrador (seguir, descartar, no pisarlo, se borra al guardar) y
+  "Vaciar"; fichas y registro de sitting que preguntan antes de cerrar y se recuperan al recargar.
 - `tests/entrevista-en-curso.spec.js`: guardar la entrevista a medias, retomarla desde
   Candidatas guardadas o desde la candidata, completarla en la misma fila, base sin migrar.
 - `tests/conciliacion.spec.js`: conciliación con el extracto (tildadas, dudosas, confirmar) y
@@ -352,6 +356,12 @@ reporte.
   anterior (`abrirModalTerminarFijo`, agenda.js).
 - No repintar la app entera ante eventos de auth ni al volver de segundo plano: ya causó
   pérdida de entrevistas (ver comentarios en auth.js y bootstrap.js).
+- Que no se pierda lo escrito (21/10/2026): la entrevista y los modales largos guardan un borrador
+  en el dispositivo en cada cambio (core.js, `leerBorrador` / `programarBorrador`) y, al volver a
+  abrirlos, preguntan antes de ponerlo. Un modal largo nuevo llama a `protegerModal(clave)` después
+  de abrirse y precargarse; así también pregunta antes de cerrarse con cambios (fondo, ×,
+  "Cancelar"). Toda recarga que dispare la app pregunta si `hayCambiosSinGuardar()`. `signOut`
+  siempre con `{ scope: 'local' }`: sin eso cierra la cuenta en todos los dispositivos.
 - Realtime tampoco repinta lo que se está escribiendo: RR.HH. en Entrevista y Finanzas usan
   recarga liviana (`RT_RECARGA_LIVIANA`, agenda.js); con un modal abierto el cambio se aplica al
   cerrarlo.
@@ -531,7 +541,6 @@ descartado (19/10/2026): no proponerlo de nuevo.
 - Borrar una familia borra sus fijos en cascada (FK `ON DELETE CASCADE`): conviene baja lógica.
   "Descartar" una candidata es un DELETE físico: decidido (21/10/2026) que pase al estado
   `descartada`; va en el PR de Postulantes del rediseño.
-- "Vaciar formulario" de la Entrevista no pide confirmación.
 - `asignaciones.cobro_hora/pago_hora` se guardan pero solo `sospechasDelMes` las usa: decidir una
   sola fuente del precio del fijo.
 - Sittings no está en `RT_RECARGA_LIVIANA` (agenda.js): el propio guardado reconstruye el módulo y
@@ -581,9 +590,9 @@ descartado (19/10/2026): no proponerlo de nuevo.
   reescribir el texto del mail.
 - Web pública: sumar reseñas de padres e historias de influencers y sacar "Somos Paulina y
   Delfina". Confirmar con Diego dónde vive la web antes de tocar nada.
-- Autoguardado de borrador en la Entrevista (red de seguridad si se cierra la pestaña o se
-  queda sin batería): decidido que sí (21/10/2026, ya se borró una entrevista dos veces); va en el
-  PR de Postulantes del rediseño (`docs/rediseno-panel.md` 4.9).
+- Borrador de la entrevista en la base (21/10/2026): el del dispositivo ya está; falta el de la
+  base (cada pocos segundos y al salir de cada campo, una fila por candidata y por usuaria, para
+  seguir desde otro dispositivo). Migración propuesta aparte, espera el OK de Diego.
 - Modo offline (hoy no hay): pendiente aparte, sin fecha.
 
 ### Cierre

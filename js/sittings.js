@@ -734,6 +734,9 @@ async function abrirModalSitForm(id=null){
       sitPrefill = null;
     }
     calcSitMargen();
+    // Después de precargar (lo precargado no cuenta como cambio): borrador y aviso antes de
+    // cerrar con cambios (21/10/2026).
+    protegerModal('sitting:'+(id || 'nuevo'));
   }, 20);
 }
 function setSitTipo(t){
