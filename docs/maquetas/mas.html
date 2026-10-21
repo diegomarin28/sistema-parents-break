@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maqueta Más</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="maquetas.css">
+<style>
+
+  .fila .avatar-ic{border-radius:var(--r-md);background:var(--accent-soft);color:var(--accent-deep);}
+  .fila .avatar-ic svg{width:20px;height:20px;}
+  .fila .flecha{font-size:20px;color:var(--ink-soft);line-height:1;}
+  .fila .derecha{flex-direction:row;align-items:center;gap:10px;}
+  a.fila{color:inherit;font-weight:inherit;}
+  a.fila .nombre{font-weight:600;}
+  .fila-salir .avatar-ic{background:var(--bad-soft);color:var(--bad);}
+  .fila-salir .nombre{color:var(--bad);}
+  .mas-grilla{display:flex;flex-direction:column;gap:var(--sp-4);}
+  @media (min-width:1024px){ .mas-grilla{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;} .mas-grilla > div{display:flex;flex-direction:column;gap:var(--sp-4);} }
+  @media (max-width:1023px){ .mas-grilla > div{display:contents;} }
+</style>
+</head>
+<body>
+<div class="telefono">
+  <header class="topbar">
+    <span class="logo">Parents’ Break</span>
+    <a class="ver-celu solo-compu" href="celular.html#mas.html">Ver cómo queda en el celular</a>
+    <span class="quien">Prueba</span>
+    <button class="campana" aria-label="Avisos: 2 sin leer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="n">2</span>
+    </button>
+  </header>
+
+  <main class="contenido">
+    <div class="cabecera">
+      <div>
+        <h1>Más</h1>
+        <p class="fecha">Personas, ajustes y lo que se usa poco</p>
+      </div>
+    </div>
+
+    <div class="mas-grilla">
+    <div>
+    <div class="seccion-titulo"><h2>Personas</h2></div>
+    <div class="lista">
+      <a class="fila fila-toca" href="#">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg></div>
+        <div class="principal"><span class="nombre">Familias</span><span class="meta">94 activas</span></div>
+        <div class="derecha"> <span class="chip chip-aviso">30 sin tarifa</span><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+      <a class="fila fila-toca" href="ninieras.html">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg></div>
+        <div class="principal"><span class="nombre">Niñeras</span><span class="meta">92 activas, 20 trabajaron en los últimos 3 meses</span></div>
+        <div class="derecha"> <span class="chip chip-aviso">69 sin cuenta</span><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+      <a class="fila fila-toca" href="postulantes.html">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9z"/><path d="M9 12h6M9 16h4"/></svg></div>
+        <div class="principal"><span class="nombre">Postulantes y entrevistas</span><span class="meta">37 por revisar, 3 entrevistadas</span></div>
+        <div class="derecha"> <span class="chip chip-marca">37</span><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+    </div>
+
+    <div class="seccion-titulo"><h2>Operación</h2></div>
+    <div class="lista">
+      <a class="fila fila-toca" href="#">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg></div>
+        <div class="principal"><span class="nombre">Intermediaciones</span><span class="meta">Animación, limpieza y eventos</span></div>
+        <div class="derecha"><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+      <a class="fila fila-toca" href="#">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg></div>
+        <div class="principal"><span class="nombre">Notificaciones</span><span class="meta">Qué avisa la campanita y a quién</span></div>
+        <div class="derecha"><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+    </div>
+    </div>
+
+    <div>
+    <div class="seccion-titulo"><h2>Se usa poco</h2></div>
+    <div class="lista">
+      <a class="fila fila-toca" href="#">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10v4h3l6 4V6L7 10H4Z"/><path d="M16.5 9a4 4 0 0 1 0 6"/></svg></div>
+        <div class="principal"><span class="nombre">Marketing</span><span class="meta">9 publicaciones</span></div>
+        <div class="derecha"><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+      <a class="fila fila-toca" href="#">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 13h5M10 17h3"/></svg></div>
+        <div class="principal"><span class="nombre">Contratos</span><span class="meta">Ninguno todavía</span></div>
+        <div class="derecha"><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+      <a class="fila fila-toca" href="#">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="9" width="16" height="11" rx="2"/><path d="M12 9v11M4 13h16"/><path d="M12 9c-2-4-6-3-5 0M12 9c2-4 6-3 5 0"/></svg></div>
+        <div class="principal"><span class="nombre">Juguetes</span><span class="meta">Ninguno todavía</span></div>
+        <div class="derecha"><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+    </div>
+
+    <div class="seccion-titulo"><h2>Ajustes</h2></div>
+    <div class="lista">
+      <a class="fila fila-toca" href="#">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></div>
+        <div class="principal"><span class="nombre">Zonas y tarifa de traslado</span><span class="meta">12 zonas, $40 por km</span></div>
+        <div class="derecha"><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+      <a class="fila fila-toca" href="#">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></div>
+        <div class="principal"><span class="nombre">Entrar con Face ID</span><span class="meta">Activado en este celular</span></div>
+        <div class="derecha"> <span class="chip chip-ok">Activo</span><span class="flecha" aria-hidden="true">›</span></div>
+      </a>
+      <a class="fila fila-toca fila-salir" href="#">
+        <div class="avatar avatar-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 4h5v16h-5"/><path d="M10 8l-4 4 4 4M6 12h9"/></svg></div>
+        <div class="principal"><span class="nombre">Cerrar sesión</span><span class="meta">Versión 2026.10.21</span></div>
+        <div class="derecha"></div>
+      </a>
+    </div>
+    </div>
+    </div>
+    <p class="nota-maqueta">Maqueta con datos ficticios · 21/10/2026</p>
+  </main>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <button class="tab-nuevo" aria-label="Nuevo: registro, pedido o fijo">+ Nuevo</button>
+    <a class="tab" href="hoy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>Hoy<span class="punto"></span></a>
+    <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16"/><path d="M8 3v4M16 3v4"/></svg>Agenda</a>
+    <a class="tab" href="sittings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Registros</a>
+    <a class="tab" href="finanzas.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>Plata<span class="punto"></span></a>
+    <a class="tab" href="mas.html" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>Más</a>
+  </nav>
+</div>
+</body>
+</html>

@@ -390,7 +390,9 @@ Finanzas, el PDF y la Agenda lo traten como cobrable: hoy un registro cancelado 
 
 ### 4.8 Maquetas
 
-En `local/maquetas/` del worktree principal (ignorada por git, datos ficticios):
+En `docs/maquetas/` (datos ficticios; hasta el 21/10/2026 estaban en `local/`, fuera del repo). Como
+GitHub Pages publica el repo, también se ven en el celular en
+`https://diegomarin28.github.io/sistema-parents-break/docs/maquetas/hoy.html` (y las demás):
 
 | Archivo | Pantalla |
 |---|---|
@@ -409,7 +411,7 @@ derecha, "Ver cómo queda en el celular" abre la misma pantalla en `celular.html
 debajo de un separador ("Al tocar una niñera: su ficha") es una anotación de la maqueta: muestra la
 hoja que en la app sube al tocar.
 
-**Fidelidad (regla de Diego, 21/10/2026).** La app nueva replica las maquetas lo más fiel posible,
+**Fidelidad (regla de Diego, 21/10/2026).** La app nueva replica las maquetas de `docs/maquetas/` lo más fiel posible,
 en celular y en compu: mismos textos, orden, componentes, espaciado y comportamiento. Si algo de una
 maqueta no se puede hacer o choca con un test, no se cambia por cuenta propia: se le avisa a Diego
 antes. Cada PR de pantalla trae capturas a 390 px y a 1280 px al lado de la maqueta.
@@ -429,21 +431,17 @@ Decidido el 21/10/2026. Las maquetas muestran las dos versiones.
 | Postulantes | "‹ Más", título con el total y las que ya trabajan. Segmentos Por revisar (37) · Entrevistas (3) · Guardadas. Lista agrupada: Entrevista agendada (botón "Empezar"), Postularon esta semana y Esperando hace más de 15 días (botón "Agendar"). La entrevista sube como hoja: "Abrir el Meet" y "Se guarda sola mientras escribís", progreso "4 de 7 bloques completos", bloques plegables con su chip de estado (Datos personales, Experiencia con chicos, Disponibilidad y zonas, Referencias, Primeros auxilios y situaciones, Puntajes, Notas opcional), puntajes de 1 a 5 con los que faltan en ámbar, el aviso "Para guardarla faltan…", "Descartar candidata" (queda en Guardadas como descartada, no se borra) y el pie Guardar y seguir después / Contratar | lista con panel: la lista a la izquierda y la entrevista al costado |
 | Agenda y Familias | todavía sin maqueta: se dibujan antes de su PR, con estas mismas reglas (listas con `uiFila`; formulario al lado de una lista, panel al costado en la compu) | |
 
-Lo que muestran las maquetas de Más, Niñeras y Postulantes y hoy la app no tiene o no sabe (para
-resolver con Diego antes del PR de cada pantalla, según la regla de fidelidad):
+Lo que muestran las maquetas de Más, Niñeras y Postulantes y la app hoy no tiene. Decidido por Diego
+el 21/10/2026; cada punto entra en el PR de su pantalla:
 
-- **"Abrir el Meet"**: la app no crea ni guarda links de Meet. Es parte del proyecto grande
-  (entrevistas con Meet), todavía sin construir.
-- **"Se guarda sola mientras escribís"**: es el autoguardado de la Entrevista, que en CLAUDE.md
-  figura como ofrecido y sin respuesta. La maqueta lo da por decidido.
-- **"Descartar candidata" sin borrar**: hoy "Descartar" borra la fila (está en Pendientes). La
-  maqueta pide el estado `descartada`, que ya existe en la base.
-- **"94 activas" en Familias**: las familias no tienen un campo de activa. Hay que definir qué es
-  una familia activa (por ejemplo, con algún sitting en los últimos 3 meses).
-- **Cédula de la niñera**: hoy solo existe en `carsitting_datos` (vacía). Falta decidir dónde se
-  guarda para las demás.
-- **Intermediaciones "Animación, limpieza y eventos"**: hoy son colocaciones de la Agencia Enrique
-  y eventos empresariales. El texto de la maqueta no coincide con lo que hay.
+| Qué pide la maqueta | Decisión |
+|---|---|
+| "Abrir el Meet" en la entrevista | Un campo con el link del Meet en la candidata, que se pega al agendar. El botón abre ese link. Lleva una columna nueva en `candidatas` (migración en el PR de Postulantes) |
+| "Se guarda sola mientras escribís" | Sí: borrador guardado mientras escriben, para que no se pierda nada al cambiar de pestaña o cerrar (ya se borró una entrevista dos veces). Usa la entrevista a medias que ya existe (`entrevistas.estado = 'en_curso'`) |
+| "Descartar candidata" | Usa el estado `descartada` que ya existe. Nunca un DELETE |
+| "94 activas" en Familias | Familia activa = con algún sitting o traslado en los últimos 90 días, el mismo criterio que las niñeras |
+| Cédula de la niñera | Columna nueva `ninieras.cedula`, propuesta en una migración aparte que espera el OK de Diego. La de `carsitting_datos` no sirve como lugar principal: es solo para quienes hacen traslados, va una fila por formulario y está vacía. En la entrevista se carga en la ficha de la candidata (`notas_ficha`, como los demás datos corregidos) y pasa a la niñera al contratarla |
+| Subtítulo de Intermediaciones ("Animación, limpieza y eventos") | Queda como en la maqueta. Diego lo confirma con Paulina y Delfina |
 
 ### 4.10 Red de tests antes de migrar
 

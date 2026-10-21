@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maqueta Registros</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="maquetas.css">
+<style>
+  /* La hoja del formulario se muestra abajo de la lista para verla entera en la maqueta;
+     en la app sube desde abajo y tapa la lista. */
+  .segmento-tipo{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--line-soft);padding:4px;border-radius:var(--r-md);}
+  .segmento-tipo button{min-height:40px;border:none;border-radius:var(--r-sm);background:none;color:var(--ink-soft);font-weight:700;font-size:14px;}
+  .segmento-tipo button[aria-pressed="true"]{background:var(--paper);color:var(--ink);box-shadow:var(--shadow-sm);}
+  .reloj{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .precio-manual{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<div class="telefono">
+  <header class="topbar">
+    <span class="logo">Parents’ Break</span>
+    <a class="ver-celu solo-compu" href="celular.html#sittings.html">Ver cómo queda en el celular</a>
+    <span class="quien">Prueba</span>
+    <button class="campana" aria-label="Avisos: 2 sin leer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="n">2</span>
+    </button>
+  </header>
+
+  <main class="contenido">
+    <div class="cabecera">
+      <div>
+        <h1>Registros</h1>
+        <p class="fecha">Octubre · 24 registros · facturado <span class="num">$31.400</span> · margen 39%</p>
+      </div>
+      <div class="mesnav"><button aria-label="Mes anterior">‹</button><span class="label">Octubre 2026</span><button aria-label="Mes siguiente">›</button></div>
+    </div>
+
+    <div class="lista-panel">
+    <div class="lista-panel-lista">
+    <div class="filtros" role="group" aria-label="Filtros">
+      <button class="filtro" aria-pressed="true">Todos</button>
+      <button class="filtro" aria-pressed="false">Sin cobrar · 9</button>
+      <button class="filtro" aria-pressed="false">Sin pagar · 4</button>
+      <button class="filtro" aria-pressed="false">Fijos</button>
+      <button class="filtro" aria-pressed="false">Traslados</button>
+      <button class="filtro" aria-pressed="false">Con gastos</button>
+    </div>
+
+    <div class="lista">
+      <div class="grupo">Hoy · miércoles 21</div>
+      <div class="fila fila-toca">
+        <div class="hora"><b>16:00</b>19:00</div>
+        <div class="principal"><span class="nombre">Familia Prueba Uno</span><span class="meta">Ana Ficticia · 3 h <span class="chip chip-sin">fijo</span></span></div>
+        <div class="derecha"><span class="monto">$1.140</span><span class="monto monto-soft">pago $750</span></div>
+      </div>
+      <div class="grupo">Martes 20</div>
+      <div class="fila fila-toca">
+        <div class="hora"><b>08:00</b>trasl.</div>
+        <div class="principal"><span class="nombre">Familia Prueba Cuatro</span><span class="meta">Bruno Inventado · 12 km</span></div>
+        <div class="derecha"><span class="monto">$450</span><span class="chip chip-ok">Cobrado</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="hora"><b>18:00</b>21:30</div>
+        <div class="principal"><span class="nombre">Familia Prueba Tres</span><span class="meta">Carla Ejemplo · 3,5 h <span class="chip chip-aviso">precio a mano</span></span></div>
+        <div class="derecha"><span class="monto">$1.400</span><span class="monto monto-soft">+ $380 gastos</span><span class="chip chip-mal">Sin cobrar</span></div>
+      </div>
+      <div class="grupo">Sábado 17</div>
+      <div class="fila fila-toca">
+        <div class="hora"><b>19:00</b>23:00</div>
+        <div class="principal"><span class="nombre">Familia Prueba Dos</span><span class="meta">Carla Ejemplo · 4 h</span></div>
+        <div class="derecha"><span class="monto">$1.600</span><span class="chip chip-ok">Cobrado</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="hora"><b>20:00</b>00:30</div>
+        <div class="principal"><span class="nombre">Familia Prueba Tres</span><span class="meta">Dana Inventada · 4,5 h · cruza medianoche</span></div>
+        <div class="derecha"><span class="monto">$1.800</span><span class="chip chip-mal">Sin cobrar</span></div>
+      </div>
+    </div>
+    <button class="btn btn-ancho">Mostrar 19 más</button>
+
+    </div>
+    <div class="lista-panel-lado">
+    <div class="separador solo-celu">Al tocar “+”: el registro nuevo</div>
+    <div class="separador solo-compu">El registro nuevo se abre al costado de la lista</div>
+
+    <!-- Hoja: nuevo registro. Sin "Registró", precio calculado y visible, horas con el reloj del iPhone. -->
+    <section class="hoja" aria-label="Nuevo registro">
+      <div class="asa"></div>
+      <div class="hoja-cab"><h2>Nuevo registro</h2><button class="cerrar" aria-label="Cerrar">✕</button></div>
+      <div class="hoja-cuerpo">
+        <div class="segmento-tipo" role="group" aria-label="Tipo">
+          <button aria-pressed="true">Sitting</button><button aria-pressed="false">Traslado</button>
+        </div>
+
+        <div class="campo">
+          <label for="m-familia">Familia</label>
+          <input id="m-familia" type="text" value="Familia Prueba Dos" autocomplete="off">
+          <div class="chips-elegir" aria-label="Recientes">
+            <button class="chip-elegir" aria-pressed="true">Familia Prueba Dos</button>
+            <button class="chip-elegir">Familia Prueba Uno</button>
+            <button class="chip-elegir">Familia Prueba Tres</button>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="m-ninera">Niñera</label>
+          <input id="m-ninera" type="text" value="Carla Ejemplo" autocomplete="off">
+          <div class="chips-elegir" aria-label="Las que ya fueron a esta familia">
+            <button class="chip-elegir" aria-pressed="true">Carla <span class="sub">3 veces</span></button>
+            <button class="chip-elegir">Ana <span class="sub">1 vez</span></button>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label>Fecha</label>
+          <div class="chips-elegir">
+            <button class="chip-elegir" aria-pressed="true">Hoy, mié 21</button>
+            <button class="chip-elegir">Ayer, mar 20</button>
+            <button class="chip-elegir">Otra fecha…</button>
+          </div>
+        </div>
+
+        <div class="reloj">
+          <div class="campo"><label for="m-ini">Empezó</label><input id="m-ini" type="time" value="19:00"></div>
+          <div class="campo"><label for="m-fin">Terminó</label><input id="m-fin" type="time" value="23:36"></div>
+        </div>
+        <div class="chips-elegir" aria-label="Atajos de duración">
+          <button class="chip-elegir">+30 min</button><button class="chip-elegir">+1 h</button><button class="chip-elegir">Termina al día siguiente</button>
+        </div>
+
+        <!-- El precio no se tipea: se ve cómo se calcula. "Ajustar" pide un motivo. -->
+        <div class="desglose" aria-label="Precio calculado">
+          <div class="linea"><span>Cobro a la familia · 4,5 h × $400 <span class="nota">(fin 23:36 se cobra hasta 00:00, términos aceptados)</span></span><span class="num">$1.800</span></div>
+          <div class="linea"><span>Pago a Carla · 4 h 36 min × $260 <span class="nota">(hora real)</span></span><span class="num">$1.196</span></div>
+          <div class="linea"><span>Gastos extra · taxi de vuelta (pagó Carla, con ticket)</span><span class="num">+ $380</span></div>
+          <div class="linea total"><span>Margen de Parents’ Break</span><span class="num">$604 · 34%</span></div>
+          <div class="precio-manual">
+            <button class="btn btn-chico">Ajustar precio</button>
+            <span>Si lo cambiás a mano, queda marcado y con motivo (descuento, extra, otro).</span>
+          </div>
+        </div>
+
+        <div class="chips-elegir">
+          <button class="chip-elegir">+ Gasto con ticket</button>
+          <button class="chip-elegir">+ Nota</button>
+          <button class="chip-elegir">Se repite todas las semanas</button>
+        </div>
+
+        <div class="aviso aviso-info"><span>La misma niñera ya tiene un sitting ese día 16:00–19:00 con Familia Prueba Uno. No se superpone.</span></div>
+      </div>
+      <div class="hoja-pie">
+        <button class="btn" style="flex:1;">Cancelar</button>
+        <button class="btn btn-primario" style="flex:2;">Guardar · $1.800</button>
+      </div>
+    </section>
+    </div>
+    </div>
+    <p class="nota-maqueta">Maqueta con datos ficticios · 21/10/2026</p>
+  </main>
+
+  <button class="fab" aria-label="Nuevo registro">+</button>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <button class="tab-nuevo" aria-label="Nuevo: registro, pedido o fijo">+ Nuevo</button>
+    <a class="tab" href="hoy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>Hoy<span class="punto"></span></a>
+    <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16"/><path d="M8 3v4M16 3v4"/></svg>Agenda</a>
+    <a class="tab" href="sittings.html" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Registros</a>
+    <a class="tab" href="finanzas.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>Plata<span class="punto"></span></a>
+    <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>Más</a>
+  </nav>
+</div>
+</body>
+</html>
