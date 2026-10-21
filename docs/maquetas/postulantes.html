@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maqueta Postulantes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="maquetas.css">
+<style>
+
+  details.bloque{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-md);}
+  details.bloque summary{list-style:none;display:flex;align-items:center;gap:10px;min-height:52px;padding:0 var(--sp-4);cursor:pointer;font-weight:600;}
+  details.bloque summary::-webkit-details-marker{display:none;}
+  details.bloque summary .chip{margin-left:auto;}
+  details.bloque summary::after{content:'›';font-size:20px;color:var(--ink-soft);transition:transform 160ms;}
+  details.bloque[open] summary::after{transform:rotate(90deg);}
+  details.bloque .dentro{padding:0 var(--sp-4) var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-3);}
+  .progreso{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-soft);}
+  .progreso .riel{height:8px;border-radius:4px;background:var(--line-soft);overflow:hidden;}
+  .progreso .riel span{display:block;height:100%;width:57%;background:var(--accent);border-radius:4px;}
+  .puntaje{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;font-size:14px;}
+  .puntaje .esc{display:grid;grid-template-columns:repeat(5,34px);gap:4px;}
+  .puntaje .esc button{height:36px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--paper);color:var(--ink);font-family:var(--f-mono);font-weight:600;font-size:13px;cursor:pointer;}
+  .puntaje .esc button[aria-pressed="true"]{background:var(--accent-deep);border-color:var(--accent-deep);color:#fff;}
+  .puntaje-falta > span{color:var(--warn);font-weight:600;}
+  /* En el celular el nombre de la competencia va arriba y la escala de 1 a 5 abajo, a lo ancho:
+     al lado no entraba ("Responsabilidad" quedaba pegada a los botones a 390 px). */
+  @media (max-width:480px){
+    .puntaje{grid-template-columns:1fr;gap:6px;}
+    .puntaje .esc{grid-template-columns:repeat(5,1fr);gap:6px;}
+    .puntaje .esc button{height:40px;}
+  }
+  .meet{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .zona-peligro{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding-top:4px;font-size:12.5px;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<div class="telefono">
+  <header class="topbar">
+    <span class="logo">Parents’ Break</span>
+    <a class="ver-celu solo-compu" href="celular.html#postulantes.html">Ver cómo queda en el celular</a>
+    <span class="quien">Prueba</span>
+    <button class="campana" aria-label="Avisos: 2 sin leer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="n">2</span>
+    </button>
+  </header>
+
+  <main class="contenido">
+    <div class="cabecera">
+      <div>
+        <a class="volver" href="mas.html">‹ Más</a>
+        <h1>Postulantes</h1>
+        <p class="fecha">137 en total · 97 ya trabajan con nosotras</p>
+      </div>
+    </div>
+
+    <div class="segmentos" role="tablist">
+      <button role="tab" aria-selected="true">Por revisar<span class="cuenta">37</span></button>
+      <button role="tab" aria-selected="false">Entrevistas<span class="cuenta">3</span></button>
+      <button role="tab" aria-selected="false">Guardadas</button>
+    </div>
+
+    <div class="lista-panel">
+    <div class="lista-panel-lista">
+    <div class="lista">
+      <div class="grupo">Entrevista agendada</div>
+      <div class="fila fila-toca">
+        <div class="avatar">SR</div>
+        <div class="principal"><span class="nombre">Sofía Recreada</span><span class="meta">Hoy 18:30 · Meet · Pocitos · estudia Magisterio</span></div>
+        <div class="derecha"><button class="btn btn-chico btn-primario">Empezar</button></div>
+      </div>
+      <div class="grupo">Postularon esta semana</div>
+      <div class="fila fila-toca">
+        <div class="avatar">VP</div>
+        <div class="principal"><span class="nombre">Valentina Probeta</span><span class="meta">Hace 2 días · Malvín · 21 años · cuidó a sus primos</span></div>
+        <div class="derecha"><button class="btn btn-chico">Agendar</button></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="avatar">JE</div>
+        <div class="principal"><span class="nombre">Julieta Ensayo</span><span class="meta">Hace 3 días · Cordón · 19 años · niñera en un colegio</span></div>
+        <div class="derecha"><button class="btn btn-chico">Agendar</button></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="avatar">MM</div>
+        <div class="principal"><span class="nombre">Martina Maqueta</span><span class="meta">Hace 5 días · Carrasco · 23 años · tiene auto</span></div>
+        <div class="derecha"><button class="btn btn-chico">Agendar</button></div>
+      </div>
+      <div class="grupo">Esperando hace más de 15 días</div>
+      <div class="fila fila-toca">
+        <div class="avatar">CF</div>
+        <div class="principal"><span class="nombre">Camila Ficción</span><span class="meta">Hace 18 días · Ciudad Vieja · 20 años</span></div>
+        <div class="derecha"><button class="btn btn-chico">Agendar</button></div>
+      </div>
+    </div>
+    <button class="btn btn-ancho">Mostrar 32 más</button>
+    </div>
+
+    <div class="lista-panel-lado">
+    <div class="separador solo-celu">Al tocar “Empezar”: la entrevista</div>
+    <div class="separador solo-compu">Al tocar “Empezar”, la entrevista se abre al costado</div>
+    <section class="hoja" aria-label="Entrevista de Sofía Recreada">
+      <div class="asa"></div>
+      <div class="hoja-cab"><h2>Entrevista · Sofía Recreada</h2><button class="cerrar" aria-label="Cerrar">✕</button></div>
+      <div class="hoja-cuerpo">
+        <div class="meet"><button class="btn btn-suave btn-chico">Abrir el Meet</button><span class="texto-suave">Se guarda sola mientras escribís</span></div>
+        <div class="progreso"><span>4 de 7 bloques completos</span><div class="riel"><span></span></div></div>
+
+        <details class="bloque"><summary>Datos personales <span class="chip chip-ok">Completo</span></summary>
+          <div class="dentro"><div class="dos"><div class="campo"><label>Fecha de nacimiento</label><input type="date" value="2004-05-12"></div><div class="campo"><label>Cédula</label><input value="1.234.567-8"></div></div></div>
+        </details>
+        <details class="bloque"><summary>Experiencia con chicos <span class="chip chip-ok">Completo</span></summary><div class="dentro"></div></details>
+        <details class="bloque"><summary>Disponibilidad y zonas <span class="chip chip-ok">Completo</span></summary><div class="dentro"></div></details>
+        <details class="bloque"><summary>Referencias <span class="chip chip-ok">Completo</span></summary><div class="dentro"></div></details>
+        <details class="bloque"><summary>Primeros auxilios y situaciones <span class="chip chip-aviso">Faltan 2</span></summary><div class="dentro"></div></details>
+
+        <details class="bloque" open><summary>Puntajes <span class="chip chip-aviso">5 de 7</span></summary>
+          <div class="dentro">
+            <div class="puntaje"><span>Puntualidad</span><div class="esc"><button>1</button><button>2</button><button>3</button><button aria-pressed="true">4</button><button>5</button></div></div>
+            <div class="puntaje"><span>Trato con los chicos</span><div class="esc"><button>1</button><button>2</button><button>3</button><button>4</button><button aria-pressed="true">5</button></div></div>
+            <div class="puntaje"><span>Comunicación</span><div class="esc"><button>1</button><button>2</button><button>3</button><button aria-pressed="true">4</button><button>5</button></div></div>
+            <div class="puntaje"><span>Responsabilidad</span><div class="esc"><button>1</button><button>2</button><button>3</button><button>4</button><button aria-pressed="true">5</button></div></div>
+            <div class="puntaje"><span>Presencia</span><div class="esc"><button>1</button><button>2</button><button>3</button><button aria-pressed="true">4</button><button>5</button></div></div>
+            <div class="puntaje puntaje-falta"><span>Manejo de bebés</span><div class="esc"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div></div>
+            <div class="puntaje puntaje-falta"><span>Iniciativa</span><div class="esc"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div></div>
+          </div>
+        </details>
+        <details class="bloque"><summary>Notas de la entrevista <span class="chip chip-sin">Opcional</span></summary><div class="dentro"><div class="campo"><textarea>Muy clara. Cuidó mellizos de 2 años en Pocitos.</textarea></div></div></details>
+
+        <div class="aviso aviso-atencion"><span>Para guardarla faltan <b>Manejo de bebés</b> e <b>Iniciativa</b> en Puntajes.</span></div>
+        <div class="zona-peligro"><span>¿No sigue? Queda en Guardadas como descartada.</span><button class="btn btn-chico btn-peligro">Descartar candidata</button></div>
+      </div>
+      <div class="hoja-pie">
+        <button class="btn" style="flex:1;">Guardar y seguir después</button>
+        <button class="btn btn-primario" style="flex:1;">Contratar</button>
+      </div>
+    </section>
+    </div>
+    </div>
+    <p class="nota-maqueta">Maqueta con datos ficticios · 21/10/2026</p>
+  </main>
+
+  <button class="fab" aria-label="Postulante nueva">+</button>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <button class="tab-nuevo" aria-label="Nuevo: registro, pedido o fijo">+ Nuevo</button>
+    <a class="tab" href="hoy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>Hoy<span class="punto"></span></a>
+    <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16"/><path d="M8 3v4M16 3v4"/></svg>Agenda</a>
+    <a class="tab" href="sittings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Registros</a>
+    <a class="tab" href="finanzas.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>Plata<span class="punto"></span></a>
+    <a class="tab" href="mas.html" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>Más</a>
+  </nav>
+</div>
+</body>
+</html>

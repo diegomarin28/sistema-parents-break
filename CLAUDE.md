@@ -452,8 +452,8 @@ descartado (19/10/2026): no proponerlo de nuevo.
   (`tests/red-plata.spec.js`, 21/10/2026) compara las funciones nuevas con las actuales; cada PR de pantalla trae sus
   tests (cada acción, vacío / cargando / error, 390 y 1280 px); la versión nueva va detrás de
   `?nuevo=1` hasta que Paulina y Delfina la aprueben, y la vieja se apaga en un PR aparte.
-  Fidelidad a las maquetas (21/10/2026): la app nueva replica las maquetas de `local/maquetas/`
-  (worktree principal, no se commitean) lo más fiel posible, en celular y en compu: mismos textos,
+  Fidelidad a las maquetas (21/10/2026): la app nueva replica las maquetas de `docs/maquetas/`
+  lo más fiel posible, en celular y en compu: mismos textos,
   orden, componentes, espaciado y comportamiento. Si algo no se puede hacer o choca con un test, no
   se cambia por cuenta propia: se le avisa a Diego antes. Cada PR de pantalla trae capturas a 390 y
   a 1280 px al lado de la maqueta. Lo que las maquetas piden y la app no tiene está en
@@ -507,8 +507,9 @@ descartado (19/10/2026): no proponerlo de nuevo.
 - Editar un registro de una niñera inactiva deja `ninera_id` nulo (`cargarSitBase` trae solo activas).
 - Crear un fijo desde la ficha de la familia guarda `ninera_id` nulo (`ninierasItems` sin id):
   revisar en producción cuántas asignaciones quedaron así.
-- Borrar una familia borra sus fijos en cascada (FK `ON DELETE CASCADE`) y "Descartar" una
-  candidata es un DELETE físico: conviene baja lógica.
+- Borrar una familia borra sus fijos en cascada (FK `ON DELETE CASCADE`): conviene baja lógica.
+  "Descartar" una candidata es un DELETE físico: decidido (21/10/2026) que pase al estado
+  `descartada`; va en el PR de Postulantes del rediseño.
 - "Vaciar formulario" de la Entrevista no pide confirmación.
 - `asignaciones.cobro_hora/pago_hora` se guardan pero solo `sospechasDelMes` las usa: decidir una
   sola fuente del precio del fijo.
@@ -560,7 +561,8 @@ descartado (19/10/2026): no proponerlo de nuevo.
 - Web pública: sumar reseñas de padres e historias de influencers y sacar "Somos Paulina y
   Delfina". Confirmar con Diego dónde vive la web antes de tocar nada.
 - Autoguardado de borrador en la Entrevista (red de seguridad si se cierra la pestaña o se
-  queda sin batería): ofrecido, sin respuesta.
+  queda sin batería): decidido que sí (21/10/2026, ya se borró una entrevista dos veces); va en el
+  PR de Postulantes del rediseño (`docs/rediseno-panel.md` 4.9).
 - Modo offline (hoy no hay): pendiente aparte, sin fecha.
 
 ### Cierre

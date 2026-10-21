@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maqueta Plata</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="maquetas.css">
+<style>
+  .panel[hidden]{display:none;}
+  .barras{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;align-items:end;height:120px;padding:0 4px;}
+  .barra{display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;}
+  .barra .cols{display:flex;gap:3px;align-items:flex-end;width:100%;height:100%;}
+  .barra .col{flex:1;border-radius:4px 4px 0 0;background:var(--accent);}
+  .barra .col-costo{background:var(--clay);}
+  .barra .mes{font-size:11px;color:var(--ink-soft);}
+  .leyenda{display:flex;gap:14px;font-size:12px;color:var(--ink-soft);}
+  .leyenda span::before{content:'';display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--accent);margin-right:5px;vertical-align:-1px;}
+  .leyenda span.costo::before{background:var(--clay);}
+  .decidir{display:flex;flex-direction:column;gap:10px;}
+  .decidir .fila{grid-template-columns:1fr auto;}
+</style>
+</head>
+<body>
+<div class="telefono">
+  <header class="topbar">
+    <span class="logo">Parents’ Break</span>
+    <a class="ver-celu solo-compu" href="celular.html#finanzas.html">Ver cómo queda en el celular</a>
+    <span class="quien">Prueba</span>
+    <button class="campana" aria-label="Avisos: 2 sin leer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="n">2</span>
+    </button>
+  </header>
+
+  <main class="contenido contenido-angosto">
+    <div class="cabecera">
+      <div>
+        <h1>Plata</h1>
+        <p class="fecha">Octubre · resultado hasta hoy <b class="num" style="color:var(--good);">$4.270</b></p>
+      </div>
+      <div class="mesnav"><button aria-label="Mes anterior">‹</button><span class="label">Octubre 2026</span><button aria-label="Mes siguiente">›</button></div>
+    </div>
+
+    <div class="segmentos" role="tablist" aria-label="Vistas de Plata">
+      <button role="tab" id="tab-pagar" aria-selected="true" aria-controls="panel-pagar">Pagar<span class="cuenta">6</span></button>
+      <button role="tab" id="tab-cobrar" aria-selected="false" aria-controls="panel-cobrar">Cobrar<span class="cuenta">8</span></button>
+      <button role="tab" id="tab-numeros" aria-selected="false" aria-controls="panel-numeros">Números</button>
+    </div>
+
+    <!-- PAGAR: la tarea del sábado. Una niñera por fila, cuenta y monto para copiar, un toque para marcar. -->
+    <section class="panel" id="panel-pagar" role="tabpanel" aria-labelledby="tab-pagar">
+      <div class="aviso aviso-ok" style="margin-bottom:12px;"><span><b>Semana del 12 al 18 cerró.</b> 6 niñeras · <span class="num">$18.400</span>. Pagá de a una: copiá la cuenta, copiá el monto, marcá.</span></div>
+      <div class="lista">
+        <div class="fila">
+          <div class="avatar">AF</div>
+          <div class="principal"><span class="nombre">Ana Ficticia</span><span class="meta">4 sittings · lun 12 a sáb 17 · <span class="num">0099887766</span></span></div>
+          <div class="derecha"><span class="monto">$3.000</span></div>
+          <div class="botones"><button class="btn btn-chico">Copiar cuenta</button><button class="btn btn-chico">Copiar monto</button><button class="btn btn-chico btn-bueno">Pagado ✓</button></div>
+        </div>
+        <div class="fila">
+          <div class="avatar">CE</div>
+          <div class="principal"><span class="nombre">Carla Ejemplo</span><span class="meta">2 sittings + gasto $380 · saldo a favor −$200 · <span class="num">0012345678</span></span></div>
+          <div class="derecha"><span class="monto">$2.416</span></div>
+          <div class="botones"><button class="btn btn-chico">Copiar cuenta</button><button class="btn btn-chico">Copiar monto</button><button class="btn btn-chico btn-bueno">Pagado ✓</button></div>
+        </div>
+        <div class="fila">
+          <div class="avatar">BI</div>
+          <div class="principal"><span class="nombre">Bruno Inventado</span><span class="meta">3 traslados · <span class="chip chip-mal">Falta la cuenta</span></span></div>
+          <div class="derecha"><span class="monto">$750</span></div>
+          <div class="botones"><button class="btn btn-chico">Cargar cuenta en su ficha</button><button class="btn btn-chico btn-bueno">Pagado ✓</button></div>
+        </div>
+        <div class="fila">
+          <div class="avatar">DI</div>
+          <div class="principal"><span class="nombre">Dana Inventada</span><span class="meta">1 sitting · sáb 17 · <span class="num">0045678901</span></span></div>
+          <div class="derecha"><span class="monto">$1.170</span></div>
+          <div class="botones"><button class="btn btn-chico">Copiar cuenta</button><button class="btn btn-chico">Copiar monto</button><button class="btn btn-chico btn-bueno">Pagado ✓</button></div>
+        </div>
+        <div class="fila fila-pasado">
+          <div class="avatar">EF</div>
+          <div class="principal"><span class="nombre">Eva Ficticia</span><span class="meta">2 sittings · pagado hace un momento</span></div>
+          <div class="derecha"><span class="monto">$1.560</span><span class="chip chip-ok">Pagado</span></div>
+        </div>
+      </div>
+      <details style="margin-top:12px;">
+        <summary style="cursor:pointer;font-weight:600;color:var(--ink-soft);font-size:14px;padding:8px 0;">Semana en curso · cierra el sábado 24 · 4 niñeras llevan $9.200</summary>
+        <div class="lista" style="margin-top:8px;">
+          <div class="fila"><div class="avatar">AF</div><div class="principal"><span class="nombre">Ana Ficticia</span><span class="meta">2 de 3 días hechos</span></div><div class="derecha"><span class="monto monto-soft">lleva $1.500</span></div></div>
+          <div class="fila"><div class="avatar">CE</div><div class="principal"><span class="nombre">Carla Ejemplo</span><span class="meta">1 sitting</span></div><div class="derecha"><span class="monto monto-soft">lleva $1.196</span></div></div>
+        </div>
+      </details>
+      <div class="toast" role="status"><span>Pagado a Eva Ficticia · $1.560</span><button>Deshacer</button></div>
+    </section>
+
+    <!-- COBRAR: por familia, con los días de atraso y el recordatorio listo. -->
+    <section class="panel" id="panel-cobrar" role="tabpanel" aria-labelledby="tab-cobrar" hidden>
+      <div class="aviso aviso-atencion" style="margin-bottom:12px;"><span><b>8 familias deben $52.300.</b> 3 pasan los 15 días. Cuando entre Mercado Pago, los pagos que coincidan se van a marcar solos.</span></div>
+      <div class="lista">
+        <div class="fila">
+          <div class="avatar">FC</div>
+          <div class="principal"><span class="nombre">Familia Prueba Cuatro</span><span class="meta">3 traslados · desde el 29 sep · <span class="chip chip-mal">22 días</span></span></div>
+          <div class="derecha"><span class="monto">$4.200</span></div>
+          <div class="botones"><button class="btn btn-chico">Recordar por WhatsApp</button><button class="btn btn-chico">Ver detalle</button><button class="btn btn-chico btn-bueno">Cobrado ✓</button></div>
+        </div>
+        <div class="fila">
+          <div class="avatar">FU</div>
+          <div class="principal"><span class="nombre">Familia Prueba Uno</span><span class="meta">Octubre, fijo mensual · se cobra el 1 de noviembre</span></div>
+          <div class="derecha"><span class="monto monto-soft">lleva $9.120</span></div>
+        </div>
+        <div class="fila">
+          <div class="avatar">FD</div>
+          <div class="principal"><span class="nombre">Familia Prueba Dos</span><span class="meta">Semana del 12 al 18 · 2 sittings · <span class="chip chip-aviso">6 días</span></span></div>
+          <div class="derecha"><span class="monto">$3.200</span></div>
+          <div class="botones"><button class="btn btn-chico">Recordar por WhatsApp</button><button class="btn btn-chico">Ver detalle</button><button class="btn btn-chico btn-bueno">Cobrado ✓</button></div>
+        </div>
+        <div class="fila">
+          <div class="avatar">FT</div>
+          <div class="principal"><span class="nombre">Familia Prueba Tres</span><span class="meta">Sáb 17 · 1 sitting + gastos $380 · <span class="chip chip-ok">3 días</span></span></div>
+          <div class="derecha"><span class="monto">$2.180</span></div>
+          <div class="botones"><button class="btn btn-chico">Copiar resumen</button><button class="btn btn-chico">Ver PDF</button><button class="btn btn-chico btn-bueno">Cobrado ✓</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- NÚMEROS: cuatro cifras del mes y una lista de "qué decidir", con datos que ya existen. -->
+    <section class="panel" id="panel-numeros" role="tabpanel" aria-labelledby="tab-numeros" hidden>
+      <div class="resumen">
+        <div class="dato"><span class="etiqueta">Facturado</span><span class="valor num">$14.820</span><span class="pie">+12% vs. septiembre</span></div>
+        <div class="dato"><span class="etiqueta">Resultado</span><span class="valor valor-bueno num">$4.270</span><span class="pie">29% de lo facturado</span></div>
+        <div class="dato"><span class="etiqueta">Por cobrar</span><span class="valor num" style="color:var(--warn);">$52.300</span><span class="pie">8 familias · 3 atrasadas</span></div>
+        <div class="dato"><span class="etiqueta">Por pagar</span><span class="valor num" style="color:var(--clay-text);">$18.400</span><span class="pie">+ $9.200 de la semana en curso</span></div>
+      </div>
+
+      <div class="lista" style="margin-top:16px;padding:14px 16px;">
+        <div class="seccion-titulo" style="margin:0 0 10px;"><h2>Seis meses</h2><span class="leyenda"><span>Facturado</span><span class="costo">Costos</span></span></div>
+        <div class="barras" aria-label="Facturado y costos por mes">
+          <div class="barra"><div class="cols"><div class="col" style="height:70%"></div><div class="col col-costo" style="height:48%"></div></div><span class="mes">May</span></div>
+          <div class="barra"><div class="cols"><div class="col" style="height:64%"></div><div class="col col-costo" style="height:45%"></div></div><span class="mes">Jun</span></div>
+          <div class="barra"><div class="cols"><div class="col" style="height:40%"></div><div class="col col-costo" style="height:30%"></div></div><span class="mes">Jul</span></div>
+          <div class="barra"><div class="cols"><div class="col" style="height:52%"></div><div class="col col-costo" style="height:36%"></div></div><span class="mes">Ago</span></div>
+          <div class="barra"><div class="cols"><div class="col" style="height:78%"></div><div class="col col-costo" style="height:50%"></div></div><span class="mes">Sep</span></div>
+          <div class="barra"><div class="cols"><div class="col" style="height:92%"></div><div class="col col-costo" style="height:58%"></div></div><span class="mes">Oct</span></div>
+        </div>
+      </div>
+
+      <div class="seccion-titulo" style="margin-top:16px;"><h2>Qué decidir</h2></div>
+      <div class="lista decidir">
+        <div class="fila fila-toca"><div class="principal"><span class="nombre">3 familias son el 60% de lo facturado</span><span class="meta">Si una se va, el mes cambia. Ver quiénes y cuánto.</span></div><div class="derecha"><span class="chip chip-aviso">Riesgo</span></div></div>
+        <div class="fila fila-toca"><div class="principal"><span class="nombre">19 de 90 niñeras trabajaron en 90 días</span><span class="meta">3 de ellas hacen un tercio de los sittings. Repartir o dar de baja.</span></div><div class="derecha"><span class="chip chip-neutro">Equipo</span></div></div>
+        <div class="fila fila-toca"><div class="principal"><span class="nombre">Cobro promedio: 9 días después del sitting</span><span class="meta">Mensuales: 14 días. Semanales: 5. Recordar el día 10.</span></div><div class="derecha"><span class="chip chip-ok">Mejoró</span></div></div>
+        <div class="fila fila-toca"><div class="principal"><span class="nombre">7 de 22 pedidos puntuales se concretaron</span><span class="meta">15 cancelados. Anotar el motivo para saber por qué.</span></div><div class="derecha"><span class="chip chip-mal">Bajo</span></div></div>
+        <div class="fila fila-toca"><div class="principal"><span class="nombre">Margen: sittings 39% · traslados 44%</span><span class="meta">Familia Prueba Cuatro paga por debajo del promedio.</span></div><div class="derecha"><span class="chip chip-neutro">Precio</span></div></div>
+      </div>
+
+      <div class="seccion-titulo" style="margin-top:16px;"><h2>Más</h2></div>
+      <div class="lista">
+        <div class="fila fila-toca"><div class="principal"><span class="nombre">Gastos del negocio</span><span class="meta">Octubre: $800 en 2 gastos + $800 fijos</span></div><div class="derecha"><span class="chip chip-sin">›</span></div></div>
+        <div class="fila fila-toca"><div class="principal"><span class="nombre">Revisar meses anteriores</span><span class="meta">2 cosas sospechosas en septiembre</span></div><div class="derecha"><span class="chip chip-aviso">2</span></div></div>
+        <div class="fila fila-toca"><div class="principal"><span class="nombre">Conciliar con el extracto</span><span class="meta">Último subido hace 21 días</span></div><div class="derecha"><span class="chip chip-sin">›</span></div></div>
+      </div>
+    </section>
+    <p class="nota-maqueta">Maqueta con datos ficticios · 21/10/2026</p>
+  </main>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <button class="tab-nuevo" aria-label="Nuevo: registro, pedido o fijo">+ Nuevo</button>
+    <a class="tab" href="hoy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>Hoy<span class="punto"></span></a>
+    <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16"/><path d="M8 3v4M16 3v4"/></svg>Agenda</a>
+    <a class="tab" href="sittings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Registros</a>
+    <a class="tab" href="finanzas.html" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>Plata<span class="punto"></span></a>
+    <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>Más</a>
+  </nav>
+</div>
+<script>
+  // Pestañas de la maqueta (en la app esto sería cambiarVistaFinanzas con el mismo markup).
+  document.querySelectorAll('[role="tab"]').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('[role="tab"]').forEach(x => x.setAttribute('aria-selected', String(x === t)));
+    document.querySelectorAll('.panel').forEach(p => { p.hidden = p.id !== t.getAttribute('aria-controls'); });
+  }));
+</script>
+</body>
+</html>

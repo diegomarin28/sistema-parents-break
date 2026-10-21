@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maqueta Niñeras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="maquetas.css">
+<style>
+
+  .reparto{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-sm);padding:var(--sp-3) var(--sp-4);display:flex;flex-direction:column;gap:10px;}
+  .reparto .tit{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:13.5px;}
+  .reparto .tit b{font-family:var(--f-display);font-size:18px;}
+  .barra-rep{display:flex;height:14px;border-radius:7px;overflow:hidden;gap:2px;background:var(--line-soft);}
+  .barra-rep span{display:block;height:100%;}
+  .barra-rep .rep-1{background:var(--accent-deep);} .barra-rep .rep-2{background:var(--accent);} .barra-rep .rep-3{background:var(--line);}
+  .ley{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-soft);}
+  .ley i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
+  .fila-elegida{background:var(--accent-soft);}
+  .ficha-cab{display:flex;gap:12px;align-items:center;}
+  .ficha-cab .avatar{width:56px;height:56px;border-radius:50%;background:var(--clay-soft);color:var(--clay-text);font-family:var(--f-display);font-weight:700;font-size:19px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .ficha-cab .sub{color:var(--ink-soft);font-size:13px;}
+  .datos{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;font-size:13.5px;}
+  .datos dt{font-size:12px;color:var(--ink-soft);font-weight:600;}
+  .datos dd{margin:0;}
+  .datos .datos-falta{color:var(--warn);font-weight:600;}
+  .lista-mini{font-size:13px;}
+  .lista-mini .fila{min-height:48px;padding:8px 0;border-bottom:1px solid var(--line-soft);grid-template-columns:auto 1fr auto;}
+  .lista-mini .fila:last-child{border-bottom:none;}
+</style>
+</head>
+<body>
+<div class="telefono">
+  <header class="topbar">
+    <span class="logo">Parents’ Break</span>
+    <a class="ver-celu solo-compu" href="celular.html#ninieras.html">Ver cómo queda en el celular</a>
+    <span class="quien">Prueba</span>
+    <button class="campana" aria-label="Avisos: 2 sin leer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="n">2</span>
+    </button>
+  </header>
+
+  <main class="contenido">
+    <div class="cabecera">
+      <div>
+        <a class="volver" href="mas.html">‹ Más</a>
+        <h1>Niñeras</h1>
+        <p class="fecha">92 activas · 5 inactivas</p>
+      </div>
+      <button class="btn btn-suave btn-chico">+ Niñera nueva</button>
+    </div>
+
+    <!-- El gráfico reemplaza la tarjeta "92 niñeras activas": cuántas trabajan de verdad -->
+    <div class="reparto" aria-label="Quién trabajó en los últimos 3 meses">
+      <div class="tit"><span>Trabajaron en los últimos 3 meses</span><b>20 de 92</b></div>
+      <div class="barra-rep"><span class="rep-1" style="width:33%"></span><span class="rep-2" style="width:22%"></span><span class="rep-3" style="flex:1"></span></div>
+      <div class="ley"><span><i style="background:var(--accent-deep)"></i>3 niñeras hacen 1 de cada 3 sittings</span><span><i style="background:var(--accent)"></i>17 más</span><span><i style="background:var(--line)"></i>72 sin sittings</span></div>
+    </div>
+
+    <div class="buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></svg><input type="search" placeholder="Buscar por nombre, zona o teléfono" aria-label="Buscar niñera"></div>
+    <div class="filtros" role="group" aria-label="Filtros">
+      <button class="filtro" aria-pressed="true">Trabajaron hace poco · 20</button>
+      <button class="filtro" aria-pressed="false">Todas · 92</button>
+      <button class="filtro" aria-pressed="false">Sin cuenta · 69</button>
+      <button class="filtro" aria-pressed="false">Sin teléfono · 9</button>
+      <button class="filtro" aria-pressed="false">Inactivas</button>
+    </div>
+
+    <div class="lista-panel">
+    <div class="lista-panel-lista">
+    <div class="lista">
+      <div class="fila fila-toca fila-elegida">
+        <div class="avatar">AF</div>
+        <div class="principal"><span class="nombre">Ana Ficticia</span><span class="meta">Pocitos · 14 sittings en 3 meses · última ayer</span></div>
+        <div class="derecha"><span class="chip chip-ok">Activa</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="avatar">CE</div>
+        <div class="principal"><span class="nombre">Carla Ejemplo</span><span class="meta">Carrasco · 11 sittings · última el sábado</span></div>
+        <div class="derecha"><span class="chip chip-ok">Activa</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="avatar">DI</div>
+        <div class="principal"><span class="nombre">Dana Inventada</span><span class="meta">Punta Carretas · 8 sittings · cuida bebés</span></div>
+        <div class="derecha"><span class="chip chip-ok">Activa</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="avatar">BI</div>
+        <div class="principal"><span class="nombre">Bruno Inventado</span><span class="meta">Traslados · 6 en 3 meses · última hoy</span></div>
+        <div class="derecha"><span class="chip chip-aviso">Sin cuenta</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="avatar">EF</div>
+        <div class="principal"><span class="nombre">Eva Ficticia</span><span class="meta">Malvín · 4 sittings · última hace 12 días</span></div>
+        <div class="derecha"><span class="chip chip-ok">Activa</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="avatar">LP</div>
+        <div class="principal"><span class="nombre">Lía Prueba</span><span class="meta">Cordón · 2 sittings · última hace 40 días</span></div>
+        <div class="derecha"><span class="chip chip-aviso">Sin cuenta</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="avatar">MS</div>
+        <div class="principal"><span class="nombre">Mía Simulada</span><span class="meta">Buceo · 1 sitting · última hace 2 meses</span></div>
+        <div class="derecha"><span class="chip chip-ok">Activa</span></div>
+      </div>
+    </div>
+    <button class="btn btn-ancho">Mostrar 13 más</button>
+    </div>
+
+    <div class="lista-panel-lado">
+    <div class="separador solo-celu">Al tocar una niñera: su ficha</div>
+    <div class="separador solo-compu">Al tocar una niñera, la ficha se abre al costado</div>
+    <section class="hoja" aria-label="Ficha de Ana Ficticia">
+      <div class="asa"></div>
+      <div class="hoja-cab">
+        <div class="ficha-cab"><div class="avatar">AF</div><div><h2>Ana Ficticia</h2><span class="sub">24 años · desde marzo 2025</span></div></div>
+        <button class="cerrar" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="hoja-cuerpo">
+        <div class="chips-elegir"><span class="chip chip-ok">Activa</span><span class="chip chip-neutro">Cuida bebés</span><span class="chip chip-neutro">Tiene auto</span><span class="chip chip-sin">Inglés</span></div>
+        <dl class="datos">
+          <div><dt>Teléfono</dt><dd class="num">099 000 111</dd></div>
+          <div><dt>Zona</dt><dd>Pocitos, Punta Carretas</dd></div>
+          <div><dt>Cuenta para pagarle</dt><dd class="num">BROU · 0099887766</dd></div>
+          <div><dt>Semana de pago</dt><dd>Cierra el sábado</dd></div>
+          <div><dt>Disponibilidad</dt><dd>Tardes y fines de semana</dd></div>
+          <div><dt>Cédula</dt><dd class="datos-falta">Falta</dd></div>
+        </dl>
+        <div class="resumen">
+          <div class="dato"><span class="etiqueta">Sittings en 3 meses</span><span class="valor">14</span><span class="pie">5 familias distintas</span></div>
+          <div class="dato"><span class="etiqueta">Le pagamos en octubre</span><span class="valor num">$7.420</span><span class="pie">$3.000 pendiente</span></div>
+        </div>
+        <div class="lista-mini">
+          <div class="seccion-titulo"><h2>Familias a las que fue</h2></div>
+          <div class="fila"><div class="avatar">P1</div><div class="principal"><span class="nombre">Familia Prueba Uno</span><span class="meta">fijo · lun y mié 16:00–19:00</span></div><div class="derecha"><span class="monto monto-soft">9 veces</span></div></div>
+          <div class="fila"><div class="avatar">P3</div><div class="principal"><span class="nombre">Familia Prueba Tres</span><span class="meta">última el 10/10 · reseña 5/5</span></div><div class="derecha"><span class="monto monto-soft">4 veces</span></div></div>
+          <div class="fila"><div class="avatar">P2</div><div class="principal"><span class="nombre">Familia Prueba Dos</span><span class="meta">última en setiembre</span></div><div class="derecha"><span class="monto monto-soft">1 vez</span></div></div>
+        </div>
+      </div>
+      <div class="hoja-pie">
+        <button class="btn" style="flex:1;">WhatsApp</button>
+        <button class="btn btn-primario" style="flex:1;">Editar</button>
+      </div>
+    </section>
+    </div>
+    </div>
+    <p class="nota-maqueta">Maqueta con datos ficticios · 21/10/2026</p>
+  </main>
+
+  <button class="fab" aria-label="Niñera nueva">+</button>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <button class="tab-nuevo" aria-label="Nuevo: registro, pedido o fijo">+ Nuevo</button>
+    <a class="tab" href="hoy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>Hoy<span class="punto"></span></a>
+    <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16"/><path d="M8 3v4M16 3v4"/></svg>Agenda</a>
+    <a class="tab" href="sittings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Registros</a>
+    <a class="tab" href="finanzas.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>Plata<span class="punto"></span></a>
+    <a class="tab" href="mas.html" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>Más</a>
+  </nav>
+</div>
+</body>
+</html>

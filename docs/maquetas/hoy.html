@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maqueta Hoy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="maquetas.css">
+</head>
+<body>
+<div class="telefono">
+  <header class="topbar">
+    <span class="logo">Parents’ Break</span>
+    <a class="ver-celu solo-compu" href="celular.html#hoy.html">Ver cómo queda en el celular</a>
+    <span class="quien">Prueba</span>
+    <button class="campana" aria-label="Avisos: 2 sin leer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="n">2</span>
+    </button>
+  </header>
+
+  <main class="contenido">
+    <div class="cabecera">
+      <div>
+        <h1>Hoy</h1>
+        <p class="fecha">Miércoles 21 de octubre · 4 cosas para resolver</p>
+      </div>
+      <span class="chip chip-ok">Carga de fijos OK</span>
+    </div>
+
+    <div class="hoy-grid">
+    <div class="hoy-acciones">
+    <!-- 1. Lo urgente de hoy: un botón por tarjeta -->
+    <article class="accion accion-urgente">
+      <div class="franja"></div>
+      <div class="cuerpo">
+        <span class="eyebrow">Hoy 19:00 · sin niñera</span>
+        <div class="titulo">Familia Prueba Dos · sitting 19:00–23:00</div>
+        <p class="detalle">Carrasco · 2 chicos (3 y 6). Ya fueron: <b>Carla</b> (3 veces), <b>Ana</b> (1).</p>
+        <div class="acciones">
+          <button class="btn btn-primario">Elegir niñera</button>
+          <button class="btn">Copiar mensaje para niñeras</button>
+        </div>
+      </div>
+    </article>
+
+    <!-- 2. Pedido que llegó por WhatsApp (lugar reservado para el ticket + sugeridas) -->
+    <article class="accion accion-atencion">
+      <div class="franja"></div>
+      <div class="cuerpo">
+        <span class="eyebrow">Pedido nuevo · WhatsApp · hace 25 min</span>
+        <div class="titulo">Familia Prueba Tres · sáb 24, 20:00 a ~23:30</div>
+        <p class="detalle">“Sin hora de fin fija, no antes de las 23”. 2 chicos (2 y 5) · Pocitos · $400/h.</p>
+        <div class="chips-elegir" aria-label="Niñeras sugeridas, en orden">
+          <span class="chip-elegir" aria-pressed="true">1 · Ana <span class="sub">ya fue 4 veces</span></span>
+          <span class="chip-elegir">2 · Carla <span class="sub">misma zona</span></span>
+          <span class="chip-elegir">3 · Dana <span class="sub">cuidó bebés</span></span>
+        </div>
+        <div class="acciones">
+          <button class="btn btn-primario">Revisar y confirmar pedido</button>
+          <button class="btn btn-chico btn-fantasma">Ver mensaje original</button>
+        </div>
+      </div>
+    </article>
+
+    <!-- 3. Cierre de ayer: reemplaza la lista de "confirmados automáticamente" que nadie revisa -->
+    <article class="accion">
+      <div class="franja"></div>
+      <div class="cuerpo">
+        <span class="eyebrow">Cierre de ayer · fijo cargado solo</span>
+        <div class="titulo">Ana Ficticia en Familia Prueba Uno</div>
+        <p class="detalle">Previsto 16:00–19:00 · cobro <b class="num">$1.140</b> · pago <b class="num">$750</b>. ¿Terminó a las 19:00?</p>
+        <div class="acciones">
+          <button class="btn btn-bueno">Sí, terminó 19:00</button>
+          <button class="btn">Otra hora</button>
+          <button class="btn btn-chico btn-fantasma">No fue</button>
+        </div>
+      </div>
+    </article>
+
+    <!-- 4. Puntual confirmado que ya pasó y falta registrar: precio ya calculado -->
+    <article class="accion">
+      <div class="franja"></div>
+      <div class="cuerpo">
+        <span class="eyebrow">Sin registrar · sábado 17</span>
+        <div class="titulo">Carla Ejemplo en Familia Prueba Dos · 19:00–23:00</div>
+        <p class="detalle">4 h × $400 = <b class="num">$1.600</b> cobro · 4 h × $260 = <b class="num">$1.040</b> pago.</p>
+        <div class="acciones">
+          <button class="btn btn-primario">Registrar así</button>
+          <button class="btn">Cambiar horario</button>
+        </div>
+      </div>
+    </article>
+
+    <!-- 5. Plata: solo cuando hay algo que hacer -->
+    <article class="accion accion-plata">
+      <div class="franja"></div>
+      <div class="cuerpo">
+        <span class="eyebrow">Cobros</span>
+        <div class="titulo">8 familias deben <span class="num">$52.300</span></div>
+        <p class="detalle">3 con más de 15 días: Familia Prueba Cuatro ($4.200, 22 días) y dos más.</p>
+        <div class="acciones">
+          <button class="btn btn-suave">Ver cobros</button>
+          <button class="btn btn-chico btn-fantasma">Recordar por WhatsApp a las 3</button>
+        </div>
+      </div>
+    </article>
+
+    <article class="accion accion-plata">
+      <div class="franja"></div>
+      <div class="cuerpo">
+        <span class="eyebrow">Pagos · la semana cierra el sábado</span>
+        <div class="titulo">6 niñeras llevan <span class="num">$18.400</span></div>
+        <p class="detalle">El sábado esto se convierte en “Pagar ahora”, con cuenta y monto para copiar de a una.</p>
+      </div>
+    </article>
+
+    </div>
+    <aside class="hoy-lateral" aria-label="Hoy en la agenda y la semana">
+    <div class="seccion-titulo"><h2>Hoy en la agenda</h2><a href="#">Ver semana</a></div>
+    <div class="lista">
+      <div class="fila fila-toca fila-pasado">
+        <div class="hora"><b>08:00</b>trasl.</div>
+        <div class="principal"><span class="nombre">Familia Prueba Cuatro → colegio</span><span class="meta">Bruno Inventado · 12 km</span></div>
+        <div class="derecha"><span class="chip chip-ok">Hecho</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="hora"><b>16:00</b>19:00</div>
+        <div class="principal"><span class="nombre">Familia Prueba Uno</span><span class="meta">Ana Ficticia · fijo · Pocitos</span></div>
+        <div class="derecha"><span class="chip chip-neutro">En curso</span></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="hora"><b>19:00</b>23:00</div>
+        <div class="principal"><span class="nombre">Familia Prueba Dos</span><span class="meta">Carrasco · 2 chicos</span></div>
+        <div class="derecha"><span class="chip chip-mal">Sin niñera</span></div>
+      </div>
+    </div>
+
+    <div class="seccion-titulo"><h2>Esta semana</h2><a href="#">Ver Plata</a></div>
+    <div class="resumen">
+      <div class="dato"><span class="etiqueta">Sittings y traslados</span><span class="valor">12</span><span class="pie">3 más que la semana pasada</span></div>
+      <div class="dato"><span class="etiqueta">Facturado</span><span class="valor num">$18.400</span><span class="pie">margen 39%</span></div>
+      <div class="dato dato-ancho"><span class="etiqueta">Octubre, resultado hasta hoy</span><span class="valor valor-bueno num">$4.270</span><span class="pie">Facturado $14.820 − niñeras $9.750 − gastos $800</span></div>
+    </div>
+
+    <div class="seccion-titulo"><h2>Datos que faltan</h2></div>
+    <div class="lista">
+      <div class="fila fila-toca">
+        <div class="avatar">FC</div>
+        <div class="principal"><span class="nombre">Familia Prueba Cuatro</span><span class="meta">Sin tarifa por hora: los fijos salen en $0</span></div>
+        <div class="derecha"><button class="btn btn-chico">Completar</button></div>
+      </div>
+      <div class="fila fila-toca">
+        <div class="avatar">BI</div>
+        <div class="principal"><span class="nombre">Bruno Inventado</span><span class="meta">Falta la cuenta para pagarle</span></div>
+        <div class="derecha"><button class="btn btn-chico">Completar</button></div>
+      </div>
+    </div>
+    </aside>
+    </div>
+    <p class="nota-maqueta">Maqueta con datos ficticios · 21/10/2026</p>
+  </main>
+
+  <button class="fab" aria-label="Nuevo: registro, pedido o solicitud">+</button>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <button class="tab-nuevo" aria-label="Nuevo: registro, pedido o fijo">+ Nuevo</button>
+    <a class="tab" href="hoy.html" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></svg>Hoy<span class="punto"></span></a>
+    <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16"/><path d="M8 3v4M16 3v4"/></svg>Agenda</a>
+    <a class="tab" href="sittings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Registros</a>
+    <a class="tab" href="finanzas.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>Plata<span class="punto"></span></a>
+    <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>Más</a>
+  </nav>
+</div>
+</body>
+</html>
