@@ -33,13 +33,21 @@ document.addEventListener('visibilitychange', () => {
   // destruye nada solo.
   if (estuvoRatoAfuera) mostrarAvisoVolviste();
 });
+// "Actualizar" recarga toda la página: con una entrevista o una ficha a medio escribir, pregunta
+// primero (21/10/2026). Lo escrito queda igual como borrador y se ofrece al volver.
+async function actualizarAppPreguntando(){
+  guardarBorradoresPendientes();
+  if(hayCambiosSinGuardar() && !(await confirmarAccion('Tenés cambios sin guardar. Quedan como borrador en este dispositivo y te los vamos a ofrecer al volver, pero conviene guardarlos antes. ¿Actualizar igual?', 'Actualizar igual'))) return;
+  marcarSinCambios('entrevista'); marcarSinCambios('modal'); // ya se preguntó: que el navegador no vuelva a preguntar
+  location.replace(location.pathname + '?_=' + Date.now());
+}
 function mostrarAvisoVolviste(){
   if(document.getElementById('aviso-volviste')) return; // ya está mostrado, no duplicar
   const el = document.createElement('div');
   el.id = 'aviso-volviste';
   el.innerHTML = `
     <span>Volviste después de un rato — si algo se ve viejo, actualizá.</span>
-    <button type="button" onclick="location.replace(location.pathname + '?_=' + Date.now())">Actualizar</button>
+    <button type="button" onclick="actualizarAppPreguntando()">Actualizar</button>
     <button type="button" class="aviso-volviste-cerrar" onclick="document.getElementById('aviso-volviste')?.remove()" aria-label="Cerrar">✕</button>
   `;
   document.body.appendChild(el);

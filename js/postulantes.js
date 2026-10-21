@@ -209,6 +209,10 @@ async function descartarIntake(id){
 }
 async function agendarDesdeIntake(i){
   const c = intakeItems[i];
+  // Lo que se estaba escribiendo de otra entrevista queda en su borrador; esta arranca limpia
+  // (antes quedaban los puntajes de la anterior, escondidos, y se guardaban con esta).
+  guardarBorradoresPendientes();
+  entrevistaState = { ...estadoEntrevistaVacio(), tipo: c.tipo || 'Niñera', fichaOrigen: c, candidataId: c.id };
   rrhhTab = 'entrevista';
   await renderModulo(); // espera a que el form de entrevista ya esté armado (preguntas + zonas cargadas)
   document.getElementById('f-nombre').value = (c.nombre||'') + (c.apellido? ' '+c.apellido:'');
@@ -218,10 +222,8 @@ async function agendarDesdeIntake(i){
   document.getElementById('f-exp-previa').value = c.experiencia||'';
   document.getElementById('f-fecha-nac').value = c.fecha_nacimiento||'';
   actualizarEdadCandidata();
-  entrevistaState.tipo = c.tipo || 'Niñera';
-  entrevistaState.fichaOrigen = c;
-  entrevistaState.candidataId = c.id;
   renderFichaOrigen();
+  ofrecerBorradorEntrevista();
 }
 function actualizarEdadCandidata(){
   const inp = document.getElementById('f-fecha-nac');
@@ -247,6 +249,9 @@ function renderFichaOrigen(){
   const box = document.getElementById('fichaOrigenBox');
   if(!box) return;
   registrarRenderizadorZona('ent-zonasitting', renderFichaOrigen);
+  // Se vuelve a dibujar al editar las zonas desde la entrevista: lo escrito en la ficha se
+  // conserva (21/10/2026, antes volvía a lo del formulario).
+  const escrito = box.querySelector('textarea') ? leerCamposFormulario(box) : null;
   const c = entrevistaState.fichaOrigen || {};
   const completoForm = /form/i.test(c.origen||'');
   const notas = c.notas_ficha || {};
@@ -266,18 +271,24 @@ function renderFichaOrigen(){
     <div class="helper">${completoForm ? 'Se puede editar directo — arranca con lo que ella puso en el form.' : 'No completó el formulario: estos son los mismos campos, para completarlos en la entrevista.'}</div>
     <div class="fichadl">${checklistZonas('ent-zonasitting', c.zona_sitting, 'Zona en la que puede hacer sitting')}${htmlBarriosMarcados(c.zona_sitting, c.zona_sitting_barrios, 'En el formulario marcó')}${filasTexto}</div>
   </div></div>`;
+  if(escrito) ponerCamposFormulario(box, escrito, false);
 }
 
 /* ---- Entrevista ---- */
 // entrevistaId: la entrevista guardada a medias que se está siguiendo (09/10/2026).
-let entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null, entrevistaId:null };
+function estadoEntrevistaVacio(){
+  return { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null, entrevistaId:null };
+}
+let entrevistaState = estadoEntrevistaVacio();
 async function renderEntrevista(body){
+  marcarSinCambios('entrevista'); // formulario recién dibujado
   if(!entrevistaPreguntasCache) await cargarEntrevistaPreguntas();
   if(!zonaGruposCache) await cargarZonaGrupos(); // para los selectores de zona de la entrevista
   body.innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
         <h2 style="margin:0;">Datos de la entrevista</h2>
+        <button type="button" class="smallbtn" id="btnVaciarEntrevista" onclick="vaciarFormularioEntrevista()">Vaciar formulario</button>
       </div>
       <div class="grid3">
         <div class="field"><label>Nombre de la candidata</label><input type="text" id="f-nombre"></div>
@@ -334,7 +345,6 @@ async function renderEntrevista(body){
       <button class="btn primary" id="btnGuardar" onclick="conGuardado(this, ()=>guardarCandidata())">Guardar candidata</button>
       <button class="btn" id="btnGuardarEnCurso" onclick="conGuardado(this, ()=>guardarEntrevistaEnCurso())">Guardar y seguir después</button>
       <button class="btn ghost" onclick="window.print()">Imprimir</button>
-      <button class="btn ghost" onclick="limpiarForm()">Vaciar formulario</button>
     </div>
     <div id="warnArea"></div>
   `;
@@ -350,6 +360,110 @@ async function renderEntrevista(body){
       el.classList.add('selected');
     });
   });
+  // Lo que ya está en memoria (puntajes, notas, señales) se ve: antes, al volver a la pestaña,
+  // seguía guardado pero no se mostraba, y se guardaba igual sin que nadie lo viera.
+  pintarEstadoEntrevista();
+  escucharCambiosEntrevista(body);
+  ofrecerBorradorEntrevista();
+}
+/* ---- Borrador de la entrevista (21/10/2026) ----
+   Cada cambio (escribir, un puntaje, una referencia) se guarda en el dispositivo, por usuaria y
+   por candidata ('entrevista:<id>' o 'entrevista:nueva'). Al volver a abrir la entrevista, si
+   hay un borrador, se pregunta antes de ponerlo: nunca se pisa nada sin preguntar. */
+function claveBorradorEntrevista(){ return 'entrevista:' + (entrevistaState.candidataId || 'nueva'); }
+function armarBorradorEntrevista(){
+  // Se mira el formulario en pantalla, no la pestaña: al cambiar de pestaña rrhhTab ya es la
+  // nueva cuando se fuerza el último borrador, y el formulario todavía está.
+  const body = document.getElementById('rrhh-body');
+  if(!body || !body.querySelector('#f-nombre')) return null;
+  const psico = {}, notas = {};
+  body.querySelectorAll('[data-psico]').forEach(el=>{ psico[el.dataset.psico] = el.value; });
+  body.querySelectorAll('[data-notes]').forEach(el=>{ notas[el.dataset.notes] = el.value; });
+  return { nombre: document.getElementById('f-nombre').value.trim(), estado: entrevistaState, psico, notas, ...leerCamposFormulario(body) };
+}
+function escucharCambiosEntrevista(body){
+  if(body.dataset.escuchaBorrador) return; // limpiarForm vuelve a dibujar en el mismo lugar
+  body.dataset.escuchaBorrador = '1';
+  const alCambiar = (e)=>{
+    if(rrhhTab!=='entrevista' || e.target.closest('#entrevista-borrador-aviso')) return;
+    const aviso = document.getElementById('entrevista-borrador-aviso');
+    if(aviso && aviso.dataset.clave===claveBorradorEntrevista()) aviso.dataset.clave = apartarBorrador(aviso.dataset.clave) || aviso.dataset.clave;
+    marcarConCambios('entrevista');
+    programarBorrador(claveBorradorEntrevista(), armarBorradorEntrevista);
+  };
+  body.addEventListener('input', alCambiar);
+  body.addEventListener('change', alCambiar);
+  // Puntajes, "¿le explicaste los juegos?" y agregar / quitar referencias son toques, no texto.
+  body.addEventListener('click', (e)=>{
+    const boton = e.target.closest('button');
+    if(e.target.closest('[data-score],[data-juegos]') || (boton && /addRef|quitarRef/.test(boton.getAttribute('onclick')||''))) alCambiar(e);
+  });
+}
+// Puntajes, notas de cada bloque, señales de alerta y "¿le explicaste los juegos?" del estado en
+// memoria, en el formulario dibujado.
+function pintarEstadoEntrevista(){
+  Object.entries(entrevistaState.competencias||{}).forEach(([key, d])=>{
+    if(d?.score) document.querySelector(`[data-score="${CSS.escape(key)}:${d.score}"]`)?.classList.add('selected');
+    const notas = document.querySelector(`[data-notes="${CSS.escape(key)}"]`);
+    if(notas && d?.notes) notas.value = d.notes;
+  });
+  document.querySelectorAll('[data-flag]').forEach(el=>{ el.checked = !!entrevistaState.redflags?.[el.dataset.flag]; });
+  if(entrevistaState.explicacionJuegos) document.querySelector(`[data-juegos="${CSS.escape(entrevistaState.explicacionJuegos)}"]`)?.classList.add('selected');
+  calcular();
+}
+// Hay un borrador de entrevista de las últimas 12 horas: la app abre directo en la entrevista.
+function hayBorradorEntrevistaReciente(){
+  const [b] = borradoresQueEmpiezanCon('entrevista:');
+  return !!b && Date.now() - new Date(b.datos.guardadoEl).getTime() < 12*3600e3;
+}
+// baseActualizadaEl: cuándo se guardó a medias en la base la entrevista que se abrió; un
+// borrador más viejo que eso no se ofrece.
+function ofrecerBorradorEntrevista(baseActualizadaEl){
+  const body = document.getElementById('rrhh-body');
+  document.getElementById('entrevista-borrador-aviso')?.remove();
+  if(!body || rrhhTab!=='entrevista' || formulariosConCambios.has('entrevista')) return;
+  let elegido = null;
+  if(entrevistaState.candidataId){
+    const clave = 'entrevista:' + entrevistaState.candidataId;
+    const datos = leerBorrador(clave);
+    if(datos && !(baseActualizadaEl && new Date(datos.guardadoEl) <= new Date(baseActualizadaEl))) elegido = { clave, datos };
+  } else {
+    elegido = borradoresQueEmpiezanCon('entrevista:')[0] || null;
+  }
+  if(!elegido) return;
+  const quien = elegido.datos.nombre ? ` de ${escaparHtml(elegido.datos.nombre)}` : '';
+  const aviso = document.createElement('div');
+  aviso.className = 'card borrador-aviso'; aviso.id = 'entrevista-borrador-aviso'; aviso.setAttribute('role', 'status');
+  aviso.dataset.clave = elegido.clave;
+  aviso.innerHTML = `<div><b>Tenés un borrador de la entrevista${quien} de ${textoHaceCuanto(elegido.datos.guardadoEl)}.</b> ¿Seguir con ese borrador?</div>
+    <div class="borrador-botones"><button type="button" class="btn primary" onclick="seguirBorradorEntrevista(this.closest('.borrador-aviso').dataset.clave)">Seguir</button>
+    <button type="button" class="btn ghost" onclick="descartarBorradorEntrevista(this.closest('.borrador-aviso').dataset.clave)">Descartar</button></div>`;
+  body.prepend(aviso);
+}
+async function seguirBorradorEntrevista(clave){
+  const b = leerBorrador(clave);
+  if(!b){ document.getElementById('entrevista-borrador-aviso')?.remove(); toast('Ese borrador ya no está.', 'bad'); return; }
+  entrevistaState = { ...estadoEntrevistaVacio(), ...(b.estado||{}) };
+  rrhhTab = 'entrevista';
+  await renderEntrevista(document.getElementById('rrhh-body'));
+  const body = document.getElementById('rrhh-body');
+  ponerCamposFormulario(body, b);
+  Object.entries(b.psico||{}).forEach(([k, v])=>{ const el = body.querySelector(`[data-psico="${CSS.escape(k)}"]`); if(el) el.value = v; });
+  Object.entries(b.notas||{}).forEach(([k, v])=>{ const el = body.querySelector(`[data-notes="${CSS.escape(k)}"]`); if(el) el.value = v; });
+  pintarEstadoEntrevista();
+  actualizarEdadCandidata();
+  document.getElementById('entrevista-borrador-aviso')?.remove();
+  marcarConCambios('entrevista'); // sigue sin guardar en la base
+  // Desde acá se guarda con la clave de esta candidata; el borrador de origen (apartado o de
+  // una entrevista de cero) ya no hace falta.
+  escribirBorrador(claveBorradorEntrevista(), armarBorradorEntrevista());
+  if(clave !== claveBorradorEntrevista()) borrarBorrador(clave);
+  toast('Listo: seguís donde estabas. Acordate de guardar.');
+}
+async function descartarBorradorEntrevista(clave){
+  if(!(await confirmarAccion('¿Descartar el borrador? Se pierde lo que estaba escrito y no se guardó.', 'Descartar'))) return;
+  borrarBorrador(clave);
+  document.getElementById('entrevista-borrador-aviso')?.remove();
 }
 function renderCompetencias(){
   const cont = document.getElementById('competencias');
@@ -487,6 +601,8 @@ async function guardarCandidata(){
     : await sb.from('entrevistas').insert(filaEntrevista);
   if(e2){ warnArea.innerHTML = e2.code==='PGRST116' ? AVISO_ENTREVISTA_YA_COMPLETA : errBox(e2); return; }
   toast('Candidata guardada — está en "Candidatas guardadas".');
+  borrarBorrador(claveBorradorEntrevista());
+  borrarBorrador('entrevista:nueva');
   limpiarForm();
 }
 /* ---- Entrevista a medias (09/10/2026) ----
@@ -575,9 +691,15 @@ async function guardarEntrevistaEnCurso(){
   }
   entrevistaState.entrevistaId = res.data.id;
   entrevistaState.actualizadoAt = res.data.actualizado_at || fila.actualizado_at;
+  // Ya está en la base: el borrador del dispositivo no hace falta (si era una entrevista de
+  // cero, ahora tiene candidata y su borrador pasa a ser el de esa candidata).
+  borrarBorrador(claveBorradorEntrevista());
+  borrarBorrador('entrevista:nueva');
+  marcarSinCambios('entrevista');
   toast('Entrevista guardada a medias. La seguís desde "Candidatas guardadas".');
 }
 async function seguirEntrevista(entrevistaId){
+  guardarBorradoresPendientes(); // lo que se estaba escribiendo queda en su borrador
   const { data: e, error } = await sb.from('entrevistas').select('*, candidatas(*)').eq('id', entrevistaId).single();
   if(error || !e){ toast('No se pudo abrir la entrevista: '+(error?.message||'no existe'), 'bad'); return; }
   if(document.getElementById('editmodal')) cerrarModal();
@@ -601,18 +723,19 @@ async function seguirEntrevista(entrevistaId){
   poner('f-notas', e.notas);
   poner('f-capacitacion', e.borrador?.capacitacion);
   PSICO_IMGS.forEach(img=>{ const el = document.querySelector(`[data-psico="${img.id}"]`); if(el) el.value = e.psico?.[img.id] || ''; });
-  Object.entries(entrevistaState.competencias).forEach(([key, d])=>{
-    if(d?.score) document.querySelector(`[data-score="${key}:${d.score}"]`)?.classList.add('selected');
-    const notas = document.querySelector(`[data-notes="${key}"]`);
-    if(notas && d?.notes) notas.value = d.notes;
-  });
-  document.querySelectorAll('[data-flag]').forEach(el=>{ el.checked = !!entrevistaState.redflags[el.dataset.flag]; });
-  if(entrevistaState.explicacionJuegos) document.querySelector(`[data-juegos="${entrevistaState.explicacionJuegos}"]`)?.classList.add('selected');
-  calcular();
+  pintarEstadoEntrevista();
+  ofrecerBorradorEntrevista(e.actualizado_at);
 }
 function limpiarForm(){
-  entrevistaState = { competencias:{}, redflags:{}, refs:[], candidataId:null, fichaOrigen:null, tipo:'Niñera', explicacionJuegos:null, entrevistaId:null };
-  renderEntrevista(document.getElementById('rrhh-body'));
+  entrevistaState = estadoEntrevistaVacio();
+  return renderEntrevista(document.getElementById('rrhh-body'));
+}
+// "Vaciar formulario" (21/10/2026): arriba, lejos de Guardar, y preguntando. Antes estaba al
+// lado de "Guardar candidata" y borraba todo sin confirmar.
+async function vaciarFormularioEntrevista(){
+  if(!(await confirmarAccion('¿Vaciar la entrevista? Se borra todo lo que escribiste y no guardaste.', 'Vaciar'))) return;
+  borrarBorrador(claveBorradorEntrevista());
+  await limpiarForm();
 }
 
 /* ---- Candidatas guardadas ---- */

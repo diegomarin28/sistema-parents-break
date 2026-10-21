@@ -448,6 +448,7 @@ function abrirModalNuevaNinera(){
       <button class="btn primary" onclick="conGuardado(this, ()=>addNinera())">Agregar niñera</button>
     </div>`);
   setTimeout(()=>document.getElementById('nn-nombre')?.focus(), 30);
+  protegerModal('ninera:nueva');
 }
 async function addNinera(){
   const nombre = document.getElementById('nn-nombre').value.trim().replace(/\s+/g, ' ');
@@ -540,6 +541,7 @@ function editarNinera(id){
     const filaEdad = document.querySelector('#ed-extra-fields [data-campo="edad"]');
     if(filaEdad) filaEdad.closest('.field').remove();
   }
+  protegerModal('ninera:'+id); // borrador y aviso antes de cerrar con cambios (21/10/2026)
 }
 // Al cargar una fecha de nacimiento real, la fila de "Edad (texto viejo)" ya no aporta nada
 // -- se saca de la vista al toque (el guardado también la limpia en la base, más abajo).

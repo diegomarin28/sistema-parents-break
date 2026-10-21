@@ -76,6 +76,9 @@ function renderApp(){
     window.history.replaceState({}, '', window.location.pathname);
     moduloActivo = irParam;
   }
+  // Quedó una entrevista sin guardar hace poco (se recargó la página, se cerró la sesión): se
+  // abre directo ahí, con el aviso para seguirla (21/10/2026).
+  if(moduloActivo===null && hayBorradorEntrevistaReciente()){ moduloActivo = 'rrhh'; rrhhTab = 'entrevista'; }
   if(!zonaGruposCache) cargarZonaGrupos(); // las zonas se usan en casi todas las pantallas: se piden una sola vez al entrar
   cubrirHastaQueCargue(renderModulo());
   cargarNotificaciones();

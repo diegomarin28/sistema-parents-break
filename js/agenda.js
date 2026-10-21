@@ -1805,6 +1805,7 @@ function suscribirRealtimeModuloActivo(){
   rtChannel.subscribe();
 }
 function renderModulo(){
+  guardarBorradoresPendientes(); // lo último que se escribió queda en su borrador antes de redibujar
   renderSidebar();
   document.getElementById('modfooter').innerHTML = '';
   suscribirRealtimeModuloActivo();

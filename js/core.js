@@ -1040,6 +1040,9 @@ async function leerTodasLasFilas(armar){
    deshabilitado y con la ruedita hasta que el guardado termina (bien o mal), y un segundo
    toque mientras tanto no hace nada. La función de adentro tiene que devolver la promesa
    (async/await) para que el botón se libere recién al final. */
+// Cuántos guardados hay en curso: un modal que se cierra o se reemplaza mientras tanto es porque
+// se guardó, y su borrador ya no hace falta (protegerModal).
+let guardandoActivo = 0;
 async function conGuardado(btn, accion){
   if(btn && btn.dataset.guardando) return;
   let htmlAntes = null;
@@ -1053,9 +1056,11 @@ async function conGuardado(btn, accion){
     const texto = btn.textContent.trim();
     btn.innerHTML = `<span class="spinner${fondoOscuro?'':' dark'}"></span>${texto ? ' '+escaparHtml(texto) : ''}`;
   }
+  guardandoActivo++;
   try {
     return await accion();
   } finally {
+    guardandoActivo--;
     // Si el modal se cerró, el botón ya no está en pantalla y no hay nada que restaurar.
     if(btn && btn.isConnected){
       btn.innerHTML = htmlAntes;
@@ -1618,16 +1623,43 @@ function cerrarLightboxFoto(){
   setTimeout(()=>{ ov.remove(); }, 200); // recién ahí lo saca del todo, cuando terminó la animación
 }
 let modalToken = 0;
+// El fondo, la × y los "Cancelar" de un modal con cambios sin guardar preguntan antes de cerrar
+// (21/10/2026): un toque de más afuera de la caja borraba una ficha entera. Se intercepta en la
+// fase de captura, antes del onclick="cerrarModal()" del botón.
+function crearOverlayModal(){
+  const overlay = document.createElement('div');
+  overlay.className = 'confirmoverlay';
+  overlay.id = 'editmodal';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e)=>{
+    const boton = e.target.closest('button');
+    const esCerrar = e.target===overlay || (boton && boton.getAttribute('onclick')==='cerrarModal()');
+    if(!esCerrar) return;
+    e.stopPropagation(); e.preventDefault();
+    cerrarModalPreguntando();
+  }, true);
+  return overlay;
+}
+// Al abrir un modal encima de otro: si el de antes se estaba guardando, su borrador se borra; si
+// no, queda (se ofrece la próxima vez que se abra ese formulario).
+function soltarModalAnterior(overlay){
+  const clave = overlay.dataset.borrador;
+  if(clave && guardandoActivo > 0) borrarBorrador(clave);
+  delete overlay.dataset.borrador;
+  marcarSinCambios('modal');
+}
+async function cerrarModalPreguntando(){
+  if(formulariosConCambios.has('modal')
+     && !(await confirmarAccion('Tenés cambios sin guardar. Si cerrás, se pierden.', 'Cerrar sin guardar'))) return;
+  cerrarModal();
+}
 function abrirModal(html){
   modalToken++;
   let overlay = document.getElementById('editmodal');
   if(!overlay){
-    overlay = document.createElement('div');
-    overlay.className = 'confirmoverlay';
-    overlay.id = 'editmodal';
-    document.body.appendChild(overlay);
-    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) cerrarModal(); });
+    overlay = crearOverlayModal();
   }
+  soltarModalAnterior(overlay);
   overlay.innerHTML = `<div class="confirmbox wide"><button class="modal-close" onclick="cerrarModal()" aria-label="Cerrar">×</button>${html}</div>`;
   requestAnimationFrame(()=>overlay.classList.add('show'));
 }
@@ -1636,12 +1668,9 @@ function abrirModalConNodo(node, headerHtml=''){
   modalToken++;
   let overlay = document.getElementById('editmodal');
   if(!overlay){
-    overlay = document.createElement('div');
-    overlay.className = 'confirmoverlay';
-    overlay.id = 'editmodal';
-    document.body.appendChild(overlay);
-    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) cerrarModal(); });
+    overlay = crearOverlayModal();
   }
+  soltarModalAnterior(overlay);
   modalNodoOrigen = { node, parent: node.parentNode, next: node.nextSibling };
   const box = document.createElement('div');
   box.className = 'confirmbox wide';
@@ -1655,6 +1684,10 @@ function abrirModalConNodo(node, headerHtml=''){
 function cerrarModal(){
   const overlay = document.getElementById('editmodal');
   if(!overlay) return;
+  // Se cerró porque se guardó o porque se eligió no guardar: el borrador ya no sirve.
+  if(overlay.dataset.borrador) borrarBorrador(overlay.dataset.borrador);
+  delete overlay.dataset.borrador;
+  marcarSinCambios('modal');
   const myToken = modalToken;
   overlay.classList.remove('show');
   setTimeout(()=>{
@@ -1813,3 +1846,184 @@ const PSICO_IMGS = [
   {id:'p3', svg:`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#fff"/><path d="M100 15 L130 80 L190 90 L145 130 L160 190 L100 155 L40 190 L55 130 L10 90 L70 80 Z" fill="#52655A" opacity="0.8"/></svg>`},
 ];
 
+/* ============================================================
+   Que no se pierda lo escrito (21/10/2026). A Paulina y Delfina se les borró muchas veces la
+   entrevista: la página se recargaba (el botón "Actualizar" al volver de un rato, o el
+   navegador / el iPhone que descartan la pestaña en segundo plano), la sesión se cerraba desde
+   otro dispositivo, cambiaban de pestaña o de sección, o tocaban "Vaciar formulario". Desde acá:
+   - borrador en el dispositivo (localStorage) en cada cambio, por usuaria y por formulario, que
+     se ofrece al volver a abrir ese formulario ("Tenés un borrador de hace X minutos");
+   - registro de formularios con cambios sin guardar: el navegador avisa antes de cerrar o
+     recargar, "Actualizar" pregunta y los modales no se cierran sin preguntar.
+   El borrador se borra al guardar o al elegir descartarlo. Vence a los 14 días.
+   ============================================================ */
+const BORRADOR_PREFIJO = 'pb_borrador:';
+const BORRADOR_VIGENCIA_DIAS = 14;
+// La usuaria de la última sesión: al cerrarse la sesión todavía hay que guardar sus borradores.
+let ultimaUsuariaBorrador = null;
+function claveLocalBorrador(clave){
+  const usuaria = session?.user?.id || ultimaUsuariaBorrador || 'sin-sesion';
+  if(session?.user?.id) ultimaUsuariaBorrador = session.user.id;
+  return `${BORRADOR_PREFIJO}${usuaria}:${clave}`;
+}
+function leerBorrador(clave){
+  try{
+    const raw = localStorage.getItem(claveLocalBorrador(clave));
+    if(!raw) return null;
+    const b = JSON.parse(raw);
+    if(!b?.guardadoEl || Date.now() - new Date(b.guardadoEl).getTime() > BORRADOR_VIGENCIA_DIAS*864e5){
+      localStorage.removeItem(claveLocalBorrador(clave));
+      return null;
+    }
+    return b;
+  }catch(e){ return null; }
+}
+function escribirBorrador(clave, datos){
+  try{ localStorage.setItem(claveLocalBorrador(clave), JSON.stringify({ ...datos, guardadoEl: new Date().toISOString() })); return true; }
+  catch(e){ console.error('[borrador] no se pudo guardar en el dispositivo', e); return false; }
+}
+function borrarBorrador(clave){
+  cancelarBorradorPendiente(clave);
+  try{ localStorage.removeItem(claveLocalBorrador(clave)); }catch(e){}
+}
+// Si se empieza a escribir sin contestar "¿Recuperar?" / "¿Seguir?", lo nuevo no pisa el
+// borrador que se está ofreciendo: ese se aparta a otra clave (con la misma fecha) y el aviso
+// sigue apuntándole. Devuelve la clave nueva.
+function apartarBorrador(clave){
+  cancelarBorradorPendiente(clave);
+  try{
+    const raw = localStorage.getItem(claveLocalBorrador(clave));
+    if(!raw) return null;
+    const nueva = `${clave}~${Date.now()}`;
+    localStorage.setItem(claveLocalBorrador(nueva), raw);
+    localStorage.removeItem(claveLocalBorrador(clave));
+    return nueva;
+  }catch(e){ return null; }
+}
+// Borradores de esta usuaria cuya clave empieza con `prefijo`, el más nuevo primero.
+function borradoresQueEmpiezanCon(prefijo){
+  const base = claveLocalBorrador(prefijo);
+  const lista = [];
+  try{
+    for(let i=0; i<localStorage.length; i++){
+      const k = localStorage.key(i);
+      if(!k || !k.startsWith(base)) continue;
+      const clave = prefijo + k.slice(base.length);
+      const datos = leerBorrador(clave);
+      if(datos) lista.push({ clave, datos });
+    }
+  }catch(e){}
+  return lista.sort((a,b)=>String(b.datos.guardadoEl).localeCompare(String(a.datos.guardadoEl)));
+}
+// Escrituras con una pausa corta (cada tecla no escribe), que se fuerzan antes de cambiar de
+// sección, al irse a segundo plano o al cerrar la página.
+const borradoresPendientes = new Map();
+function programarBorrador(clave, armar, ms=400){
+  cancelarBorradorPendiente(clave);
+  const escribir = ()=>{ borradoresPendientes.delete(clave); const datos = armar(); if(datos) escribirBorrador(clave, datos); };
+  borradoresPendientes.set(clave, { timer: setTimeout(escribir, ms), escribir });
+}
+function cancelarBorradorPendiente(clave){
+  const p = borradoresPendientes.get(clave);
+  if(p){ clearTimeout(p.timer); borradoresPendientes.delete(clave); }
+}
+function guardarBorradoresPendientes(){
+  [...borradoresPendientes.values()].forEach(p=>{ clearTimeout(p.timer); p.escribir(); });
+}
+// Formularios con cambios sin guardar ('entrevista', 'modal').
+const formulariosConCambios = new Set();
+function marcarConCambios(clave){ formulariosConCambios.add(clave); }
+function marcarSinCambios(clave){ formulariosConCambios.delete(clave); }
+function hayCambiosSinGuardar(){ return formulariosConCambios.size > 0; }
+window.addEventListener('beforeunload', (e)=>{
+  guardarBorradoresPendientes();
+  if(hayCambiosSinGuardar()){ e.preventDefault(); e.returnValue = ''; }
+});
+window.addEventListener('pagehide', guardarBorradoresPendientes);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') guardarBorradoresPendientes(); });
+function textoHaceCuanto(iso){
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime())/60000));
+  if(min < 1) return 'hace un momento';
+  if(min < 60) return `hace ${min} minuto${min===1?'':'s'}`;
+  const h = Math.round(min/60);
+  if(h < 24) return `hace ${h} hora${h===1?'':'s'}`;
+  const d = Math.round(h/24);
+  return `hace ${d} día${d===1?'':'s'}`;
+}
+// Lo cargado en un formulario: cada campo con id (sin archivos, contraseñas ni campos
+// deshabilitados) y las zonas de cada checklist de zonas. Alcanza para las fichas, el registro
+// de sittings y la entrevista (que suma lo suyo sin id: psicotécnico, notas y puntajes).
+function leerCamposFormulario(cont){
+  const campos = {}, zonas = {};
+  cont.querySelectorAll('input[id], textarea[id], select[id]').forEach(el=>{
+    if(el.disabled || ['file','password','hidden','button','submit'].includes(el.type)) return;
+    campos[el.id] = (el.type==='checkbox' || el.type==='radio') ? el.checked : el.value;
+  });
+  cont.querySelectorAll('[id$="-zonas-checklist"]').forEach(c=>{
+    const prefijo = c.id.slice(0, -'-zonas-checklist'.length);
+    zonas[prefijo] = leerZonasChecklist(prefijo);
+  });
+  return { campos, zonas };
+}
+// Vuelve a poner lo leído. Avisa a cada campo como si se hubiera escrito (input y change), así
+// lo que depende de él se recalcula (la familia del registro, la edad, el precio); con
+// avisar=false solo pone los valores (redibujar una parte sin que cuente como un cambio).
+function ponerCamposFormulario(cont, { campos={}, zonas={} }={}, avisar=true){
+  Object.entries(zonas).forEach(([prefijo, valor])=>{
+    if(cont.querySelector(`#${CSS.escape(prefijo)}-zonas-field`)) setZonasChecklist(prefijo, valor);
+  });
+  Object.entries(campos).forEach(([id, valor])=>{
+    const el = cont.querySelector('#'+CSS.escape(id));
+    if(!el || el.disabled) return;
+    if(el.type==='checkbox' || el.type==='radio') el.checked = !!valor; else el.value = valor ?? '';
+    if(!avisar) return;
+    el.dispatchEvent(new Event('input', { bubbles:true }));
+    el.dispatchEvent(new Event('change', { bubbles:true }));
+  });
+}
+// Un modal largo (ficha de niñera o de familia, registro de sitting) con borrador propio. Se
+// llama después de abrirlo y precargarlo. Si quedó un borrador de ese mismo formulario (se
+// recargó la página o se cayó la sesión con cambios sin guardar), se ofrece recuperarlo.
+function protegerModal(clave){
+  const overlay = document.getElementById('editmodal');
+  const box = overlay?.querySelector('.confirmbox');
+  if(!box) return;
+  overlay.dataset.borrador = clave;
+  const previo = leerBorrador(clave);
+  if(previo){
+    const aviso = document.createElement('div');
+    aviso.className = 'borrador-aviso'; aviso.id = 'modal-borrador-aviso'; aviso.setAttribute('role', 'status');
+    aviso.dataset.clave = clave;
+    aviso.innerHTML = `<div>Quedaron cambios sin guardar de ${textoHaceCuanto(previo.guardadoEl)}.</div>
+      <div class="borrador-botones"><button type="button" class="btn primary" onclick="recuperarBorradorModal()">Recuperar</button>
+      <button type="button" class="btn ghost" onclick="descartarBorradorModal()">Descartar</button></div>`;
+    box.insertBefore(aviso, box.querySelector('.modal-close')?.nextSibling || box.firstChild);
+  }
+  const alCambiar = (e)=>{
+    if(overlay.dataset.borrador!==clave || e.target.closest('#modal-borrador-aviso')) return;
+    const aviso = document.getElementById('modal-borrador-aviso');
+    if(aviso && aviso.dataset.clave===clave) aviso.dataset.clave = apartarBorrador(clave) || clave;
+    marcarConCambios('modal');
+    programarBorrador(clave, ()=>leerCamposFormulario(box));
+  };
+  box.addEventListener('input', alCambiar);
+  box.addEventListener('change', alCambiar);
+}
+function recuperarBorradorModal(){
+  const overlay = document.getElementById('editmodal');
+  const aviso = document.getElementById('modal-borrador-aviso');
+  const clave = aviso?.dataset.clave;
+  const b = clave ? leerBorrador(clave) : null;
+  aviso?.remove();
+  if(!b){ toast('Ese borrador ya no está.', 'bad'); return; }
+  ponerCamposFormulario(overlay.querySelector('.confirmbox'), b);
+  if(clave !== overlay.dataset.borrador) borrarBorrador(clave); // lo recuperado ya se guarda con la clave del formulario
+  toast('Listo: recuperaste lo que no se había guardado. Revisalo y tocá Guardar.');
+}
+async function descartarBorradorModal(){
+  const aviso = document.getElementById('modal-borrador-aviso');
+  const clave = aviso?.dataset.clave;
+  if(!(await confirmarAccion('¿Descartar los cambios que no se guardaron?', 'Descartar'))) return;
+  if(clave) borrarBorrador(clave);
+  aviso?.remove();
+}

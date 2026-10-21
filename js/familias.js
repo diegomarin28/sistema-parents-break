@@ -50,6 +50,7 @@ function abrirModalNuevaFamilia(){
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="conGuardado(this, ()=>addFamilia())">Agregar familia</button>
     </div>`);
+  protegerModal('familia:nueva');
 }
 // Términos y condiciones al dar de alta (20/10/2026): la casilla solo aparece si la base ya
 // tiene la columna (con la base sin migrar, familias no la trae).
@@ -435,6 +436,7 @@ function editarFamilia(id){
       <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn primary" onclick="conGuardado(this, ()=>guardarEdicionFamilia(${argJs(id)}))">Guardar</button>
     </div>`);
+  protegerModal('familia:'+id); // borrador y aviso antes de cerrar con cambios (21/10/2026)
 }
 async function guardarEdicionFamilia(id){
   const cambios = {
