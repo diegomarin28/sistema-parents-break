@@ -272,6 +272,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   temporada, temporada por quincenas, "Dijo que no va", Montevideo sin temporada aparte, la zona
   escrita en el buscador, 390 px).
 - `tests/modo-claro.spec.js`: con el aparato en modo oscuro, Hoy, Postulantes y Finanzas se ven claros.
+- `tests/cierre-fijos.spec.js`: "Cierre de los fijos" en Hoy (Sí, terminó / Otra hora con entrada y fin que
+  recalcula con la tarifa y los términos, medianoche, ya cobrado, otra admin, base que falla, traslado, 390 px).
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).

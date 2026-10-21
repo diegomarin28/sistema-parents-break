@@ -494,7 +494,7 @@ async function abrirFichaDesdeHoy(tipo, id){
 /* Confirmados automáticamente (fijos automáticos, 06/10/2026): los días de los fijos se
    confirman solos cuando llegan. Acá queda una lista corta de los que ya pasaron y nadie
    miró todavía (ayer, o los últimos días si no entraron), para revisarlos de un vistazo y
-   marcar "no fue" o el reemplazo si hace falta. "Bien" los saca de la lista. */
+   marcar "no fue", otra hora o el reemplazo si hace falta. "Sí" los saca de la lista. */
 let dashAutoConfirmados = [];
 async function cargarConfirmadosAutomaticos(){
   const box = document.getElementById('dash-autoconf');
@@ -508,19 +508,25 @@ async function cargarConfirmadosAutomaticos(){
   dashAutoConfirmados = data || [];
   if(!dashAutoConfirmados.length){ box.innerHTML = ''; return; }
   const fmt = iso => new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'short',day:'2-digit',month:'2-digit'});
+  const hhmm = h => escaparHtml(String(h||'').slice(0,5));
+  const plata = n => '$'+Number(n||0).toLocaleString('es-UY');
+  // Cierre de los fijos (21/10/2026, de las maquetas): en vez de un "Bien" genérico, la pregunta
+  // concreta "¿Terminó a las 19:00?". "Otra hora" deja cambiar la hora de entrada y la de fin, y
+  // recalcula el precio con la tarifa.
   box.innerHTML = `<div class="card autoconf-card">
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
-      <h2 style="margin:0;">Fijos confirmados automáticamente</h2>
-      <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoRevisados(dashAutoConfirmados.map(r=>r.id)))">Todo bien</button>
+      <h2 style="margin:0;">Cierre de los fijos</h2>
+      <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoRevisados(dashAutoConfirmados.map(r=>r.id)))">Sí a todos</button>
     </div>
-    <div class="helper" style="margin:4px 0 8px;">Se cargaron solos. Si alguno no fue o fue otra niñera, corregilo; si está bien, tocá "Bien".</div>
+    <div class="helper" style="margin:4px 0 8px;">Se cargaron solos con el horario previsto. Confirmá cómo fue cada uno.</div>
     ${dashAutoConfirmados.map(r=>`<div class="autoconf-fila" data-autoconf="${escaparHtml(r.id)}">
       <div class="autoconf-txt">
-        <div><b>${fmt(r.fecha)}</b> · ${escaparHtml(r.familia_nombre)} · ${escaparHtml(r.ninera_nombre)}</div>
-        <div class="helper" style="margin:2px 0 0;">${r.tipo==='traslado'?'Traslado':'Sitting'} · ${escaparHtml((r.hora_inicio||'').slice(0,5))}${r.hora_fin?'–'+escaparHtml(r.hora_fin.slice(0,5)):''} · cobro $${Number(r.cobro_familia||0).toLocaleString('es-UY')}</div>
+        <div><b>${fmt(r.fecha)}</b> · ${escaparHtml(r.ninera_nombre)} en ${escaparHtml(r.familia_nombre)}</div>
+        <div class="helper" style="margin:2px 0 0;">${r.tipo==='traslado'?'Traslado':'Sitting'} previsto ${hhmm(r.hora_inicio)}${r.hora_fin?'–'+hhmm(r.hora_fin):''} · cobro ${plata(r.cobro_familia)} · pago ${plata(r.pago_ninera)}.${r.hora_fin?` ¿Terminó a las ${hhmm(r.hora_fin)}?`:''}</div>
       </div>
       <div class="autoconf-btns">
-        <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoRevisados([${argJs(r.id)}]))">Bien</button>
+        <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoRevisados([${argJs(r.id)}]))">${r.hora_fin ? `Sí, terminó ${hhmm(r.hora_fin)}` : 'Sí, fue así'}</button>
+        <button class="smallbtn" onclick="abrirOtraHoraAuto(${argJs(r.id)})">Otra hora</button>
         <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoNoFue(${argJs(r.id)}))">No fue</button>
         <button class="smallbtn" onclick="abrirReemplazoAuto(${argJs(r.id)})">Fue otra</button>
       </div>
@@ -544,6 +550,85 @@ async function marcarAutoNoFue(id){
     notas: `${r.ninera_nombre} no fue — sin reemplazo`,
   }).eq('id', id), 'el cambio'))) return;
   toast('Listo: ese día no fue nadie.');
+  await cargarConfirmadosAutomaticos();
+}
+/* "Otra hora" (21/10/2026): la hora de entrada y la de fin reales de ese día. En un sitting, el
+   cobro y el pago se recalculan con la tarifa de la familia y las reglas de siempre
+   (precioSegunHorario: términos y redondeo); en un traslado solo cambia la hora. */
+let dashOtraHoraFamilia = null;
+async function abrirOtraHoraAuto(id){
+  const r = dashAutoConfirmados.find(x=>x.id===id);
+  if(!r) return;
+  if(r.cobrado || r.pagado){ toast('Ese día ya está marcado como cobrado o pagado: corregilo desde Sittings & traslados.', 'bad'); return; }
+  dashOtraHoraFamilia = null;
+  if(r.tipo!=='traslado' && r.familia_id){
+    // Sin la tarifa se guardaría la hora nueva con el precio viejo: mejor no abrir.
+    const { data, error } = await leerFamiliasConTerminos('id,nombre,cobro_hora,pago_hora', q=>q.eq('id', r.familia_id));
+    if(error){ toast('No se pudo leer la tarifa de la familia. Probá de nuevo.', 'bad'); return; }
+    dashOtraHoraFamilia = (data||[])[0] || null;
+  }
+  const esSitting = r.tipo!=='traslado';
+  abrirModal(`
+    <h2 style="margin:0 0 4px;padding-right:32px;">¿A qué hora fue?</h2>
+    <div class="helper" style="margin-bottom:12px;">${escaparHtml(r.ninera_nombre)} en ${escaparHtml(r.familia_nombre)} · ${new Date(r.fecha+'T12:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'})}. Previsto ${escaparHtml(String(r.hora_inicio||'').slice(0,5))}${r.hora_fin?'–'+escaparHtml(r.hora_fin.slice(0,5)):''}.</div>
+    <div class="grid2">
+      <div class="field"><label>${esSitting ? 'Entró a las' : 'Hora'}</label>${selectHora('autoconf-hi')}</div>
+      ${esSitting ? `<div class="field"><label>Terminó a las</label>${selectHora('autoconf-hf')}</div>` : ''}
+    </div>
+    ${esSitting ? `<label class="chk" style="margin:0 0 8px;"><input type="checkbox" id="autoconf-cruza" ${r.termina_dia_siguiente?'checked':''}> Termina al día siguiente</label>` : ''}
+    <div id="autoconf-precio" class="helper" style="margin:4px 0 0;"></div>
+    <div id="autoconf-warn"></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarOtraHoraAuto(${argJs(id)}))">Guardar</button>
+    </div>`);
+  setHoraSelect('autoconf-hi', r.hora_inicio||'');
+  if(esSitting) setHoraSelect('autoconf-hf', r.hora_fin||'');
+  const box = document.querySelector('#editmodal .confirmbox');
+  box?.addEventListener('change', ()=>pintarPrecioOtraHoraAuto(r));
+  pintarPrecioOtraHoraAuto(r);
+}
+// Lo que se va a guardar: horas y, en un sitting con tarifa, el precio recalculado. Si el
+// horario no sirve, `error` dice por qué.
+function otraHoraAutoElegida(r){
+  const hi = leerHora('autoconf-hi');
+  if(!hi) return { error: 'Elegí la hora.' };
+  if(r.tipo==='traslado') return { cambios: { hora_inicio: hi } };
+  const hf = leerHora('autoconf-hf');
+  const cruza = document.getElementById('autoconf-cruza')?.checked || false;
+  if(!hf) return { error: 'Elegí a qué hora terminó.' };
+  if(!cruza && hf<=hi) return { error: 'La hora de fin tiene que ser después de la de entrada. Si terminó pasada la medianoche, marcá "Termina al día siguiente".' };
+  if(cruceMedianocheMalMarcado(hi, hf, cruza)) return { error: AVISO_CRUCE_MEDIANOCHE };
+  const cambios = { hora_inicio: hi, hora_fin: hf, termina_dia_siguiente: cruza };
+  const calc = dashOtraHoraFamilia ? precioSegunHorario(dashOtraHoraFamilia, hi, hf, cruza, r.fecha) : {};
+  if(calc.cobro!=null) cambios.cobro_familia = calc.cobro;
+  if(calc.pago!=null) cambios.pago_ninera = calc.pago;
+  return { cambios };
+}
+function pintarPrecioOtraHoraAuto(r){
+  const box = document.getElementById('autoconf-precio');
+  if(!box) return;
+  const { cambios, error } = otraHoraAutoElegida(r);
+  if(error || r.tipo==='traslado'){ box.textContent = ''; return; }
+  const plata = n => '$'+Number(n||0).toLocaleString('es-UY');
+  box.textContent = cambios.cobro_familia!=null || cambios.pago_ninera!=null
+    ? `Queda: cobro ${plata(cambios.cobro_familia ?? r.cobro_familia)} · pago ${plata(cambios.pago_ninera ?? r.pago_ninera)}.`
+    : 'La familia no tiene tarifa por hora: el precio queda como estaba.';
+}
+async function guardarOtraHoraAuto(id){
+  const r = dashAutoConfirmados.find(x=>x.id===id);
+  const warn = document.getElementById('autoconf-warn');
+  if(!r) return;
+  const { cambios, error: problema } = otraHoraAutoElegida(r);
+  if(problema){ warn.innerHTML = `<div class="warnbox">${escaparHtml(problema)}</div>`; return; }
+  // Solo si sigue sin cobrar ni pagar (si otra admin lo marcó mientras tanto, no se toca).
+  const { data, error } = await sb.from('sittings_traslados')
+    .update({ ...cambios, generado_automatico: false, revisado_at: new Date().toISOString() })
+    .eq('id', id).eq('cobrado', false).eq('pagado', false).select('id');
+  if(error){ warn.innerHTML = errBox(error); return; }
+  if(!data || !data.length){ warn.innerHTML = '<div class="warnbox">No se guardó: mientras tanto alguien lo marcó como cobrado o pagado. Corregilo desde Sittings &amp; traslados.</div>'; return; }
+  cerrarModal();
+  toast('Listo: quedó con el horario real.');
   await cargarConfirmadosAutomaticos();
 }
 let dashReemplazoSel = null;
