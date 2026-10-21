@@ -6,7 +6,8 @@
 //   - redondear_pago y redondear_cobro: montos con centavos y bordes de ,5;
 //   - generar_previstos_fijos: fijos inventados de todos los días (horarios cualquiera, algunos
 //     después de medianoche, tarifas con centavos, con y sin términos) y el cobro y el pago de
-//     cada día que crea.
+//     cada día que crea;
+//   - precio_sitting (pedido desde WhatsApp): las mismas familias con otros horarios.
 // Se vuelve a generar cuando cambia el oráculo o el generador (tests/red-plata.spec.js avisa):
 //   node scripts/paridad-plata-sql.js
 // El .sql se corre en un Postgres LOCAL (nunca en producción), como las otras pruebas.
@@ -18,6 +19,7 @@ const { SEMILLA_FIJA, crearAzar, casoMonto, TARIFAS, hhmm } = require('../tests/
 const DESTINO = path.join(__dirname, '..', 'supabase', 'pruebas', 'paridad_plata.sql');
 const FIJOS = 150;
 const MONTOS = 800;
+const PRECIOS = 300;
 
 function generarSQL() {
   const O = crearOraculoPlata();
@@ -83,7 +85,7 @@ select pg_temp.verificar('redondear_cobro igual a la app en ' || (select count(*
   // ---- 3) generar_previstos_fijos: un fijo por familia, todos los días; lo que crea tiene que
   // cobrar y pagar lo mismo que la app con ese horario y esa tarifa. Los términos van en una
   // fecha muy vieja (siempre redondea) o muy lejana (nunca), así no depende de qué día se corra.
-  const familias = [], ninieras = [], asignaciones = [], esperados = [];
+  const familias = [], ninieras = [], asignaciones = [], esperados = [], tarifas = [];
   for (let i = 1; i <= FIJOS; i++) {
     const idF = `f1000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
     const idN = `e1000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
@@ -93,6 +95,7 @@ select pg_temp.verificar('redondear_cobro igual a la app en ' || (select count(*
     const ini = az.entero(0, 1439);
     const fin = az.si(0.15) ? az.entero(0, ini) : (ini + az.entero(1, 600)) % 1440; // a veces termina pasada la medianoche
     const horas = O.horasSitting(hhmm(ini), hhmm(fin), fin <= ini, { terminos_aceptados_el: terminos }, '2026-10-22');
+    tarifas.push({ id: idF, cobro_hora: cobroH, pago_hora: pagoH, terminos_aceptados_el: terminos });
     familias.push(`('${idF}', 'Familia Paridad ${i}', ${cobroH}, ${pagoH}, ${terminos ? `'${terminos}'` : 'null'})`);
     ninieras.push(`('${idN}', 'Niñera Paridad ${i}')`);
     asignaciones.push(`('${idA}', '${idF}', '${idN}', 'Niñera Paridad ${i}', '["L","M","X","J","V","S","D"]', '${hhmm(ini)}', '${hhmm(fin)}', current_date - 30, 'sitting')`);
@@ -117,6 +120,31 @@ select pg_temp.verificar('generar_previstos_fijos cobra y paga igual que la app 
                            where s.cobro_familia <> e.cobro or s.pago_ninera <> e.pago limit 5) x), ''),
   not exists (select 1 from sittings_traslados s join _esperado e using (asignacion_id)
               where s.cobro_familia <> e.cobro or s.pago_ninera <> e.pago));
+`);
+
+  // ---- 4) precio_sitting: el precio estimado del pedido desde WhatsApp, con las mismas familias
+  // y otros horarios, contra precioSegunHorario (sittings.js).
+  const precios = [];
+  for (let i = 0; i < PRECIOS; i++) {
+    const fam = tarifas[i % tarifas.length];
+    const ini = az.entero(0, 1439);
+    const fin = az.si(0.15) ? az.entero(0, ini) : (ini + az.entero(1, 600)) % 1440;
+    const p = O.precioSegunHorario(fam, hhmm(ini), hhmm(fin), fin <= ini, '2026-10-22');
+    precios.push(`('${fam.id}'::uuid, '${hhmm(ini)}'::time, '${hhmm(fin)}'::time, ${p.cobro ?? 'null'}::numeric, ${p.pago ?? 'null'}::numeric)`);
+  }
+  sql(`-- 4) precio_sitting = precioSegunHorario (sittings.js) en ${PRECIOS} horarios.
+create temporary table _precio (familia_id uuid, ini time, fin time, cobro numeric, pago numeric);
+insert into _precio values
+${valores(precios, 2)};
+select pg_temp.verificar('precio_sitting igual a la app en ' || (select count(*) from _precio) || ' horarios'
+  || coalesce(': ' || (select string_agg(x.ini || '-' || x.fin || ' da ' || coalesce(x.c::text, 'vacío') || '/' || coalesce(x.p::text, 'vacío')
+                          || ' (app ' || coalesce(x.cobro::text, 'vacío') || '/' || coalesce(x.pago::text, 'vacío') || ')', ', ')
+                     from (select e.ini, e.fin, e.cobro, e.pago, r.cobro c, r.pago p from _precio e
+                           cross join lateral public.precio_sitting(e.familia_id, '2026-10-22', e.ini, e.fin) r
+                           where r.cobro is distinct from e.cobro or r.pago is distinct from e.pago limit 5) x), ''),
+  not exists (select 1 from _precio e cross join lateral public.precio_sitting(e.familia_id, '2026-10-22', e.ini, e.fin) r
+              where r.cobro is distinct from e.cobro or r.pago is distinct from e.pago)
+  and (select count(*) from _precio e cross join lateral public.precio_sitting(e.familia_id, '2026-10-22', e.ini, e.fin) r) = ${PRECIOS});
 
 rollback;
 `);
@@ -125,6 +153,6 @@ rollback;
 
 if (require.main === module) {
   fs.writeFileSync(DESTINO, generarSQL());
-  console.log(`Generada ${path.relative(path.join(__dirname, '..'), DESTINO)}: 2880 minutos, ${MONTOS} montos, ${FIJOS} fijos.`);
+  console.log(`Generada ${path.relative(path.join(__dirname, '..'), DESTINO)}: 2880 minutos, ${MONTOS} montos, ${FIJOS} fijos, ${PRECIOS} precios.`);
 }
 module.exports = { generarSQL };

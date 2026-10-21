@@ -200,7 +200,11 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   con la regla escrita: ~2.000 horarios (con barridos minuto a minuto), 1.600 montos y precios, 400
   meses de resumen y 400 bases chicas de Por cobrar / Por pagar en miércoles, sábado, domingo y lunes,
   y 60 pantallas de Finanzas. La base, contra el mismo oráculo: `supabase/pruebas/paridad_plata.sql`
-  (2.880 minutos, 800 montos y 450 días de fijos; Postgres local).
+  (2.880 minutos, 800 montos, 450 días de fijos y 300 precios de `precio_sitting`; Postgres local).
+- `supabase/pruebas/pedidos_whatsapp.sql`: la tabla del pedido desde WhatsApp (estados, límites,
+  política) y `precio_sitting()` con casos a mano. `supabase/functions/pedido-whatsapp/ticket_test.ts`:
+  la Edge Function con el modelo simulado (Deno, desde una copia fuera del repo:
+  `npx deno@2 test --allow-env <copia>/pedido-whatsapp/`).
 - `tests/errores-plata.spec.js`: errores de plata de la auditoría del 21/10/2026: "Termina al día
   siguiente" mal marcado (Sittings, Agenda, día de un fijo y reemplazo), editar un movimiento sin
   pisar cobrado / pagado de la otra, asignar un pedido que ya asignó otra o cuando falla guardar,
@@ -232,10 +236,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   todo apagado sin la marca. La función de la base se prueba aparte en Postgres local:
   `supabase/pruebas/fijos_automaticos.sql` y, con el "hoy" fijado a mano (fin de mes y de
   año, pausas entre semanas, cambios desde una fecha), `fijos_automaticos_bordes.sql`
-  (nunca en producción). Si no hay Postgres instalado: PGlite (`npm i @electric-sql/pglite` en
-  una carpeta fuera del repo), creando antes los roles anon/authenticated/service_role y
-  esquemas auth, storage y cron de mentira (con `auth.uid()`, `cron.schedule()`, `net.http_post()` y
-  la publicación `supabase_realtime`), y sacando los `create extension` de schema.sql.
+  (nunca en producción). Si no hay Postgres instalado: PGlite, con `scripts/probar-sql.mjs`
+  (instrucciones adentro): `PGLITE_DIR=<carpeta con pglite> node scripts/probar-sql.mjs
+  supabase/pruebas/*.sql`. Arma lo mínimo de Supabase de mentira y una base nueva por archivo;
+  con `--schema` y `--migracion` prueba una migración sobre el schema de main.
 - `tests/saldo.spec.js`: saldo a favor (ajustes) en Por pagar / Por cobrar, al marcar pagado o
   cobrado, en la ficha, en el PDF y con la base sin la tabla.
 - `tests/gastos-extra.spec.js`: gastos extra con ticket en el formulario, en Por cobrar / Por
@@ -307,6 +311,11 @@ reporte.
   verifica la firma de Meta (WHATSAPP_APP_SECRET).
 - Para revisarlas: `npx deno@2 check` desde una carpeta fuera del repo (el package.json de la
   raíz confunde a Deno).
+- pedido-whatsapp (21/10/2026) es la primera que llama la app: valida adentro la sesión de la
+  admin y `es_usuaria_autorizada()` (sin eso, 401/403), responde CORS a `ORIGENES_PERMITIDOS`
+  (por defecto GitHub Pages y localhost) y usa `ANTHROPIC_API_KEY` (Secrets) con
+  `claude-haiku-5-5`. La lógica va en `ticket.ts`, sin red, para poder probarla con el modelo
+  simulado; `index.ts` solo conecta la base y la API.
 
 ## Convenciones
 - UI y comentarios en español rioplatense (voseo). Los comentarios explican el porqué y
@@ -405,7 +414,8 @@ reporte.
   ficha o en el alta). Desde ese día el fin de cada sitting se COBRA a la media hora siguiente con 5 min de
   tolerancia (17:05 → 17:00, 17:36 → 18:00); el inicio no se redondea y el pago a la niñera va
   siempre con la hora real. Todo cobro por hora pasa por `horasSitting()` (core.js); en la base,
-  por `minutos_fin_cobro()` (generar_previstos_fijos): si cambia la regla, cambian las dos. Las
+  por `minutos_fin_cobro()` (generar_previstos_fijos y `precio_sitting()`): si cambia la regla,
+  cambian todas (las prueba `supabase/pruebas/paridad_plata.sql`). Las
   familias que se usan para cobrar se leen con `leerFamiliasConTerminos()` (anda sin la columna).
 - Montos sin centavos (21/10/2026): todo pago a una niñera que sale de una cuenta (horas por
   tarifa, total de Por pagar, "Copiar monto", confirmación) pasa por `redondearPago()`: ,5 o menos
@@ -474,6 +484,10 @@ descartado (19/10/2026): no proponerlo de nuevo.
   vez; el orden se cambia desde la app. Botón "Copiar mensaje para niñeras" (lista de difusión).
   Son 4 a 6 pedidos por semana: por ahora no hace falta la API de WhatsApp. Va después del PR 0
   del rediseño, como tarjeta de Hoy y en el "+" (`docs/rediseno-panel.md`, 4.3 y 5).
+  Hecha la parte de atrás (21/10/2026): Edge Function `pedido-whatsapp` (texto pegado → ticket con
+  Claude Haiku, precio con `precio_sitting()`) y tabla `pedidos_whatsapp` (borrador, confirmado,
+  descartado). Falta: la pantalla, las niñeras sugeridas, el mensaje para niñeras y que confirmar
+  cree la solicitud.
 - Mensajes editables (20/10/2026): todo mensaje que se copia o abre WhatsApp tiene "Editar" antes
   de mandarlo y la opción de guardarlo como plantilla.
 - Mercado Pago automático (20/10/2026): van a usar todo Mercado Pago (cobros y pagos). Objetivo:

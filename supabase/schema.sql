@@ -392,6 +392,42 @@ create table public.notificaciones_leidas (
   constraint notificaciones_leidas_pkey PRIMARY KEY (notif_id, usuario)
 );
 
+-- Pedido desde WhatsApp (21/10/2026): ticket armado por la Edge Function pedido-whatsapp.
+create table public.pedidos_whatsapp (
+  id uuid default gen_random_uuid() not null,
+  creado_el timestamp with time zone default now() not null,
+  creado_por text,
+  texto text not null,
+  estado text default 'borrador'::text not null,
+  tipo text,
+  familia_id uuid,
+  familia_texto text,
+  servicio text,
+  fecha date,
+  hora_inicio time without time zone,
+  hora_fin time without time zone,
+  termina_dia_siguiente boolean default false not null,
+  horario_aproximado boolean default false not null,
+  horario_nota text,
+  chicos_cantidad integer,
+  chicos_edades text,
+  zona text,
+  notas text,
+  dudas jsonb default '[]'::jsonb not null,
+  cobro_estimado numeric,
+  pago_estimado numeric,
+  solicitud_id uuid,
+  modelo text,
+  respuesta jsonb,
+  tokens_entrada integer,
+  tokens_salida integer,
+  constraint pedidos_whatsapp_pkey PRIMARY KEY (id),
+  constraint pedidos_whatsapp_texto_check CHECK ((char_length(texto) between 1 and 6000)),
+  constraint pedidos_whatsapp_estado_check CHECK ((estado = ANY (ARRAY['borrador'::text, 'confirmado'::text, 'descartado'::text]))),
+  constraint pedidos_whatsapp_tipo_check CHECK ((tipo = ANY (ARRAY['pedido_nuevo'::text, 'cambio'::text, 'cancelacion'::text, 'otra_cosa'::text]))),
+  constraint pedidos_whatsapp_servicio_check CHECK ((servicio = ANY (ARRAY['sitting'::text, 'traslado'::text]))),
+  constraint pedidos_whatsapp_chicos_check CHECK ((chicos_cantidad between 1 and 12))
+);
 create table public.push_subscriptions (
   id uuid default gen_random_uuid() not null,
   usuario text not null,
@@ -686,6 +722,8 @@ alter table public.sittings_traslados add constraint sittings_traslados_ninera_i
 alter table public.solicitud_ninieras add constraint solicitud_ninieras_ninera_id_fkey FOREIGN KEY (ninera_id) REFERENCES ninieras(id) ON DELETE SET NULL;
 alter table public.solicitud_ninieras add constraint solicitud_ninieras_solicitud_id_fkey FOREIGN KEY (solicitud_id) REFERENCES solicitudes(id) ON DELETE CASCADE;
 alter table public.solicitudes add constraint solicitudes_familia_id_fkey FOREIGN KEY (familia_id) REFERENCES familias(id) ON DELETE SET NULL;
+alter table public.pedidos_whatsapp add constraint pedidos_whatsapp_familia_id_fkey FOREIGN KEY (familia_id) REFERENCES familias(id) ON DELETE SET NULL;
+alter table public.pedidos_whatsapp add constraint pedidos_whatsapp_solicitud_id_fkey FOREIGN KEY (solicitud_id) REFERENCES solicitudes(id) ON DELETE SET NULL;
 
 -- ----------------------------------------------------------------------------
 -- Índices (además de los de las claves primarias y únicas)
@@ -727,6 +765,9 @@ CREATE INDEX idx_solicitud_ninieras_ninera_id ON public.solicitud_ninieras USING
 CREATE INDEX idx_solicitud_ninieras_solicitud_id ON public.solicitud_ninieras USING btree (solicitud_id);
 CREATE INDEX idx_solicitudes_familia_id ON public.solicitudes USING btree (familia_id);
 CREATE INDEX idx_solicitudes_fecha ON public.solicitudes USING btree (fecha);
+CREATE INDEX pedidos_whatsapp_creado_el_idx ON public.pedidos_whatsapp USING btree (creado_el DESC);
+CREATE INDEX pedidos_whatsapp_familia_id_idx ON public.pedidos_whatsapp USING btree (familia_id);
+CREATE INDEX pedidos_whatsapp_solicitud_id_idx ON public.pedidos_whatsapp USING btree (solicitud_id);
 
 -- ----------------------------------------------------------------------------
 -- Row Level Security: todas las tablas con RLS. Las que no tienen política
@@ -758,6 +799,7 @@ alter table public.ninieras enable row level security;
 alter table public.notif_push_enviadas enable row level security;
 alter table public.notif_push_preferencias enable row level security;
 alter table public.notificaciones_leidas enable row level security;
+alter table public.pedidos_whatsapp enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.resenas_ninieras enable row level security;
 alter table public.respaldo_asignaciones_20261005 enable row level security;
@@ -876,6 +918,8 @@ create policy notif_push_preferencias_authenticated_all on public.notif_push_pre
 create policy notificaciones_leidas_authenticated_all on public.notificaciones_leidas as permissive for all to authenticated
   using ((select public.es_usuaria_autorizada()))
   with check ((select public.es_usuaria_autorizada()));
+create policy solo_autenticados_todo on public.pedidos_whatsapp as permissive for all to public
+  using ((select public.es_usuaria_autorizada())) with check ((select public.es_usuaria_autorizada()));
 create policy push_subscriptions_authenticated_all on public.push_subscriptions as permissive for all to authenticated
   using ((select public.es_usuaria_autorizada()))
   with check ((select public.es_usuaria_autorizada()));
@@ -1164,6 +1208,39 @@ $function$;
 revoke execute on function public.redondear_cobro(numeric) from public, anon, authenticated;
 
 
+-- Cobro y pago de un sitting según la tarifa de la familia (21/10/2026). Misma cuenta que
+-- generar_previstos_fijos: un fin igual o antes del inicio es al día siguiente; a la familia que
+-- aceptó los términos, desde ese día, se le cobra con el fin redondeado (minutos_fin_cobro); a
+-- la niñera, la hora real; montos con redondear_cobro / redondear_pago. Sin tarifa, ese monto
+-- va vacío. Es la misma regla que precioSegunHorario() en js/sittings.js (lo prueba
+-- supabase/pruebas/paridad_plata.sql): si cambia una, cambia la otra.
+create or replace function public.precio_sitting(p_familia_id uuid, p_fecha date, p_hora_inicio time without time zone, p_hora_fin time without time zone)
+returns table (horas numeric, horas_cobro numeric, cobro numeric, pago numeric)
+language sql
+stable
+set search_path to ''
+as $function$
+  with h as (
+    select f.cobro_hora, f.pago_hora,
+           (extract(epoch from p_hora_fin) - extract(epoch from p_hora_inicio)) / 3600.0
+             + case when p_hora_fin <= p_hora_inicio then 24 else 0 end as horas,
+           case when f.terminos_aceptados_el is null or p_fecha < f.terminos_aceptados_el then null
+                else greatest(public.minutos_fin_cobro(
+                       (extract(epoch from p_hora_fin) / 60)::integer
+                       + case when p_hora_fin <= p_hora_inicio then 1440 else 0 end)
+                     - (extract(epoch from p_hora_inicio) / 60)::integer, 0) / 60.0
+           end as horas_cobro
+      from public.familias f
+     where f.id = p_familia_id and p_hora_inicio is not null and p_hora_fin is not null
+  )
+  select h.horas, coalesce(h.horas_cobro, h.horas),
+         case when coalesce(h.cobro_hora, 0) > 0 then public.redondear_cobro(coalesce(h.horas_cobro, h.horas) * h.cobro_hora) end,
+         case when coalesce(h.pago_hora, 0) > 0 then public.redondear_pago(h.horas * h.pago_hora) end
+    from h
+$function$;
+revoke execute on function public.precio_sitting(uuid, date, time without time zone, time without time zone) from public, anon, authenticated;
+
+
 -- Fijos automáticos (06/10/2026). El proceso. Lo corre pg_cron todos los días a las 03:00 de Montevideo (lo programa
 --    _ACTIVAR) y la app lo llama después de cada cambio en un fijo, para que la ventana
 --    quede al día enseguida. Hace, en orden:
@@ -1319,6 +1396,7 @@ alter publication supabase_realtime add table public.intermediaciones_eventos_ni
 alter publication supabase_realtime add table public.juguetes;
 alter publication supabase_realtime add table public.juguetes_movimientos;
 alter publication supabase_realtime add table public.ninieras;
+alter publication supabase_realtime add table public.pedidos_whatsapp;
 alter publication supabase_realtime add table public.resenas_ninieras;
 alter publication supabase_realtime add table public.sittings_traslados;
 alter publication supabase_realtime add table public.solicitud_ninieras;
