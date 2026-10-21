@@ -81,10 +81,11 @@ test.describe('E3: confirmar antes de marcar pagado', () => {
     );
     const e = await abrirApp(page, { datos: d });
     await irAModulo(page, 'finanzas');
-    await porPagar(page).locator('.agendarow', { hasText: 'Carla Ejemplo' }).locator('button').click();
+    await porPagar(page).locator('.agendarow', { hasText: 'Carla Ejemplo' }).locator('button', { hasText: 'Marcar pagado' }).click();
     const modal = modalPago(page);
+    // Con la compu cargada el modal tarda: se espera a que estén las tres filas antes de leerlas.
+    await expect(modal.locator('#pago-detalle .pago-fila:not(.pago-total-fila)')).toHaveCount(3);
     const filas = await modal.locator('#pago-detalle .pago-fila:not(.pago-total-fila)').allInnerTexts();
-    expect(filas).toHaveLength(3);
     expect(filas[2]).toContain('22:00–01:00 (+1 día)');
     // 500 + 650,5 + 820 = 1970,5: el modal muestra los centavos, igual que Por pagar.
     await expect(modal.locator('#pago-total')).toHaveText('$1.970,5');

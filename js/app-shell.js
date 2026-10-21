@@ -124,12 +124,19 @@ function renderSidebar(){
 async function actualizarFinanzasBadge(){
   const dot = document.getElementById('finanzas-navdot');
   if(!dot) return;
-  const [{data:cfg}, {data:pend}] = await Promise.all([
+  const [{data:cfg}, {data:pend}, {data:pendEventos}] = await Promise.all([
     sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle(),
     sb.from('sittings_traslados').select('id').eq('pagado', false).gt('pago_ninera', 0).lte('fecha', todayISO()).limit(1),
+    sb.from('intermediaciones_eventos_ninieras').select('evento_id').eq('pagado', false).gt('pago', 0),
   ]);
+  // Niñeras de eventos sin pagar (21/10/2026): avisan igual que un sitting, desde el día del evento.
+  let eventoSinPagar = false;
+  if(pendEventos && pendEventos.length){
+    const { data } = await sb.from('intermediaciones_eventos').select('id').in('id', [...new Set(pendEventos.map(p=>p.evento_id))]).lte('fecha', todayISO()).limit(1);
+    eventoSinPagar = !!(data && data.length);
+  }
   const diasSinExtracto = cfg?.actualizado_at ? (Date.now() - new Date(cfg.actualizado_at).getTime()) / 86400000 : Infinity;
-  const hayAviso = diasSinExtracto > 7 || (pend && pend.length > 0);
+  const hayAviso = diasSinExtracto > 7 || (pend && pend.length > 0) || eventoSinPagar;
   dot.innerHTML = hayAviso ? '<span class="navdot"></span>' : '';
 }
 

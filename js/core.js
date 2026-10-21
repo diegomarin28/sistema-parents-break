@@ -1312,6 +1312,15 @@ function textoTotalConGastos(etiqueta, base, gastos){
   const b = Number(base)||0, f = n => '$'+Math.round(n).toLocaleString('es-UY');
   return `${etiqueta} ${f(b)} + gastos ${f(g)} = ${f(b+g)}`;
 }
+// Copia un dato con un toque (cuentas y montos para pagar desde el celular, 21/10/2026). Si el
+// navegador no deja usar el portapapeles, lo muestra seleccionado para copiarlo a mano.
+async function copiarAlPortapapeles(texto, aviso='Copiado.'){
+  try{ await navigator.clipboard.writeText(texto); toast(aviso); }
+  catch(e){
+    abrirModal(`<h2 style="margin:0 0 8px;">Copialo de acá</h2><input type="text" id="copiar-a-mano" readonly value="${escaparHtml(texto)}" style="font-family:'IBM Plex Mono',monospace;">`);
+    document.getElementById('copiar-a-mano')?.select();
+  }
+}
 /* Términos y condiciones (20/10/2026, regla de Paulina y Delfina). A las familias que los
    aceptaron (familias.terminos_aceptados_el) el fin de cada sitting se les COBRA redondeado a
    la media hora siguiente, con 5 minutos de tolerancia: 17:05 → 17:00, 17:06 → 17:30,
