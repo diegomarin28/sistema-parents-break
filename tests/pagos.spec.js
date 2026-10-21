@@ -87,9 +87,11 @@ test.describe('E3: confirmar antes de marcar pagado', () => {
     await expect(modal.locator('#pago-detalle .pago-fila:not(.pago-total-fila)')).toHaveCount(3);
     const filas = await modal.locator('#pago-detalle .pago-fila:not(.pago-total-fila)').allInnerTexts();
     expect(filas[2]).toContain('22:00–01:00 (+1 día)');
-    // 500 + 650,5 + 820 = 1970,5: el modal muestra los centavos, igual que Por pagar.
-    await expect(modal.locator('#pago-total')).toHaveText('$1.970,5');
-    await expect(porPagar(page)).toContainText('$1.970,5');
+    // 500 + 650,5 + 820 = 1970,5: cada línea tal cual y el total sin centavos con la regla del
+    // pago (,5 baja, 21/10/2026), igual que Por pagar.
+    await expect(modal.locator('#pago-detalle')).toContainText('$650,5');
+    await expect(modal.locator('#pago-total')).toHaveText('$1.970');
+    await expect(porPagar(page).locator('.agendarow', { hasText: 'Carla Ejemplo' })).toContainText('$1.970');
     await modal.locator('button', { hasText: 'Confirmar pago' }).click();
     await expect(page.locator('.toaststack .toast').last()).toContainText('Marcado como pagado');
     const w = e.escrituras.find(x => x.tabla === 'sittings_traslados');

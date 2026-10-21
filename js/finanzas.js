@@ -549,11 +549,13 @@ async function cargarFinanzas(){
   const egresosGenerales = res.gastos;
   const egresos = egresosNinieras + egresosGenerales;
   const fmt = n => '$'+Math.round(n).toLocaleString('es-UY');
+  // Lo de las niñeras con la regla del pago (,5 baja), como la lista de Por pagar (21/10/2026).
+  const fmtPago = n => '$'+redondearPago(n).toLocaleString('es-UY');
   summary.innerHTML = `
     <div class="summarycard"><div class="statlabel">Facturado de ${monthLabel(finMes)}</div><div class="statnum" id="fin-facturado" style="font-size:19px;margin-top:3px;">${fmt(res.facturado)}</div></div>
     <div class="summarycard"><div class="statlabel">Cobrado (plata que ya entró)</div><div class="statnum" id="fin-cobrado" style="font-size:19px;margin-top:3px;color:var(--good);">${fmt(res.cobrado)}</div></div>
     <div class="summarycard"><div class="statlabel">Por cobrar</div><div class="statnum" id="fin-porcobrar" style="font-size:19px;margin-top:3px;color:var(--warn);">${fmt(res.porCobrar)}</div></div>
-    <div class="summarycard"><div class="statlabel">Por pagar a niñeras</div><div class="statnum" id="fin-porpagar" style="font-size:19px;margin-top:3px;color:var(--clay-text);">${fmt(res.porPagar)}</div>${res.porPagarEnCurso ? `<div class="helper" id="fin-porpagar-semanas" style="margin:2px 0 0;">Más ${fmt(res.porPagarEnCurso)} de semanas que todavía no cierran.</div>` : ''}${res.porPagarFuturo ? `<div class="helper" id="fin-porpagar-futuro" style="margin:2px 0 0;">Sin contar ${fmt(res.porPagarFuturo)} de días que todavía no pasaron.</div>` : ''}${previosSinPagar ? `<div class="helper" id="fin-porpagar-previos" style="margin:2px 0 0;">En la lista de Por pagar hay ${fmt(previosSinPagar)} más de meses anteriores.</div>` : ''}</div>
+    <div class="summarycard"><div class="statlabel">Por pagar a niñeras</div><div class="statnum" id="fin-porpagar" style="font-size:19px;margin-top:3px;color:var(--clay-text);">${fmtPago(res.porPagar)}</div>${res.porPagarEnCurso ? `<div class="helper" id="fin-porpagar-semanas" style="margin:2px 0 0;">Más ${fmtPago(res.porPagarEnCurso)} de semanas que todavía no cierran.</div>` : ''}${res.porPagarFuturo ? `<div class="helper" id="fin-porpagar-futuro" style="margin:2px 0 0;">Sin contar ${fmtPago(res.porPagarFuturo)} de días que todavía no pasaron.</div>` : ''}${previosSinPagar ? `<div class="helper" id="fin-porpagar-previos" style="margin:2px 0 0;">En la lista de Por pagar hay ${fmtPago(previosSinPagar)} más de meses anteriores.</div>` : ''}</div>
     <div class="summarycard fin-resultado" style="grid-column:1/-1;border-left:3px solid ${res.resultado>=0?'var(--good)':'var(--bad)'};">
       <div class="statlabel">Resultado de ${monthLabel(finMes)}</div>
       <div class="statnum" id="fin-resultado" style="font-size:21px;margin-top:3px;color:${res.resultado>=0?'var(--good)':'var(--bad)'};">${fmt(res.resultado)}</div>
@@ -1056,11 +1058,17 @@ function subtituloPendienteHtml(g){
   if(g.inter) return `<span class="badge brand" style="margin-right:4px;">Intermediación</span>${escaparHtml(g.detalle)} · ${fmtFechaCortaFin(g.bucket)}`;
   return `${bucketLabelFecha(g.bucket, g.frec, g.finde)} · ${escaparHtml(g.frec)}`;
 }
+// Lo que se cobra o se paga de un grupo, ya con saldo a favor y gastos, sin centavos
+// (21/10/2026): a la familia con redondearCobro, a la niñera con redondearPago (core.js).
+function montoGrupo(g, sujeto){
+  const n = g.totalNeto ?? g.total;
+  return sujeto==='familia' ? redondearCobro(n) : redondearPago(n);
+}
 function renderPorCobrar(lista, sueltos=[]){
   const box = document.getElementById('fin-porcobrar-wrap');
   if(!box) return;
   if(!lista.length){ box.innerHTML = `<h2>Por cobrar</h2><div class="empty">No hay cobros pendientes.</div>${saldosSueltosHtml(sueltos, 'cobro')}`; return; }
-  const total = lista.reduce((s,g)=>s+(g.totalNeto ?? g.total),0);
+  const total = lista.reduce((s,g)=>s+montoGrupo(g, 'familia'),0);
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;">Por cobrar</h2>
@@ -1074,7 +1082,7 @@ function renderPorCobrar(lista, sueltos=[]){
           ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Gasto extra')}${lineasAjustesHtml(g.ajustes)}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${(g.totalNeto ?? g.total).toLocaleString('es-UY')}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${montoGrupo(g, 'familia').toLocaleString('es-UY')}</span>
           <button class="smallbtn" onclick="conGuardado(this, ()=>${g.inter ? `marcarIntermediacionResuelta(${argJs(g.inter)})` : `marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado', ${argJs(g.ajustes||[])}, ${argJs((g.gastos||[]).map(x=>x.id))})`})">Marcar cobrado</button>
         </div>
       </div>`).join('')}
@@ -1105,7 +1113,7 @@ function porPagarEnCursoHtml(enCurso){
         </div>
         <div style="text-align:right;">
           <div class="helper" style="margin:0;">Lleva</div>
-          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink-soft);">$${g.total.toLocaleString('es-UY')}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink-soft);">$${redondearPago(g.total).toLocaleString('es-UY')}</span>
         </div>
       </div>`).join('')}
   </div>`;
@@ -1113,8 +1121,8 @@ function porPagarEnCursoHtml(enCurso){
 /* Pagan sábado o domingo desde Mercado Pago, de a una y desde el celular (21/10/2026): la
    cuenta y el monto se copian con un toque. Sin cuenta cargada, el aviso lleva a la ficha. */
 function cuentasDeFicha(info){ return (info?.cuenta_bancaria||[]).filter(Boolean); }
-// Sin "$" ni puntos de miles, para pegarlo en el campo del monto; los centavos con coma.
-function montoParaCopiar(n){ return String(Math.round((Number(n)||0)*100)/100).replace('.', ','); }
+// Sin "$" ni puntos de miles, para pegarlo en el campo del monto. Sin centavos (21/10/2026).
+function montoParaCopiar(n){ return String(redondearPago(n)); }
 function cuentasPorPagarHtml(g){
   if(g.cuentas?.length) return g.cuentas.map(c=>`<div class="fin-cuenta" style="display:flex;align-items:center;gap:8px;margin:4px 0 0;flex-wrap:wrap;">
       <span class="helper" style="margin:0;font-family:'IBM Plex Mono',monospace;">${escaparHtml(c)}</span>
@@ -1127,7 +1135,7 @@ function renderPorPagar(lista, sueltos=[], enCurso=[]){
   const box = document.getElementById('fin-porpagar-wrap');
   if(!box) return;
   if(!lista.length){ box.innerHTML = `<h2>Por pagar</h2><div class="empty">No hay pagos pendientes.</div>${porPagarEnCursoHtml(enCurso)}${saldosSueltosHtml(sueltos, 'pago')}`; return; }
-  const total = lista.reduce((s,g)=>s+(g.totalNeto ?? g.total),0);
+  const total = lista.reduce((s,g)=>s+montoGrupo(g, 'ninera'),0);
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;">Por pagar</h2>
@@ -1142,8 +1150,8 @@ function renderPorPagar(lista, sueltos=[], enCurso=[]){
           ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Reintegro de gasto')}${lineasAjustesHtml(g.ajustes)}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${(g.totalNeto ?? g.total).toLocaleString('es-UY')}</span>
-          <button class="smallbtn fin-copiar-monto" style="min-height:36px;" onclick="copiarAlPortapapeles(${argJs(montoParaCopiar(g.totalNeto ?? g.total))}, 'Monto copiado.')">Copiar monto</button>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${montoGrupo(g, 'ninera').toLocaleString('es-UY')}</span>
+          <button class="smallbtn fin-copiar-monto" style="min-height:36px;" onclick="copiarAlPortapapeles(${argJs(montoParaCopiar(montoGrupo(g, 'ninera')))}, 'Monto copiado.')">Copiar monto</button>
           <button class="smallbtn" style="min-height:36px;" onclick="conGuardado(this, ()=>${g.inter ? `marcarIntermediacionResuelta(${argJs(g.inter)})` : `marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}, ${argJs(g.gastos||[])})`})">Marcar pagado</button>
         </div>
       </div>`).join('')}
@@ -1199,13 +1207,13 @@ async function confirmarPagoSittings(ids, montosNuevos={}, ajustes=[], gastos=[]
     .sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||'') || (a.hora_inicio||'').localeCompare(b.hora_inicio||''));
   if(!filas.length && !(gastos||[]).length && !otros.length){ toast('Esos registros ya no existen. Actualizá la pantalla.', 'bad'); return false; }
   const subtotal = filas.reduce((s,r)=>s+r.monto, 0) + (gastos||[]).reduce((s,g)=>s+(Number(g.monto)||0), 0) + otros.reduce((s,o)=>s+(Number(o.monto)||0), 0);
-  const total = Math.round((subtotal + (ajustes||[]).reduce((s,a)=>s+(Number(a.monto)||0), 0))*100)/100;
+  const total = redondearPago(subtotal + (ajustes||[]).reduce((s,a)=>s+(Number(a.monto)||0), 0));
   const hoy = todayISO();
   const futuros = filas.filter(r=>r.fecha > hoy).length;
   const ninieras = [...new Set([...filas.map(r=>r.ninera_nombre||'(sin niñera)'), ...otros.map(o=>o.ninera||'(sin niñera)')])];
   const fmtF = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'short',day:'2-digit',month:'2-digit'}) : '—';
   const horario = r => r.hora_inicio ? `${r.hora_inicio.slice(0,5)}${r.hora_fin?'–'+r.hora_fin.slice(0,5):''}${r.termina_dia_siguiente?' (+1 día)':''}` : 'sin horario';
-  const plata = n => '$'+Number(n).toLocaleString('es-UY', {maximumFractionDigits:2}); // sin redondear: hay pagos con centavos
+  const plata = n => '$'+Number(n).toLocaleString('es-UY', {maximumFractionDigits:2}); // cada línea tal cual; el total ya va sin centavos
   return new Promise(resolve=>{
     const overlay = document.createElement('div');
     overlay.className = 'confirmoverlay';
@@ -1296,11 +1304,13 @@ async function guardarMovimientoSitting(id){
   const cobroTxt = document.getElementById('fin-mov-cobro').value;
   const pagoTxt = document.getElementById('fin-mov-pago').value;
   const warn = document.getElementById('fin-mov-warn');
-  const cobro = Number(cobroTxt), pago = Number(pagoTxt);
-  if(cobroTxt==='' || pagoTxt==='' || !isFinite(cobro) || !isFinite(pago) || cobro<0 || pago<0){
+  const cobroNum = Number(cobroTxt), pagoNum = Number(pagoTxt);
+  if(cobroTxt==='' || pagoTxt==='' || !isFinite(cobroNum) || !isFinite(pagoNum) || cobroNum<0 || pagoNum<0){
     if(warn) warn.innerHTML = '<div class="warnbox">Los montos tienen que ser números (0 o más).</div>';
     return;
   }
+  // Sin centavos aunque se tipeen (21/10/2026): 600,5 → cobro 601, pago 600.
+  const cobro = redondearCobro(cobroNum), pago = redondearPago(pagoNum);
   const cambios = {
     cobro_familia: cobro,
     pago_ninera: pago,
@@ -1720,7 +1730,7 @@ function sospechasDelMes(sits, ctx){
       // Horas que se le cobran (con el fin redondeado si la familia aceptó los términos).
       const horas = horasSitting(r.hora_inicio, r.hora_fin, r.termina_dia_siguiente, fam, r.fecha)?.cobro || 0;
       const tarifa = Number(asig?.cobro_hora) || Number(fam?.cobro_hora) || 0;
-      if(horas && tarifa){ esperado = Math.round(horas*tarifa); deDonde = Number(asig?.cobro_hora) ? 'el fijo' : 'la tarifa de la familia'; }
+      if(horas && tarifa){ esperado = redondearCobro(horas*tarifa); deDonde = Number(asig?.cobro_hora) ? 'el fijo' : 'la tarifa de la familia'; }
     }
     if(esperado && cobro>0 && Math.abs(cobro-esperado) > esperado*0.30) agregar(r.id, `Cobro ${fmt(cobro)}; con ${deDonde} daría ${fmt(esperado)}`);
     if(r.pagado && !r.cobrado && r.fecha < sumarDiasISO(ctx.hoy, -30)) agregar(r.id, 'Pagado a la niñera y sin cobrar hace más de 30 días');

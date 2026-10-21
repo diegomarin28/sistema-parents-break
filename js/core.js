@@ -1304,6 +1304,23 @@ function sinColumnasVigencia(payload){
    Parents Break. Los que pagó la familia van como saldo a su favor; los que absorbe Parents
    Break no se le cobran a nadie (se le reintegran a la niñera y bajan el resultado del mes). */
 function gastoACargoFamilia(g){ return !!g && g.pagado_por==='ninera' && !g.absorbe_pb; }
+/* Montos sin centavos (21/10/2026, regla de Paulina y Delfina). Todo pago a una niñera y todo
+   cobro a una familia que sale de una cuenta (horas por tarifa, totales con saldo o gastos)
+   pasa por una de estas dos. Pago: ,5 o menos baja (600,5 → 600; 600,6 → 601). Cobro: ,5 o
+   más sube (600,5 → 601; 600,4 → 600). Primero se lleva a centavos para que el error de
+   punto flotante (2,5 h × 240,2 = 600,4999…) no cambie el lado del ,5. Son las mismas
+   reglas que redondear_pago() y redondear_cobro() en la base (generar_previstos_fijos): si
+   cambia una, cambia la otra. Con negativos redondea igual sobre el valor absoluto. */
+function redondearMonto(n, mitadSube){
+  const v = Number(n);
+  if(!isFinite(v)) return 0;
+  const centavos = Math.round(Math.abs(v)*100);
+  const entero = Math.floor(centavos/100), resto = centavos % 100;
+  const r = resto > 50 || (resto === 50 && mitadSube) ? entero + 1 : entero;
+  return v < 0 && r ? -r : r;
+}
+function redondearPago(n){ return redondearMonto(n, false); }
+function redondearCobro(n){ return redondearMonto(n, true); }
 // "Traslado $1.018 + gastos $427 = $1.445". Delfi no veía que la comida se sumaba aparte, la
 // metió en el precio y quedó cobrada dos veces (13/10/2026). Sin gastos devuelve ''.
 function textoTotalConGastos(etiqueta, base, gastos){
