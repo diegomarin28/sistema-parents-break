@@ -369,6 +369,7 @@ create table public.ninieras (
   barrios text,
   telefono_pendiente text,
   telefono_pendiente_en timestamp with time zone,
+  cedula text, -- 21/10/2026: la de la ficha (antes solo en carsitting_datos)
   constraint ninieras_pkey PRIMARY KEY (id)
 );
 
