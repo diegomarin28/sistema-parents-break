@@ -128,11 +128,12 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
       const hoy = ahora.slice(0, 10);
       const escenarios = Array.from({ length: 100 }, () => escenarioResumen(az, hoy));
       const res = await page.evaluate(escs => {
-        const APP = { construirEsTrabajoFijo, construirTrabajaFinde, finDeSemanaDesde, lunesDeSemana, resumenIntermediaciones, resumenFinancieroMes, filtrarFijosSemanaIncompleta };
-        // Igual que cargarFinanzas: una fija cuya semana no cerró va aparte de Por pagar.
+        const APP = { construirEsTrabajoFijo, construirEsEnCurso, resumenIntermediaciones, resumenFinancieroMes, filtrarFijosSemanaIncompleta };
+        // Igual que cargarFinanzas: una fija cuya semana todavía no se puede pagar va aparte de
+        // Por pagar (construirEsEnCurso; 21/10/2026: el día que cierra, después del último fijo).
         const calcular = (F, esc) => {
-          const esFijo = F.construirEsTrabajoFijo(esc.asigs), finde = F.construirTrabajaFinde(esc.asigs);
-          const enCurso = r => esFijo(r) && F.finDeSemanaDesde(F.lunesDeSemana(r.fecha), finde(r.ninera_nombre)) >= todayISO();
+          const esFijo = F.construirEsTrabajoFijo(esc.asigs);
+          const enCurso = F.construirEsEnCurso(esc.sits, esc.asigs);
           const inter = F.resumenIntermediaciones(esc.enrique, esc.eventos);
           return {
             resumen: F.resumenFinancieroMes(esc.sits, esc.gastosNegocio, esc.absorbidos, inter, enCurso),
@@ -245,7 +246,7 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
         const { gruposCobrar, gruposPagar } = await O.calcularPendientesAgrupados();
         const inter = await O.intermediacionesPendientes();
         const listaCobrar = gruposCobrar.filter(g => g.frec !== 'semanal' || O.finDeSemanaDesde(g.bucket) < hoyISO);
-        const enCurso = g => g.frec === 'semanal' && O.finDeSemanaDesde(g.bucket, g.finde) >= hoyISO;
+        const enCurso = g => g.frec === 'semanal' && !O.semanaFijoCerrada(g.cierre);
         const listaPagar = gruposPagar.filter(g => !enCurso(g));
         const ajustes = await O.cargarAjustesSaldo();
         O.aplicarAjustesAGrupos(listaCobrar, ajustes, 'familia');

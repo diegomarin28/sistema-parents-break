@@ -17,14 +17,16 @@ const { execSync } = require('child_process');
 const RAIZ = path.resolve(__dirname, '..');
 const DESTINO = path.join(RAIZ, 'tests', 'support', 'oraculo-plata.js');
 // En el orden en que se copian. Lo que no es plata (supabase, normaliza, todayISO, sumarDiasISO,
-// esperarConfigFijos, sinPrevistos, leerTodasLasFilas) se sigue usando el de la app.
+// minutosAhoraMontevideo, diaSemanaDeISO, esperarConfigFijos, sinPrevistos, leerTodasLasFilas)
+// se sigue usando el de la app.
 const FUNCIONES = {
   'js/agenda.js': ['agendaMinutos'],
   'js/core.js': ['gastoACargoFamilia', 'redondearMonto', 'redondearPago', 'redondearCobro', 'asignacionVigenteEn',
     'asignacionTerminada', 'redondearFinCobro', 'familiaRedondeaFin', 'cruceMedianocheMalMarcado', 'horasSitting'],
   'js/sittings.js': ['precioSegunHorario'],
   'js/finanzas.js': ['construirEsTrabajoFijo', 'construirTrabajaFinde', 'filtrarFijosSemanaIncompleta', 'resumenFinancieroMes',
-    'resumenIntermediaciones', 'intermediacionesPendientes', 'lunesDeSemana', 'finDeSemanaDesde', 'bucketKeyFecha',
+    'resumenIntermediaciones', 'intermediacionesPendientes', 'lunesDeSemana', 'finEnMinutos', 'construirFinUltimoFijo',
+    'cierreSemanaFijo', 'semanaFijoCerrada', 'construirEsEnCurso', 'finDeSemanaDesde', 'bucketKeyFecha',
     'cargarAjustesSaldo', 'pendienteAjuste', 'aplicarAjustesAGrupos', 'calcularPendientesAgrupados', 'esFaltaTabla',
     'cargarGastosExtraPendientes', 'montoGrupo', 'cuentasDeFicha', 'montoParaCopiar'],
 };

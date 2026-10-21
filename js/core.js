@@ -1264,6 +1264,16 @@ function fechaNegocioISO(d){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function todayISO(){ return fechaNegocioISO(new Date()); }
+// Minutos desde la medianoche de ahora en Montevideo (21/10/2026): para saber si ya terminó el
+// último fijo del día, aunque el aparato tenga otra zona horaria.
+function minutosAhoraMontevideo(d=new Date()){
+  try{
+    const p = {};
+    new Intl.DateTimeFormat('en-GB', {timeZone:ZONA_NEGOCIO, hour:'2-digit', minute:'2-digit', hourCycle:'h23'}).formatToParts(d).forEach(x=>{ p[x.type] = x.value; });
+    if(p.hour!==undefined) return Number(p.hour)*60 + Number(p.minute);
+  }catch(e){}
+  return d.getHours()*60 + d.getMinutes();
+}
 function currentMonthStr(){ return todayISO().slice(0,7); }
 function diaSemanaDeISO(fechaISO){ return ['D','L','M','X','J','V','S'][new Date(fechaISO+'T12:00:00').getDay()]; }
 
