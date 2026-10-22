@@ -221,6 +221,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/arranque.spec.js`: pantalla de carga (símbolo latiendo), error si no carga supabase-js,
   "Entrando…", carga entre el login y Hoy, símbolo chico al cambiar de sección (> 300 ms).
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
+- `tests/familia-desde-registro.spec.js`: familia nueva desde el registro de un sitting (ficha ahí mismo sin
+  perder lo cargado, precio con su tarifa, base que falla, doble toque, nombre parecido, sin términos, 390 px).
 - `tests/escape.spec.js`: todos los campos de texto con datos tramposos (comillas, HTML, URLs
   `javascript:`) en cada módulo y ficha; nada se ejecuta y los handlers siguen válidos.
 - `tests/gastos-total.spec.js`: "Traslado $X + gastos $Y = $Z" en el registro y en Sittings,
