@@ -64,6 +64,7 @@ async function cargarNinieras(){
   const { data, error } = await sb.from('ninieras').select('*, candidatas(*)').eq('activa', true).order('nombre');
   if(error){ const g = document.getElementById('ninierasgrid'); if(g) g.innerHTML = errBox(error); return; }
   ninierasItems = data;
+  const fechasEntrevista = cargarFechasEntrevistaNinieras(); // en paralelo: para el orden de la lista
   renderCumpleaneras();
   renderZonasNuevasPanel();
   renderTemporadasPanel();
@@ -71,7 +72,54 @@ async function cargarNinieras(){
   await cargarConteoIncidentesNinieras();
   const wZonas = document.getElementById('filt-zonas-wrap');
   if(wZonas) wZonas.innerHTML = htmlFiltroZonas(ninFiltroZonas, 'toggleFiltroZonaNin');
+  await fechasEntrevista;
   filtrarNinieras();
+}
+/* Orden de la lista (21/10/2026, pedido de Paulina y Delfina): por la fecha de la entrevista, de la
+   más nueva a la más vieja; las de antes de la app, sin entrevista, al final. La fecha es la de la
+   entrevista completa más reciente de su candidata (si solo hay una a medias, esa). */
+let ninFechaEntrevista = {}; // id de la niñera -> 'AAAA-MM-DD'
+async function cargarFechasEntrevistaNinieras(){
+  const porCandidata = {};
+  ninierasItems.forEach(n=>{ if(n.candidata_id) porCandidata[n.candidata_id] = n.id; });
+  const ids = Object.keys(porCandidata);
+  ninFechaEntrevista = {};
+  if(!ids.length) return;
+  const { data, error } = await sb.from('entrevistas').select('candidata_id,fecha,estado,created_at').in('candidata_id', ids);
+  if(error) return; // sin las fechas, queda por nombre: no frena la lista
+  const mejor = {};
+  (data||[]).forEach(e=>{
+    const fecha = e.fecha || (e.created_at ? fechaNegocioISO(new Date(e.created_at)) : null);
+    if(!fecha) return;
+    const completa = e.estado !== 'en_curso';
+    const antes = mejor[e.candidata_id];
+    if(!antes || (completa && !antes.completa) || (completa===antes.completa && fecha > antes.fecha)) mejor[e.candidata_id] = { fecha, completa };
+  });
+  Object.entries(mejor).forEach(([cid, m])=>{ ninFechaEntrevista[porCandidata[cid]] = m.fecha; });
+}
+function ordenarNinierasPorEntrevista(a, b){
+  const fa = ninFechaEntrevista[a.id], fb = ninFechaEntrevista[b.id];
+  if(fa && fb && fa!==fb) return fb.localeCompare(fa);
+  if(fa && !fb) return -1;
+  if(fb && !fa) return 1;
+  return String(a.nombre||'').localeCompare(String(b.nombre||''), 'es');
+}
+/* Cuántos trabajos viene haciendo cada una, en su fila (21/10/2026): sittings y traslados que se
+   hicieron (sin previstos ni cancelados), de toda la historia. Sale de la misma lectura que el
+   panel de utilización: no suma consultas. */
+let ninConteoTrabajos = { porId: {}, porNombre: {} };
+function conteoTrabajosNinera(n){
+  const a = ninConteoTrabajos.porId[n.id] || { sitting:0, traslado:0 };
+  const b = ninConteoTrabajos.porNombre[normaliza(n.nombre||'')] || { sitting:0, traslado:0 };
+  return { sittings: a.sitting + b.sitting, traslados: a.traslado + b.traslado };
+}
+function textoTrabajosNinera(n){
+  const { sittings, traslados } = conteoTrabajosNinera(n);
+  if(!sittings && !traslados) return 'Sin sittings todavía';
+  const partes = [];
+  if(sittings) partes.push(`${sittings} sitting${sittings===1?'':'s'}`);
+  if(traslados) partes.push(`${traslados} traslado${traslados===1?'':'s'}`);
+  return partes.join(' · ');
 }
 const NIN_UTIL_DIAS = 30;
 let ninUtilChart = null;
@@ -85,12 +133,19 @@ let ninUtilUltimaActividad = {};
    el equipo. No bloquea el resto de la pantalla si falla — es secundario. */
 async function cargarUtilizacionNinieras(){
   await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
-  const { data, error } = await leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('ninera_nombre,fecha')).order('id'));
+  const { data, error } = await leerTodasLasFilas(()=>sinPrevistos(sb.from('sittings_traslados').select('ninera_id,ninera_nombre,fecha,tipo,cancelado')).order('id'));
   if(error || !document.getElementById('nin-utilizacion-wrap')) return;
   const desde30 = sumarDiasISO(todayISO(), -NIN_UTIL_DIAS);
   const porNinera = {};
   const ultimaActividad = {};
+  const conteo = { porId: {}, porNombre: {} };
   (data||[]).forEach(r=>{
+    if(!r.cancelado){
+      // Cada registro cuenta una sola vez: por la niñera vinculada o, si no tiene, por el nombre.
+      const mapa = r.ninera_id ? conteo.porId : conteo.porNombre;
+      const k = r.ninera_id || normaliza(r.ninera_nombre||'');
+      if(k){ mapa[k] ||= { sitting:0, traslado:0 }; mapa[k][r.tipo==='traslado' ? 'traslado' : 'sitting']++; }
+    }
     const k = normaliza(r.ninera_nombre||'');
     if(!k || !r.fecha) return;
     if(r.fecha >= desde30){
@@ -101,6 +156,7 @@ async function cargarUtilizacionNinieras(){
   });
   ninUtilPorNinera = porNinera;
   ninUtilUltimaActividad = ultimaActividad;
+  ninConteoTrabajos = conteo;
   renderUtilizacionNinieras();
 }
 function toggleNinUtil(){ ninUtilAbierto = !ninUtilAbierto; renderUtilizacionNinieras(); }
@@ -228,6 +284,7 @@ function filtrarNinieras(){
     // aparte, al final, como "sin temporada cargada" (21/10/2026; antes no se mostraban).
     return c!=='nada';
   });
+  filtradas.sort(ordenarNinierasPorEntrevista);
   const zonaLabel = escaparHtml(nombresZonasFiltro(zonas).join(' o '));
   const hayZonaAfuera = [...zonas].some(k=>grupoFueraDeZona(k));
   const mesesTxt = [...ninFiltroMeses].sort((a,b)=>a-b).map(m=>TEMP_MESES_LARGO[m]).join(', ');
@@ -248,6 +305,7 @@ function filtrarNinieras(){
       <div class="info">
         <div class="name">${escaparHtml(n.nombre)}${cvEstaDesactualizado(n) ? ` <span style="color:var(--warn);font-weight:600;font-size:12px;">· Actualizar CV</span>` : ''}</div>
         <div class="meta">${escaparHtml(textoZonasConBarrios(n.zona, n.barrios)||'zona s/d')}${escaparHtml((() => { const e = calcularEdad(n.candidatas?.fecha_nacimiento); return e!==null ? ' · '+e+' años' : (n.candidatas?.edad ? ' · '+n.candidatas.edad : ''); })())}${n.candidatas?.universidad?escaparHtml(' · '+n.candidatas.universidad):''}</div>
+        <div class="meta nin-trabajos">${escaparHtml(textoTrabajosNinera(n))}</div>
         ${mostrarTira ? htmlMiniTemporada(n, qsFiltro) : ''}
       </div>
       <div class="badge-slot">
@@ -549,8 +607,10 @@ function editarNinera(id){
   // precargar los campos de categorías que ya tenían datos cargados —
   // si no se hace esto, al reabrir "Editar" los campos con dato quedaban
   // invisibles (solo se veían en "Ver ficha") y no había forma de corregirlos
+  // La fecha de nacimiento tiene su calendario propio arriba: no va también como categoría de
+  // texto (21/10/2026, aparecía dos veces, "2005-07-05" debajo del calendario).
   FICHA_CAMPOS.forEach(f=>{
-    if(!['nombre','apellido','telefono','zona'].includes(f.key) && ninEditCandidataCache[f.key]){
+    if(!['nombre','apellido','telefono','zona','fecha_nacimiento'].includes(f.key) && ninEditCandidataCache[f.key]){
       agregarCampoExtraNinera(f.key);
     }
   });
@@ -583,7 +643,7 @@ function abrirSelectorCategoriaNinera(){
   // la fecha de nacimiento (más abajo, con calendario). Si una niñera ya tenía texto viejo
   // ahí, sigue precargado y editable (ver el forEach de arriba) -- esto solo saca la opción
   // para las que no tienen nada, así no se vuelve a usar el campo de texto libre.
-  const disponibles = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','edad'].includes(f.key) && !yaAgregadas.has(f.key));
+  const disponibles = FICHA_CAMPOS.filter(f=>!['nombre','apellido','telefono','zona','edad','fecha_nacimiento'].includes(f.key) && !yaAgregadas.has(f.key));
   const seleccionadas = new Set();
   const overlay = document.createElement('div');
   overlay.className = 'confirmoverlay';
@@ -696,8 +756,9 @@ async function guardarEdicionNinera(id){
   // borraron con el botón "−" durante esta edición: hay que mandarlos como null
   // explícitamente, si no Supabase nunca los toca y el dato viejo queda pegado en la base
   const clavesActuales = new Set(extraInputs.map(el=>el.dataset.campo));
+  // La fecha de nacimiento no es una categoría (tiene su calendario, arriba): no se borra acá.
   FICHA_CAMPOS.forEach(f=>{
-    if(!['nombre','apellido','telefono','zona'].includes(f.key) && ninEditCandidataCache[f.key] && !clavesActuales.has(f.key)){
+    if(!['nombre','apellido','telefono','zona','fecha_nacimiento'].includes(f.key) && ninEditCandidataCache[f.key] && !clavesActuales.has(f.key)){
       extra[f.key] = null;
     }
   });
