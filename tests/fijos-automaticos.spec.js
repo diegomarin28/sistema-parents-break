@@ -288,15 +288,15 @@ test.describe('cambios del fijo: se recalculan los previstos', () => {
   });
 });
 
-test.describe('Hoy: confirmados automáticamente y sin registrar', () => {
-  test('lista los días que se confirmaron solos y "Bien" los saca', async ({ page }) => {
+test.describe('Hoy: cierre de los fijos y sin registrar', () => {
+  test('lista los días que se confirmaron solos y "Sí, terminó" los saca', async ({ page }) => {
     const e = await abrirApp(page, { datos: datosActivos() });
     const card = page.locator('.autoconf-card');
-    await expect(card).toContainText('Fijos confirmados automáticamente');
+    await expect(card).toContainText('Cierre de los fijos');
     await expect(card.locator('.autoconf-fila')).toHaveCount(1);
     await expect(card).toContainText('30/09');
     await expect(card).toContainText('Ana Ficticia');
-    await card.locator('button', { hasText: /^Bien$/ }).click();
+    await card.locator('button', { hasText: 'Sí, terminó 19:00' }).click();
     await expect(card).toHaveCount(0);
     const [revision] = escrituras(e, 'sittings_traslados', 'PATCH');
     expect(revision.params).toEqual({ id: `in.(${P.mie30})` });
