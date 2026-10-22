@@ -278,6 +278,7 @@ test.describe('editar un registro de otro mes', () => {
     const e = await abrirApp(page);
     await irAModulo(page, 'sittings');
     await page.locator('button[onclick^="abrirModalSitForm"]').first().click();
+    await expect(page.locator('#sit-familia')).toBeVisible(); // el formulario se abre después del clic
     await page.evaluate(() => {
       document.getElementById('sit-familia').value = 'Familia Prueba Uno';
       sitFamiliaSel = sitFamilias.find(f => f.nombre === 'Familia Prueba Uno');
@@ -288,9 +289,12 @@ test.describe('editar un registro de otro mes', () => {
     await page.fill('#sit-fecha', '2026-09-28');
     await page.locator('#editmodal button', { hasText: 'Guardar registro' }).click();
     await page.locator('#confirm3-ver').click();
+    // Hasta que se abre el registro de antes, en pantalla sigue el formulario nuevo con los mismos
+    // datos: primero se espera a que esté abierto ese registro (21/10/2026, el test fallaba 1 de
+    // cada 3 veces por mirar el formulario viejo).
+    await expect.poll(() => page.evaluate(() => sitEditId)).toBe(SIT_28);
     await expect(page.locator('#sit-cobro')).toHaveValue('1140');
     expect(await valoresForm(page)).toEqual(datos28);
-    expect(await page.evaluate(() => sitEditId)).toBe(SIT_28);
     expect(e.escrituras.filter(w => w.tabla === 'sittings_traslados')).toEqual([]);
     verificarLimpio(e);
   });
