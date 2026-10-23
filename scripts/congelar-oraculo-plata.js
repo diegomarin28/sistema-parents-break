@@ -24,9 +24,9 @@ const FUNCIONES = {
   'js/core.js': ['gastoACargoFamilia', 'redondearMonto', 'redondearPago', 'redondearCobro', 'asignacionVigenteEn',
     'asignacionTerminada', 'redondearFinCobro', 'familiaRedondeaFin', 'cruceMedianocheMalMarcado', 'horasSitting'],
   'js/sittings.js': ['precioSegunHorario'],
-  'js/finanzas.js': ['construirEsTrabajoFijo', 'construirTrabajaFinde', 'filtrarFijosSemanaIncompleta', 'resumenFinancieroMes',
-    'resumenIntermediaciones', 'intermediacionesPendientes', 'lunesDeSemana', 'finEnMinutos', 'construirFinUltimoFijo',
-    'cierreSemanaFijo', 'semanaFijoCerrada', 'construirEsEnCurso', 'finDeSemanaDesde', 'bucketKeyFecha',
+  'js/finanzas.js': ['construirEsTrabajoFijo', 'filtrarFijosSemanaIncompleta', 'resumenFinancieroMes',
+    'resumenIntermediaciones', 'intermediacionesPendientes', 'lunesDeSemana', 'domingoDeSemana', 'finEnMinutos', 'construirFinUltimoFijo',
+    'cierreSemanaFijo', 'semanaFijoCerrada', 'construirEsEnCurso', 'finDeSemanaDesde', 'bucketKeyFecha', 'bucketPagoFecha',
     'cargarAjustesSaldo', 'pendienteAjuste', 'aplicarAjustesAGrupos', 'calcularPendientesAgrupados', 'esFaltaTabla',
     'cargarGastosExtraPendientes', 'montoGrupo', 'cuentasDeFicha', 'montoParaCopiar', 'totalParcial', 'combinacionExacta'],
 };

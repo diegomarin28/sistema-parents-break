@@ -5,7 +5,11 @@
 // 21/10/2026 (regla de Paulina y Delfina): se paga el MISMO día que cierra, cuando terminó el
 // último fijo de ese día; antes se ve "cierra hoy a las HH:MM". Los dos tests de "el día que
 // cierra" se adaptaron a esa regla (antes esperaban que se pagara recién al día siguiente).
-// Datos ficticios: Ana es fija de Familia Prueba Uno los lunes y miércoles (cierra el sábado).
+// 23/10/2026 (regla de Paulina y Delfina del 21/10): las fijas se pagan SIEMPRE el sábado, también
+// las que trabajan el fin de semana. La semana de pago va de domingo a sábado: lo del domingo entra
+// en la semana que se paga el sábado siguiente. Los tests de Carla (fija los sábados o los domingos)
+// se adaptaron: antes esperaban que su semana cerrara el domingo.
+// Datos ficticios: Ana es fija de Familia Prueba Uno los lunes y miércoles.
 const { test, expect } = require('@playwright/test');
 const { abrirApp, irAModulo, verificarLimpio } = require('./support/app');
 const { datosBase, sitting, ID } = require('./support/datos');
@@ -18,8 +22,8 @@ function datos() {
   const d = datosBase();
   const fijo = { asignacion_id: ID.aFijo };
   d.sittings_traslados.push(
-    sitting(S(1), '2026-10-12', fijo),                    // semana 12-17/10: ya cerró
-    sitting(S(2), '2026-10-19', fijo),                    // semana en curso (cierra el 24/10)
+    sitting(S(1), '2026-10-12', fijo),                    // semana 11-17/10: ya cerró
+    sitting(S(2), '2026-10-19', fijo),                    // semana en curso (18-24/10, cierra el 24/10)
     sitting(S(3), '2026-10-21', { ...fijo, pago_ninera: 800 }),
     sitting(FUTURO, '2026-10-26', { ...fijo, pago_ninera: 999 }), // todavía no pasó
     // Puntual de Bruno esta semana: no es fijo, se paga por día como siempre.
@@ -27,7 +31,7 @@ function datos() {
   );
   return d;
 }
-// Carla: fija con un horario los sábados, así que su semana cierra el domingo.
+// Carla: fija con un horario los sábados. Su semana cierra igual el sábado, cuando termina ese fijo.
 function conCarlaFinde(d) {
   d.asignaciones.push({ ...d.asignaciones[0], id: '40000000-0000-4000-8000-000000000021', familia_id: ID.fDos, ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', dias: ['S'] });
   d.sittings_traslados.push(sitting(S(6), '2026-10-17', { familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos', ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', asignacion_id: '40000000-0000-4000-8000-000000000021', pago_ninera: 500 }));
@@ -48,7 +52,7 @@ test.describe('Por pagar: semana en curso de las fijas', () => {
     await expect(enCurso(page)).toContainText('todavía no cierra');
     await expect(enCurso(page).locator('button')).toHaveCount(0);
     // La semana que ya cerró sigue arriba, con su botón.
-    await expect(listos(page).filter({ hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 12/ }).locator('button', { hasText: 'Marcar pagado' })).toHaveCount(1);
+    await expect(listos(page).filter({ hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 11/ }).locator('button', { hasText: 'Marcar pagado' })).toHaveCount(1);
     // El puntual de esta semana no es de un fijo: va arriba, como siempre.
     await expect(listos(page).filter({ hasText: 'Bruno Inventado' }).filter({ hasText: '$600' })).toHaveCount(1);
     await expect(enCurso(page)).not.toContainText('Bruno Inventado');
@@ -66,25 +70,28 @@ test.describe('Por pagar: semana en curso de las fijas', () => {
     await expect(enCurso(page).locator('.fin-semana-en-curso', { hasText: 'Ana Ficticia' })).toContainText('Semana en curso, cierra mañana');
     await page.clock.setFixedTime(new Date('2026-10-24T08:00:00-03:00'));
     await page.evaluate(() => cargarPorCobrarPorPagar());
-    await expect(listos(page).filter({ hasText: /Semana del 19/ })).toContainText('$1.550');
+    await expect(listos(page).filter({ hasText: /Semana del 18/ })).toContainText('$1.550');
     await expect(enCurso(page)).toHaveCount(0);
     // Marcar pagado sigue pasando por la confirmación y marca justo esos dos (no el del 26).
-    await listos(page).filter({ hasText: /Semana del 19/ }).locator('button', { hasText: 'Marcar pagado' }).click();
+    await listos(page).filter({ hasText: /Semana del 18/ }).locator('button', { hasText: 'Marcar pagado' }).click();
     await page.locator('[aria-label="Confirmar pago"] button', { hasText: 'Confirmar pago' }).click();
     await expect.poll(() => e.db.sittings_traslados.filter(r => r.pagado && [S(2), S(3)].includes(r.id)).length).toBe(2);
     expect(e.db.sittings_traslados.find(r => r.id === FUTURO).pagado).toBe(false);
     verificarLimpio(e);
   });
 
-  test('una fija que trabaja el fin de semana cierra el domingo', async ({ page }) => {
-    const e = await abrirApp(page, { datos: conCarlaFinde(datos()), ahora: '2026-10-17T20:00:00-03:00' });
+  test('una fija que trabaja el fin de semana también cobra el sábado, cuando termina su fijo de ese día', async ({ page }) => {
+    const e = await abrirApp(page, { datos: conCarlaFinde(datos()), ahora: '2026-10-17T18:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     const fila = enCurso(page).locator('.fin-semana-en-curso', { hasText: 'Carla Ejemplo' });
-    await expect(fila).toContainText('Semana en curso, cierra mañana');
+    await expect(fila).toContainText('Semana en curso, cierra hoy a las 19:00');
     await expect(fila).toContainText('$500');
-    // Ana, en cambio, cierra hoy sábado y no tiene fijo hoy: ya se le paga.
-    await expect(enCurso(page)).not.toContainText('Ana Ficticia');
-    await expect(listos(page).filter({ hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 12/ }).locator('button', { hasText: 'Marcar pagado' })).toHaveCount(1);
+    await expect(enCurso(page)).not.toContainText('Ana Ficticia'); // Ana no tiene fijo hoy: ya se le paga
+    await page.clock.setFixedTime(new Date('2026-10-17T19:00:00-03:00'));
+    await page.evaluate(() => cargarPorCobrarPorPagar());
+    await expect(enCurso(page)).toHaveCount(0);
+    await expect(listos(page).filter({ hasText: 'Carla Ejemplo' }).filter({ hasText: /Semana del 11-oct.* al 17-oct/ }).locator('button', { hasText: 'Marcar pagado' })).toHaveCount(1);
+    await expect(listos(page).filter({ hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 11/ }).locator('button', { hasText: 'Marcar pagado' })).toHaveCount(1);
     verificarLimpio(e);
   });
 
@@ -140,73 +147,74 @@ test.describe('Por pagar con semana en curso en el celular (390 px)', () => {
   });
 });
 
-// Cierre el mismo día, cuando terminó el último fijo (21/10/2026). Carla es fija los domingos
-// (su semana cierra el domingo). Hoy es domingo 25/10 en todos estos casos.
-const A_DOM = '40000000-0000-4000-8000-000000000022';
-function conCarlaDomingo(d, { ini = '15:00:00', fin = '19:00:00', registrado } = {}) {
-  d.asignaciones.push({ ...d.asignaciones[0], id: A_DOM, familia_id: ID.fDos, ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', dias: ['D'], hora_inicio: ini, hora_fin: fin });
+// Cierre el mismo día, cuando terminó el último fijo (21/10/2026). Carla es fija los sábados
+// (23/10/2026: antes era los domingos y su semana cerraba el domingo; ahora todas cierran el
+// sábado). Hoy es sábado 24/10 en todos estos casos.
+const A_SAB = '40000000-0000-4000-8000-000000000022';
+function conCarlaSabado(d, { ini = '15:00:00', fin = '19:00:00', registrado } = {}) {
+  d.asignaciones.push({ ...d.asignaciones[0], id: A_SAB, familia_id: ID.fDos, ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', dias: ['S'], hora_inicio: ini, hora_fin: fin });
   const r = registrado || { ini, fin };
-  d.sittings_traslados.push(sitting(S(7), '2026-10-25', { familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos', ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo',
-    asignacion_id: A_DOM, hora_inicio: r.ini, hora_fin: r.fin, termina_dia_siguiente: r.fin <= r.ini, pago_ninera: 500 }));
+  d.sittings_traslados.push(sitting(S(7), '2026-10-24', { familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos', ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo',
+    asignacion_id: A_SAB, hora_inicio: r.ini, hora_fin: r.fin, termina_dia_siguiente: r.fin <= r.ini, pago_ninera: 500 }));
   return d;
 }
 const filaCarla = page => enCurso(page).locator('.fin-semana-en-curso', { hasText: 'Carla Ejemplo' });
-const listaCarla = page => listos(page).filter({ hasText: 'Carla Ejemplo' }).filter({ hasText: /Semana del 19/ });
+const listaCarla = page => listos(page).filter({ hasText: 'Carla Ejemplo' }).filter({ hasText: /Semana del 18/ });
 async function aLas(page, iso) {
   await page.clock.setFixedTime(new Date(iso));
   await page.evaluate(() => cargarPorCobrarPorPagar());
 }
 
 test.describe('Por pagar: se paga el día que cierra, cuando terminó el último fijo', () => {
-  test('domingo: antes de que termine su fijo, "cierra hoy a las 19:00" y sin botón; después, se paga', async ({ page }) => {
-    const e = await abrirApp(page, { datos: conCarlaDomingo(datos()), ahora: '2026-10-25T14:00:00-03:00' });
+  test('sábado: antes de que termine su fijo, "cierra hoy a las 19:00" y sin botón; después, se paga', async ({ page }) => {
+    const e = await abrirApp(page, { datos: conCarlaSabado(datos()), ahora: '2026-10-24T14:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     await expect(filaCarla(page)).toContainText('Semana en curso, cierra hoy a las 19:00');
     await expect(filaCarla(page)).toContainText('$500');
     await expect(listaCarla(page)).toHaveCount(0);
-    await aLas(page, '2026-10-25T18:59:00-03:00');
+    await aLas(page, '2026-10-24T18:59:00-03:00');
     await expect(filaCarla(page)).toContainText('cierra hoy a las 19:00');
-    await aLas(page, '2026-10-25T19:00:00-03:00');
+    await aLas(page, '2026-10-24T19:00:00-03:00');
     await expect(listaCarla(page).locator('button', { hasText: 'Marcar pagado' })).toHaveCount(1);
     await expect(filaCarla(page)).toHaveCount(0);
     verificarLimpio(e);
   });
 
   test('un fijo que pasa la medianoche cierra al día siguiente, a su hora', async ({ page }) => {
-    const e = await abrirApp(page, { datos: conCarlaDomingo(datos(), { ini: '21:00:00', fin: '01:00:00' }), ahora: '2026-10-25T23:00:00-03:00' });
+    const e = await abrirApp(page, { datos: conCarlaSabado(datos(), { ini: '21:00:00', fin: '01:00:00' }), ahora: '2026-10-24T23:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     await expect(filaCarla(page)).toContainText('cierra mañana a las 01:00');
-    await aLas(page, '2026-10-26T00:30:00-03:00');
+    await aLas(page, '2026-10-25T00:30:00-03:00');
     await expect(filaCarla(page)).toContainText('cierra hoy a las 01:00');
-    await aLas(page, '2026-10-26T01:00:00-03:00');
+    await aLas(page, '2026-10-25T01:00:00-03:00');
     await expect(listaCarla(page)).toHaveCount(1);
     verificarLimpio(e);
   });
 
   test('si ese día se registró un horario más largo que el del fijo, espera al registrado', async ({ page }) => {
-    const e = await abrirApp(page, { datos: conCarlaDomingo(datos(), { registrado: { ini: '15:00:00', fin: '21:00:00' } }), ahora: '2026-10-25T20:00:00-03:00' });
+    const e = await abrirApp(page, { datos: conCarlaSabado(datos(), { registrado: { ini: '15:00:00', fin: '21:00:00' } }), ahora: '2026-10-24T20:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     await expect(filaCarla(page)).toContainText('cierra hoy a las 21:00');
-    await aLas(page, '2026-10-25T21:00:00-03:00');
+    await aLas(page, '2026-10-24T21:00:00-03:00');
     await expect(listaCarla(page)).toHaveCount(1);
     verificarLimpio(e);
   });
 
   test('si ese día todavía no está registrado, espera igual a la hora del fijo', async ({ page }) => {
-    const d = conCarlaDomingo(datos());
+    const d = conCarlaSabado(datos());
     d.sittings_traslados = d.sittings_traslados.filter(r => r.id !== S(7));
-    d.sittings_traslados.push(sitting(S(8), '2026-10-24', { familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos', ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', asignacion_id: A_DOM, pago_ninera: 400 }));
-    const e = await abrirApp(page, { datos: d, ahora: '2026-10-25T18:00:00-03:00' });
+    d.sittings_traslados.push(sitting(S(8), '2026-10-23', { familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos', ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', asignacion_id: A_SAB, pago_ninera: 400 }));
+    const e = await abrirApp(page, { datos: d, ahora: '2026-10-24T18:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     await expect(filaCarla(page)).toContainText('cierra hoy a las 19:00');
     verificarLimpio(e);
   });
 
   test('el resumen del mes usa la misma regla', async ({ page }) => {
-    const e = await abrirApp(page, { datos: conCarlaDomingo(datos()), ahora: '2026-10-25T14:00:00-03:00' });
+    const e = await abrirApp(page, { datos: conCarlaSabado(datos()), ahora: '2026-10-24T14:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     await expect(page.locator('#fin-porpagar-semanas')).toContainText('Más $500 de semanas que todavía no cierran');
-    await page.clock.setFixedTime(new Date('2026-10-25T19:30:00-03:00'));
+    await page.clock.setFixedTime(new Date('2026-10-24T19:30:00-03:00'));
     await irAModulo(page, 'agenda');
     await irAModulo(page, 'finanzas');
     await expect(page.locator('#fin-porpagar')).toBeVisible();
@@ -215,13 +223,43 @@ test.describe('Por pagar: se paga el día que cierra, cuando terminó el último
   });
 });
 
+test.describe('siempre el sábado (23/10/2026)', () => {
+  test('lo que una fija trabaja el domingo va a la semana que se paga el sábado siguiente', async ({ page }) => {
+    const d = datos();
+    d.asignaciones.push({ ...d.asignaciones[0], id: A_SAB, familia_id: ID.fDos, ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', dias: ['D'] });
+    d.sittings_traslados.push(
+      sitting(S(9), '2026-10-18', { familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos', ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', asignacion_id: A_SAB, pago_ninera: 500 }),
+      sitting(S(10), '2026-10-25', { familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos', ninera_id: ID.nCarla, ninera_nombre: 'Carla Ejemplo', asignacion_id: A_SAB, pago_ninera: 450 }),
+    );
+    const e = await abrirApp(page, { datos: d, ahora: '2026-10-25T20:00:00-03:00' });
+    await irAModulo(page, 'finanzas');
+    // El domingo 18 entró en la semana del 18 al 24, que ya se paga (cerró ayer sábado).
+    await expect(listos(page).filter({ hasText: 'Carla Ejemplo' }).filter({ hasText: /Semana del 18-oct.* al 24-oct/ })).toContainText('$500');
+    // El de hoy domingo 25 es de la semana que cierra el sábado 31.
+    const fila = enCurso(page).locator('.fin-semana-en-curso', { hasText: 'Carla Ejemplo' });
+    await expect(fila).toContainText('Semana en curso, cierra el sábado 31/10');
+    await expect(fila).toContainText('$450');
+    verificarLimpio(e);
+  });
+
+  test('un sábado, el margen del mes cuenta la semana que ya se paga (antes esperaba al lunes)', async ({ page }) => {
+    const e = await abrirApp(page, { datos: datos(), ahora: '2026-10-24T10:00:00-03:00' });
+    await irAModulo(page, 'finanzas');
+    // Ana cerró hoy: su semana está para pagar, y el margen la cuenta: 12/10 + 19/10 + 21/10 de
+    // Familia Prueba Uno ($1.140 cada uno) = $3.420 en octubre.
+    await expect(listos(page).filter({ hasText: /Semana del 18/ })).toContainText('$1.550');
+    await expect(page.locator('#fin-margen-tabla')).toContainText('$3.420');
+    verificarLimpio(e);
+  });
+});
+
 test.describe('Por pagar: el cierre es en hora de Montevideo aunque el aparato tenga otra zona', () => {
   test.use({ timezoneId: 'Asia/Tokyo' });
   test('a las 18:30 de Montevideo todavía no, a las 19:30 sí', async ({ page }) => {
-    const e = await abrirApp(page, { datos: conCarlaDomingo(datos()), ahora: '2026-10-25T18:30:00-03:00' });
+    const e = await abrirApp(page, { datos: conCarlaSabado(datos()), ahora: '2026-10-24T18:30:00-03:00' });
     await irAModulo(page, 'finanzas');
     await expect(filaCarla(page)).toContainText('cierra hoy a las 19:00');
-    await aLas(page, '2026-10-25T19:30:00-03:00');
+    await aLas(page, '2026-10-24T19:30:00-03:00');
     await expect(listaCarla(page)).toHaveCount(1);
     verificarLimpio(e);
   });
