@@ -268,6 +268,59 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
     verificarLimpio(e);
   });
 
+  test('cobro parcial: lo tildado con el saldo a favor y la combinación exacta de "¿Cuánto pagó?"', async ({ page }) => {
+    // Regla escrita (23/10/2026): el saldo se aplica a lo que se marca, en orden; un descuento
+    // nunca deja el total en negativo; el total va sin centavos. "¿Cuánto pagó?" elige, entre
+    // las partes que suman exacto, la que usa las más viejas (se compara con probar todas).
+    const e = await abrirApp(page);
+    await cargarOraculo(page);
+    const az = crearAzar(SEMILLA + 30);
+    const reglaParcial = (subtotal, ajustes, familia) => {
+      let neto = subtotal;
+      for (const a of ajustes) neto = a.monto > 0 ? neto + a.monto : neto - Math.min(-a.monto, Math.max(neto, 0));
+      return reglaRedondeo(Math.round(neto * 100) / 100, familia);
+    };
+    const casos = [];
+    const N = 400;
+    for (let i = 0; i < N; i++) {
+      const n = az.entero(1, 9);
+      const unidades = Array.from({ length: n }, () => ({ monto: az.si(0.6) ? az.de([380, 570, 760, 1140, 1520]) : Math.round(az.entero(100, 3000) * 100 + az.de([0, 0, 50, 49])) / 100 }));
+      const ajustes = Array.from({ length: az.entero(0, 2) }, (_, k) => ({ id: 'aj' + k, monto: (az.si(0.8) ? -1 : 1) * az.de([100, 250, 500, 760, 2000, 333.5]) }));
+      const familia = az.si(0.7);
+      // Una parte al azar (siempre tiene solución) o un monto al azar (puede no tenerla).
+      const parte = unidades.map(() => az.si(0.5));
+      if (!parte.some(Boolean)) parte[az.entero(0, n - 1)] = true;
+      const suma = unidades.reduce((t, u, k) => t + (parte[k] ? u.monto : 0), 0);
+      const objetivo = az.si(0.7) ? reglaParcial(suma, ajustes, familia) : az.entero(1, 8000);
+      casos.push({ unidades, ajustes, familia, objetivo, suma });
+    }
+    const r = await page.evaluate(casos => casos.map(c => {
+      const sujeto = c.familia ? 'familia' : 'ninera';
+      const de = F => ({ parcial: F.totalParcial(c.suma, c.ajustes, sujeto), combinacion: F.combinacionExacta(c.unidades, c.objetivo, c.ajustes, sujeto) });
+      return { app: de(window), oraculo: de(ORACULO) };
+    }), casos);
+    const malos = [];
+    const masVieja = (a, b) => { for (let j = 0; j < Math.min(a.length, b.length); j++) if (a[j] !== b[j]) return a[j] < b[j]; return a.length < b.length; };
+    casos.forEach((c, i) => {
+      const { app, oraculo } = r[i];
+      if (!igual(app, oraculo)) { malos.push({ caso: i, que: 'contra el oráculo', c, app, oraculo }); return; }
+      if (app.parcial.total !== reglaParcial(c.suma, c.ajustes, c.familia)) malos.push({ caso: i, que: 'total de lo tildado', c, app: app.parcial });
+      // Lo usado de cada ajuste, sumado a lo tildado, da el total (antes de sacar los centavos).
+      const usado = app.parcial.usados.reduce((t, a) => t + a.monto, 0);
+      if (!cerca(reglaRedondeo(Math.round((c.suma + usado) * 100) / 100, c.familia), app.parcial.total)) malos.push({ caso: i, que: 'saldo usado', c, app: app.parcial });
+      let mejor = null;
+      for (let m = 1; m < (1 << c.unidades.length); m++) {
+        const idx = c.unidades.map((_, k) => k).filter(k => m & (1 << k));
+        const s = Math.round(idx.reduce((t, k) => t + c.unidades[k].monto, 0) * 100) / 100;
+        if (reglaParcial(s, c.ajustes, c.familia) === c.objetivo && (!mejor || masVieja(idx, mejor))) mejor = idx;
+      }
+      if (!igual(app.combinacion, mejor)) malos.push({ caso: i, que: 'combinación exacta', c, app: app.combinacion, regla: mejor });
+    });
+    sinDiferencias(malos, 'cobros parciales');
+    anotarCasos(N, 'cobros parciales');
+    verificarLimpio(e);
+  });
+
   test('la prueba SQL de paridad está al día con el oráculo y la semilla', () => {
     // Si cambia el oráculo o el generador, hay que volver a generarla: node scripts/paridad-plata-sql.js
     const enRepo = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'pruebas', 'paridad_plata.sql'), 'utf8');

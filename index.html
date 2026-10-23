@@ -297,6 +297,8 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .toast.good{background:var(--good);}
 .toast.bad{background:var(--bad);}
 .toast.leaving{animation:toastOut 200ms ease forwards;}
+.toast.con-accion{display:flex;align-items:center;justify-content:space-between;gap:14px;}
+.toast-accion{background:#fff;color:var(--ink);border:none;border-radius:8px;min-height:44px;padding:0 14px;font-weight:700;font-size:14.5px;cursor:pointer;font-family:inherit;flex:none;}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
 @keyframes toastOut{to{opacity:0;transform:translateX(20px);}}
 .appshell{position:fixed;inset:0;display:flex;}
@@ -401,6 +403,19 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .confirmbox h2,.confirmbox .helper,.confirmbox td,.person-list .name,.agendarow{overflow-wrap:anywhere;}
 .pago-fila{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
 .pago-fila .pago-monto{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+/* Por cobrar / Por pagar: detalle de cada pendiente para marcar solo una parte (23/10/2026). */
+.fin-pend-cabeza{cursor:pointer;min-height:44px;min-width:0;flex:1;}
+.fin-pend-cabeza:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px;}
+.fin-pend-vermas{color:var(--accent);font-size:12.5px;margin-top:3px;}
+.fin-det{padding:4px 0 10px;border-bottom:1px solid var(--line);}
+.fin-det-fila{font-weight:400;display:flex;align-items:center;gap:12px;min-height:44px;padding:4px 0;border-bottom:1px dashed var(--line);cursor:pointer;font-size:13.5px;}
+.fin-det-fila.sub{padding-left:22px;}
+.fin-det-fila input[type=checkbox]{width:24px;height:24px;flex:none;margin:0;accent-color:var(--accent);}
+.fin-det-fila .fin-det-texto{flex:1;min-width:0;overflow-wrap:anywhere;}
+.fin-det-fila .pago-monto{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+.fin-det-pie{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;}
+.fin-det-pagado-campo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 6px;}
+.fin-det-pagado-campo input{max-width:160px;min-height:44px;font-size:16px;}
 /* Fijos automáticos (06/10/2026): días previstos en la Agenda, revisión en Hoy, previsto del mes. */
 .agenda-previsto{display:inline-block;font-size:10px;font-weight:700;color:var(--accent);background:var(--accent-soft);border:1px dashed var(--accent);padding:1px 6px;border-radius:100px;flex-shrink:0;}
 .autoconf-fila{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;flex-wrap:wrap;}
