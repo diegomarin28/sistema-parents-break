@@ -107,6 +107,7 @@ test.describe('E3: confirmar antes de marcar pagado', () => {
     const id = '70000000-0000-4000-8000-000000000003'; // 28/09, sin pagar
     await page.evaluate(i => editarMovimientoSitting(i), id);
     await page.fill('#fin-mov-pago', '800');
+    await page.selectOption('#fin-mov-motivo', 'extra'); // cambiar el monto pide el motivo (21/10/2026)
     await page.check('#fin-mov-pagado');
     await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
     const modal = modalPago(page);
@@ -120,7 +121,7 @@ test.describe('E3: confirmar antes de marcar pagado', () => {
     await page.locator('#editmodal button', { hasText: 'Guardar' }).click();
     await modalPago(page).locator('button', { hasText: 'Confirmar pago' }).click();
     await expect(page.locator('#editmodal')).toHaveCount(0);
-    expect(e.escrituras.find(x => x.tabla === 'sittings_traslados').cuerpo).toMatchObject({ pagado: true, pago_ninera: 800 });
+    expect(e.escrituras.find(x => x.tabla === 'sittings_traslados').cuerpo).toMatchObject({ pagado: true, pago_ninera: 800, precio_motivo: 'extra' });
     verificarLimpio(e);
   });
 
