@@ -283,6 +283,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   recalcula con la tarifa y los términos, medianoche, ya cobrado, otra admin, base que falla, traslado, 390 px).
 - `tests/ninieras-lista.spec.js`: lista de Niñeras por fecha de entrevista (sin entrevista al
   final), sittings y traslados de cada una en su fila, una sola fecha de nacimiento al editar.
+- `tests/precio-a-mano.spec.js`: precio puesto a mano con motivo en el registro (pide el motivo, lo
+  conserva, "Usar estos montos" lo saca, editar lo muestra, base sin migrar) y en "Editar
+  movimiento"; "Revisar meses" no marca los que tienen motivo. En la base: `supabase/pruebas/precio_a_mano.sql`.
 - `tests/regresiones.spec.js`: bugs conocidos. Los que tienen `test.fail()` todavía no están
   arreglados; cuando el arreglo se mergea, el test empieza a pasar y hay que sacarle la marca.
 - Supabase está simulado en `tests/support/app.js` con datos ficticios (`tests/support/datos.js`).
@@ -367,6 +370,10 @@ reporte.
 - "Termina al día siguiente" (21/10/2026): con la casilla, el fin va antes que el inicio (o igual:
   24 h). Si no, `cruceMedianocheMalMarcado()` (core.js) avisa y no deja guardar, y `horasSitting()`
   devuelve null; antes se sumaban 24 h y se cobraban 26 horas.
+- Precio a mano con motivo (21/10/2026): si el precio de un sitting no es el de la tarifa, el
+  registro pide por qué (`precio_motivo`: descuento, extra, sin_servicio, otro); "Editar
+  movimiento" lo pide si se cambia el monto. Sin la columna se guarda igual y se avisa
+  (`esFaltaColumnaMotivo`). "Revisar meses" no marca como sospechoso lo que tiene motivo.
 - Precio de un sitting (21/10/2026): lo tipeado a mano no se pisa al cambiar la hora o la familia;
   se muestra el calculado con "Usar estos montos" (`precioSegunHorario`, sittings.js). Al editar,
   un precio igual a horas × tarifa se sigue recalculando. Un pedido sin hora de fin no tiene total

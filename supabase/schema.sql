@@ -529,6 +529,10 @@ create table public.sittings_traslados (
   estado text default 'confirmado'::text not null,
   generado_automatico boolean default false not null,
   revisado_at timestamp with time zone,
+  -- Precio puesto a mano (21/10/2026): por qué el cobro o el pago no es el de la tarifa.
+  -- Vacío = es el de la tarifa.
+  precio_motivo text,
+  constraint sittings_traslados_precio_motivo_check CHECK ((precio_motivo = ANY (ARRAY['descuento'::text, 'extra'::text, 'sin_servicio'::text, 'otro'::text]))),
   constraint sittings_traslados_pkey PRIMARY KEY (id),
   constraint sittings_traslados_estado_check CHECK ((estado = ANY (ARRAY['previsto'::text, 'confirmado'::text]))),
   constraint sittings_traslados_fuente_check CHECK ((fuente = ANY (ARRAY['app'::text, 'historico'::text]))),
