@@ -9,6 +9,8 @@ let sitEsRegistroConocido = false; // true si se está editando uno ya guardado,
 let sitPagoModoHora = false; // true = el campo de pago a niñera se tipea por hora (y se calcula el total solo), false = se tipea el total directo
 let sitEditId = null;
 let sitPrecioMotivo = ''; // el motivo guardado del registro que se edita (precio a mano, 21/10/2026)
+let sitTeniaVariantes = false; // el registro que se edita tenía variantes de precio (23/10/2026)
+let sitAsignacionVariantes = null; // el fijo del registro, para mostrar las variantes que son solo de ese fijo
 let sitFamiliaSel = null;
 let sitNineraSel = null;
 let sitOrigenAuto = true;
@@ -164,7 +166,7 @@ function filaHistorialTr(r){
     <td>${horasEfectuadasTexto(r)}</td>
     <td>${plataFin(r.cobro_familia)}</td>
     <td>${plataFin(r.pago_ninera)}</td>
-    <td class="hist-detalle" title="${escaparHtml(r.notas)}">${escaparHtml(r.notas||'—')}</td>
+    <td class="hist-detalle" title="${escaparHtml(detalleRegistro(r))}">${escaparHtml(detalleRegistro(r)||'—')}</td>
     <td>${resenaBadge(r.ninera_nombre)}</td>
   </tr>`;
 }
@@ -245,6 +247,9 @@ function abrirModalExportarHistorialPDF(){
   `;
   abrirModal(html);
 }
+// El detalle de un registro en el historial y en el PDF: las variantes de precio que se le
+// aplicaron (23/10/2026) y las notas.
+function detalleRegistro(r){ return [nombresVariantes(r.precio_variantes), r.notas].filter(Boolean).join(' · '); }
 async function generarVistaPreviaHistorialPDF(){
   await esperarConfigFijos(); // fijos automáticos: saber si hay que sacar los previstos
   const desde = document.getElementById('exphist-desde')?.value;
@@ -315,7 +320,7 @@ async function generarVistaPreviaHistorialPDF(){
         <td>${horarioEfectuadoTexto(r)}</td>
         <td>${horasEfectuadasTexto(r)}</td>
         <td>${plataFin(r.cobro_familia)}</td>
-        <td class="hist-detalle" title="${escaparHtml(r.notas)}">${escaparHtml(r.notas||'—')}</td>
+        <td class="hist-detalle" title="${escaparHtml(detalleRegistro(r))}">${escaparHtml(detalleRegistro(r)||'—')}</td>
       </tr>`).join('')}</tbody>
     </table></div>
     ${gastosHtml}
@@ -378,7 +383,7 @@ async function descargarHistorialPDF(desde, hasta){
       horarioEfectuadoTexto(r),
       horasEfectuadasTexto(r),
       `$${(r.cobro_familia||0).toLocaleString('es-UY')}`,
-      r.notas || '',
+      detalleRegistro(r),
     ]),
     styles:{fontSize:8, cellPadding:3, overflow:'linebreak'},
     headStyles:{fillColor:[117,124,187]},
@@ -564,6 +569,7 @@ function sitFormHTML(){
     </div>
     <div id="sit-precio-sugerido"></div>
     <div id="sit-sin-tarifa-box"></div>
+    <div id="sit-variantes"></div>
     <div id="sit-gastos-box" style="margin-top:12px;"></div>
     <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="sit-notas"></textarea></div>
     <div class="actions">
@@ -665,9 +671,11 @@ async function abrirModalSitForm(id=null){
   }
   sitEditId = id;
   sitPrecioMotivo = r?.precio_motivo || '';
+  sitTeniaVariantes = !!r?.precio_variantes;
   sitEsRegistroConocido = !!r || !!sitPrefill; // nuevo en blanco -> no corresponde "no hubo servicio"
   sitPagoModoHora = false;
   sitAsignacionId = (!r && sitPrefill?.asignacionId) || null;
+  sitAsignacionVariantes = r?.asignacion_id || sitAsignacionId;
   sitTipo = r ? r.tipo : (sitPrefill?.tipo==='traslado' ? 'traslado' : 'sitting');
   sitFamiliaSel = r ? (sitFamilias.find(f=>f.id===r.familia_id) || findFamilia(r.familia_nombre)) : null;
   sitNineraSel = r ? (sitNinieras.find(n=>n.id===r.ninera_id) || findNinera(r.ninera_nombre)) : null;
@@ -684,13 +692,17 @@ async function abrirModalSitForm(id=null){
       document.getElementById('sit-ninera').value = r.ninera_nombre || '';
       document.getElementById('sit-registro').value = r.registrado_por || registradoPorUsuario();
       document.getElementById('sit-fecha').value = r.fecha || '';
-      document.getElementById('sit-cobro').value = r.cobro_familia || 0;
-      document.getElementById('sit-pago').value = r.pago_ninera || 0;
+      // Con variantes de precio, los campos muestran la base (sin las variantes): se vuelven a
+      // aplicar al guardar (23/10/2026).
+      const baseV = r.precio_variantes?.base;
+      const cobroBase = baseV ? baseV.cobro : r.cobro_familia, pagoBase = baseV ? baseV.pago : r.pago_ninera;
+      document.getElementById('sit-cobro').value = cobroBase || 0;
+      document.getElementById('sit-pago').value = pagoBase || 0;
       // Lo que no es horas × tarifa se puso a mano: no se pisa si se toca el horario (aparece el
       // calculado para usarlo con un toque). Si coincide, cambiar la hora lo sigue recalculando.
       // Un traslado guardado nunca se pisa con el sugerido por km (actualizarPrecioSugeridoTraslado).
       const calc = r.tipo==='sitting' ? precioSegunHorario(sitFamiliaSel, r.hora_inicio, r.hora_fin, !!r.termina_dia_siguiente, r.fecha) : {};
-      [['sit-cobro', r.cobro_familia, calc.cobro], ['sit-pago', r.pago_ninera, calc.pago]].forEach(([campo, guardado, calculado])=>{
+      [['sit-cobro', cobroBase, calc.cobro], ['sit-pago', pagoBase, calc.pago]].forEach(([campo, guardado, calculado])=>{
         if(r.tipo!=='sitting' || (Number(guardado) && Number(guardado)!==calculado)) document.getElementById(campo).dataset.tocadoManual = '1';
       });
       document.getElementById('sit-cancelado').checked = !!r.cancelado;
@@ -736,6 +748,7 @@ async function abrirModalSitForm(id=null){
       }
       sitPrefill = null;
     }
+    refrescarVariantesSit(r ? (r.precio_variantes?.aplicadas || []) : []);
     calcSitMargen();
     refrescarSugerenciaPrecioSit(); // un registro con precio a mano muestra su motivo al abrir
     // Después de precargar (lo precargado no cuenta como cambio): borrador y aviso antes de
@@ -758,6 +771,7 @@ function setSitTipo(t){
   sitOrigenCoord = null; sitDestinoCoord = null;
   document.getElementById('sit-camposTipo').innerHTML = sitCamposTipoHTML();
   if(fechaElegida) document.getElementById('sit-fecha').value = fechaElegida;
+  refrescarVariantesSit(); // las variantes dependen de si es sitting o traslado
   if(horaElegida) setHoraSelect(t==='sitting' ? 'sit-horaini' : 'sit-hora', horaElegida);
   wireSitAutocompletes();
   if(t==='traslado') aplicarDireccionSugerida();
@@ -774,6 +788,14 @@ function onSitFamiliaInput(){
   sitOrigenAuto = true;
   if(sitTipo==='traslado') aplicarDireccionSugerida();
   actualizarCobroPagoPorHorario();
+  refrescarVariantesSit();
+}
+// Los botones de variantes de esta familia y el ajuste libre (familias.js). La base es lo que
+// dicen los campos de cobro y pago; lo que se guarda, eso con las variantes (23/10/2026).
+function refrescarVariantesSit(aplicadas=null){
+  return prepararVariantesPrecio('sit', { familiaId: sitFamiliaSel?.id || null, tipo: sitTipo, asignacionId: sitAsignacionVariantes, aplicadas,
+    base: ()=>({ cobro: redondearCobro(document.getElementById('sit-cobro')?.value), pago: redondearPago(document.getElementById('sit-pago')?.value) }),
+    alCambiar: pintarMargenSit });
 }
 function onSitNineraInput(){
   const val = document.getElementById('sit-ninera').value.trim();
@@ -1360,8 +1382,14 @@ async function guardarTarifaTraslado(){
 }
 
 function calcSitMargen(){
-  const c = Number((document.getElementById('sit-cobro')||{}).value)||0;
-  const p = Number((document.getElementById('sit-pago')||{}).value)||0;
+  actualizarResumenVariantes('sit', false);
+  pintarMargenSit();
+}
+// Con variantes, el margen es el de lo que se va a guardar.
+function pintarMargenSit(){
+  const conVariantes = precioConVariantesUI('sit');
+  const c = conVariantes ? conVariantes.cobro : Number((document.getElementById('sit-cobro')||{}).value)||0;
+  const p = conVariantes ? conVariantes.pago : Number((document.getElementById('sit-pago')||{}).value)||0;
   const el = document.getElementById('sit-margen');
   if(el) el.textContent = '$'+(c-p);
 }
@@ -1631,6 +1659,18 @@ async function guardarSitting(){
   const motivoEl = document.getElementById('sit-precio-motivo');
   if(motivoEl && !motivoEl.value){ toast('Elegí por qué el precio no es el de la tarifa: descuento, extra, se cobra sin servicio u otro.', 'bad'); motivoEl.focus(); return; }
   registro.precio_motivo = motivoEl ? motivoEl.value : null;
+  // Variantes de precio (23/10/2026): lo de los campos es la base; se guarda con las variantes y
+  // queda anotado cuáles (no en las notas). Un día sin servicio va en $0, sin variantes.
+  const vars = registro.cancelado ? { aplicadas: null } : leerVariantesPrecio('sit');
+  if(vars.error){ toast(vars.error, 'bad'); return; }
+  if(vars.aplicadas){
+    const base = { cobro: registro.cobro_familia, pago: registro.pago_ninera };
+    const conVariantes = aplicarVariantes(base.cobro, base.pago, vars.aplicadas);
+    registro.precio_variantes = { base, aplicadas: vars.aplicadas };
+    registro.cobro_familia = conVariantes.cobro;
+    registro.pago_ninera = conVariantes.pago;
+    registro.precio_motivo = vars.motivo || registro.precio_motivo;
+  } else if(sitTeniaVariantes) registro.precio_variantes = null;
   // Gastos extra nuevos: se revisan ANTES de guardar el registro (concepto, monto y foto).
   const gastosNuevos = leerGastosExtraNuevos();
   if(gastosNuevos.error){ toast(gastosNuevos.error, 'bad'); return; }
@@ -1667,6 +1707,7 @@ async function guardarSitting(){
   let res = await escribir();
   let sinMotivo = false;
   if(esFaltaColumnaMotivo(res.error)){ sinMotivo = registro.precio_motivo != null; delete registro.precio_motivo; res = await escribir(); }
+  if(esFaltaColumnaVariantes(res.error)){ sinMotivo = true; delete registro.precio_variantes; res = await escribir(); }
   const error = res.error;
   if(!sitEditId) sitGuardadoId = res.data?.id || null;
   if(error){ toast('No se pudo guardar: '+error.message, 'bad'); return; }
@@ -1707,6 +1748,7 @@ async function guardarSitting(){
     toast(sitEditId ? 'Registro actualizado.' : 'Registro guardado.');
   }
   sitEditId = null; sitFamiliaSel = null; sitNineraSel = null; sitOrigenAuto = true; sitTipo = 'sitting'; sitAsignacionId = null; sitPrecioMotivo = '';
+  sitTeniaVariantes = false; sitAsignacionVariantes = null;
   cerrarModal();
   cargarSitLista();
 }

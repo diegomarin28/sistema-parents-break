@@ -527,6 +527,7 @@ async function cargarConfirmadosAutomaticos(){
       <div class="autoconf-btns">
         <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoRevisados([${argJs(r.id)}]))">${r.hora_fin ? `Sí, terminó ${hhmm(r.hora_fin)}` : 'Sí, fue así'}</button>
         <button class="smallbtn" onclick="abrirOtraHoraAuto(${argJs(r.id)})">Otra hora</button>
+        ${variantesPrecioDisponible && r.familia_id ? `<button class="smallbtn" onclick="abrirVariantesAuto(${argJs(r.id)})">Variantes</button>` : ''}
         <button class="smallbtn" onclick="conGuardado(this, ()=>marcarAutoNoFue(${argJs(r.id)}))">No fue</button>
         <button class="smallbtn" onclick="abrirReemplazoAuto(${argJs(r.id)})">Fue otra</button>
       </div>
@@ -629,6 +630,52 @@ async function guardarOtraHoraAuto(id){
   if(!data || !data.length){ warn.innerHTML = '<div class="warnbox">No se guardó: mientras tanto alguien lo marcó como cobrado o pagado. Corregilo desde Sittings &amp; traslados.</div>'; return; }
   cerrarModal();
   toast('Listo: quedó con el horario real.');
+  await cargarConfirmadosAutomaticos();
+}
+/* "Variantes" (23/10/2026): los botones de variantes de la familia y el ajuste libre sobre el
+   precio de ese día ("la llevó a la casa"). La base es el precio que tenía (o la base guardada,
+   si ya tenía variantes); se guarda con las variantes y queda anotado cuáles. */
+function abrirVariantesAuto(id){
+  const r = dashAutoConfirmados.find(x=>x.id===id);
+  if(!r) return;
+  if(r.cobrado || r.pagado){ toast('Ese día ya está marcado como cobrado o pagado: corregilo desde Sittings & traslados.', 'bad'); return; }
+  const base = r.precio_variantes?.base || { cobro: Number(r.cobro_familia)||0, pago: Number(r.pago_ninera)||0 };
+  abrirModal(`
+    <h2 style="margin:0 0 4px;padding-right:32px;">Variantes de ese día</h2>
+    <div class="helper" style="margin-bottom:12px;">${escaparHtml(r.ninera_nombre)} en ${escaparHtml(r.familia_nombre)} · ${new Date(r.fecha+'T12:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long'})} · ${r.tipo==='traslado' ? 'traslado' : 'sitting'} a $${Number(base.cobro).toLocaleString('es-UY')} / $${Number(base.pago).toLocaleString('es-UY')}.</div>
+    <div id="cierre-variantes"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
+    <div id="autoconf-warn"></div>
+    <div class="confirmbtns">
+      <button class="btn ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn primary" onclick="conGuardado(this, ()=>guardarVariantesAuto(${argJs(id)}))">Guardar</button>
+    </div>`);
+  prepararVariantesPrecio('cierre', { familiaId: r.familia_id, tipo: r.tipo, asignacionId: r.asignacion_id, aplicadas: r.precio_variantes?.aplicadas || [], base: ()=>base })
+    .then(()=>{
+      const box = document.getElementById('cierre-variantes');
+      if(box && variantesUI.cierre?.inactivo) box.innerHTML = '<div class="helper">Las variantes de precio todavía no están activadas en la base. Avisale a Diego.</div>';
+    });
+}
+async function guardarVariantesAuto(id){
+  const r = dashAutoConfirmados.find(x=>x.id===id);
+  const warn = document.getElementById('autoconf-warn');
+  if(!r) return;
+  const vars = leerVariantesPrecio('cierre');
+  if(vars.error){ warn.innerHTML = `<div class="warnbox">${escaparHtml(vars.error)}</div>`; return; }
+  // Sin variantes antes ni ahora no hay nada que cambiar (se conserva el motivo de un precio a mano).
+  if(vars.inactivo || (!vars.aplicadas && !r.precio_variantes)){ cerrarModal(); return; }
+  const base = r.precio_variantes?.base || { cobro: Number(r.cobro_familia)||0, pago: Number(r.pago_ninera)||0 };
+  const cambios = vars.aplicadas
+    ? { ...aplicarVariantes(base.cobro, base.pago, vars.aplicadas), precio_variantes: { base, aplicadas: vars.aplicadas }, precio_motivo: vars.motivo }
+    : { cobro: base.cobro, pago: base.pago, precio_variantes: null, precio_motivo: null };
+  // Solo si sigue sin cobrar ni pagar (si otra admin lo marcó mientras tanto, no se toca).
+  const { data, error } = await sb.from('sittings_traslados')
+    .update({ cobro_familia: cambios.cobro, pago_ninera: cambios.pago, precio_variantes: cambios.precio_variantes, precio_motivo: cambios.precio_motivo,
+      generado_automatico: false, revisado_at: new Date().toISOString() })
+    .eq('id', id).eq('cobrado', false).eq('pagado', false).select('id');
+  if(error){ warn.innerHTML = errBox(error); return; }
+  if(!data || !data.length){ warn.innerHTML = '<div class="warnbox">No se guardó: mientras tanto alguien lo marcó como cobrado o pagado. Corregilo desde Sittings &amp; traslados.</div>'; return; }
+  cerrarModal();
+  toast(vars.aplicadas ? 'Listo: quedó con las variantes.' : 'Listo: quedó sin variantes.');
   await cargarConfirmadosAutomaticos();
 }
 let dashReemplazoSel = null;

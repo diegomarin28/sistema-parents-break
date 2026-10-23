@@ -421,6 +421,19 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .inter-elegir{display:flex;flex-direction:column;gap:10px;}
 .inter-elegir button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;min-height:56px;padding:10px 14px;}
 .inter-elegir button .helper{margin:0;font-weight:400;}
+/* Variantes de precio (23/10/2026): botones de un toque y ajuste libre, en el registro y en el
+   Cierre de los fijos. */
+.variantes-box{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:4px 0 12px;background:var(--bg);}
+.variantes-titulo{font-weight:700;font-size:13.5px;color:var(--ink);margin:0 0 8px;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;}
+.variantes-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px;}
+.variante-chip{min-height:44px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:1px;padding:6px 14px;border-radius:12px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer;font-family:inherit;font-size:14px;text-align:left;max-width:100%;}
+.variante-chip span{font-size:12px;color:var(--ink-soft);}
+.variante-chip.on{background:var(--accent-soft);border-color:var(--accent);}
+.variante-chip.on b{color:var(--accent);}
+.variante-libre-abrir{min-height:44px;}
+.variante-libre{border-top:1px dashed var(--line);padding-top:8px;margin-top:4px;}
+.variante-libre-btns{display:flex;gap:8px;flex-wrap:wrap;}
+.variante-libre-btns .smallbtn{min-height:44px;}
 /* Por cobrar / Por pagar: una tarjeta por familia o niñera, con el detalle para marcar solo una
    parte (23/10/2026). Renglones de 44 px y casillas grandes: lo usan desde el celular. */
 .fin-pend-cabeza{cursor:pointer;min-height:44px;min-width:0;flex:1 1 230px;}
@@ -437,6 +450,7 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .fin-det-fila.fin-det-sub{padding-left:26px;font-size:13.5px;color:var(--ink-soft);}
 .fin-det-fila input[type=checkbox]{width:26px;height:26px;flex:none;margin:0;accent-color:var(--accent);}
 .fin-det-fila .fin-det-texto{flex:1;min-width:0;overflow-wrap:anywhere;}
+.fin-det-variantes{display:block;font-size:12.5px;color:var(--ink-soft);}
 .fin-det-fila .pago-monto{font-family:'IBM Plex Mono',monospace;font-weight:600;white-space:nowrap;}
 .fin-det-saldos{border-top:1px solid var(--line);margin-top:8px;}
 .fin-det-botones{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}

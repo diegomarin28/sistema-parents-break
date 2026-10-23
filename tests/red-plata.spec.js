@@ -346,6 +346,41 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
     verificarLimpio(e);
   });
 
+  test('variantes de precio: total fijo, porcentaje y sumas, con el redondeo de cada lado', async ({ page }) => {
+    // Regla escrita (23/10/2026): de cada lado (cobro y pago), primero el total fijo (si hay varios,
+    // el último), después los porcentajes y al final las sumas; nunca menos de $0; el cobro con
+    // la regla del cobro y el pago con la del pago.
+    const e = await abrirApp(page);
+    await cargarOraculo(page);
+    const az = crearAzar(SEMILLA + 40);
+    const efecto = () => {
+      const modo = az.de(['sumar', 'sumar', 'total', 'porcentaje']);
+      const valor = modo === 'porcentaje' ? az.de([-100, -50, -33, -10, 10, 15, 50]) : modo === 'total' ? az.entero(0, 3000) + az.de([0, 0, 0.5, 0.49]) : az.de([-1, 1]) * (az.entero(0, 900) + az.de([0, 0.5, 0.25]));
+      return { modo, valor };
+    };
+    const casos = Array.from({ length: 600 }, () => ({
+      cobro: az.entero(0, 4000) + az.de([0, 0.5, 0.4]),
+      pago: az.entero(0, 3000) + az.de([0, 0.5, 0.6]),
+      aplicadas: Array.from({ length: az.entero(0, 3) }, (_, k) => ({ id: 'v' + k, nombre: 'Variante ' + k, cobro: az.si(0.75) ? efecto() : null, pago: az.si(0.75) ? efecto() : null })),
+    }));
+    const regla = (base, efectos, cobro) => {
+      const total = efectos.filter(x => x.modo === 'total').pop();
+      let v = total ? total.valor : base;
+      for (const x of efectos.filter(x => x.modo === 'porcentaje')) v = v * (1 + x.valor / 100);
+      for (const x of efectos.filter(x => x.modo === 'sumar')) v = v + x.valor;
+      return reglaRedondeo(Math.max(Math.round(v * 100) / 100, 0), cobro);
+    };
+    const r = await page.evaluate(casos => casos.map(c => ({ app: aplicarVariantes(c.cobro, c.pago, c.aplicadas), oraculo: ORACULO.aplicarVariantes(c.cobro, c.pago, c.aplicadas) })), casos);
+    const malos = [];
+    casos.forEach((c, i) => {
+      const esperado = { cobro: regla(c.cobro, c.aplicadas.map(a => a.cobro).filter(Boolean), true), pago: regla(c.pago, c.aplicadas.map(a => a.pago).filter(Boolean), false) };
+      if (!igual(r[i].app, r[i].oraculo) || !igual(r[i].app, esperado)) malos.push({ caso: c, app: r[i].app, oraculo: r[i].oraculo, regla: esperado });
+    });
+    sinDiferencias(malos, 'variantes de precio');
+    anotarCasos(casos.length, 'variantes de precio');
+    verificarLimpio(e);
+  });
+
   test('la prueba SQL de paridad está al día con el oráculo y la semilla', () => {
     // Si cambia el oráculo o el generador, hay que volver a generarla: node scripts/paridad-plata-sql.js
     const enRepo = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'pruebas', 'paridad_plata.sql'), 'utf8');

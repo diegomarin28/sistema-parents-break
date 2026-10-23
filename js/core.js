@@ -1291,6 +1291,8 @@ function htmlMotivoPrecio(id, actual){
 }
 // Sin la migración del 21/10/2026 la columna no existe: se guarda igual, sin el motivo.
 function esFaltaColumnaMotivo(error){ return !!error && /precio_motivo/.test(error.message||''); }
+// Sin la migración del 23/10/2026 (variantes de precio) no está la columna: se guarda sin ellas.
+function esFaltaColumnaVariantes(error){ return !!error && /precio_variantes/.test(error.message||''); }
 // Minutos desde la medianoche de ahora en Montevideo (21/10/2026): para saber si ya terminó el
 // último fijo del día, aunque el aparato tenga otra zona horaria.
 function minutosAhoraMontevideo(d=new Date()){
@@ -1363,6 +1365,28 @@ function redondearMonto(n, mitadSube){
 }
 function redondearPago(n){ return redondearMonto(n, false); }
 function redondearCobro(n){ return redondearMonto(n, true); }
+/* Variantes de precio (23/10/2026): los casos especiales de una familia ("la llevó a la casa":
+   se suma algo a la madre y a la niñera; "no se hizo": se cobra igual y a la niñera se le paga un
+   monto fijo; un descuento por porcentaje) dejan de ser notas sueltas. Cada variante dice qué le hace al cobro
+   y qué al pago: sumar (o restar) un monto, reemplazar por un total fijo o un porcentaje. De
+   cada lado va primero el total fijo (si hay varios, el último), después los porcentajes y al
+   final las sumas; nunca menos de $0, y sin centavos con la regla de cada lado. En la base, lo
+   mismo hace precio_con_variantes() (generar_previstos_fijos); si cambia una, cambian las dos
+   (las compara supabase/pruebas/paridad_plata.sql). La app de niñeras puede usar las mismas. */
+const MODOS_VARIANTE = [['sumar', 'Sumar o restar'], ['total', 'Total fijo'], ['porcentaje', 'Porcentaje']];
+function efectoVariantes(base, efectos){
+  const n = x => Number(x)||0;
+  const total = efectos.filter(e=>e.modo==='total').pop();
+  let v = total ? n(total.valor) : n(base);
+  efectos.filter(e=>e.modo==='porcentaje').forEach(e=>{ v = v * (1 + n(e.valor)/100); });
+  efectos.filter(e=>e.modo==='sumar').forEach(e=>{ v = v + n(e.valor); });
+  return Math.max(Math.round(v*100)/100, 0);
+}
+// aplicadas: [{ id, nombre, cobro: {modo, valor} | null, pago: {modo, valor} | null, ... }].
+function aplicarVariantes(baseCobro, basePago, aplicadas){
+  const lado = k => (aplicadas||[]).map(a=>a && a[k]).filter(e=>e && e.modo);
+  return { cobro: redondearCobro(efectoVariantes(baseCobro, lado('cobro'))), pago: redondearPago(efectoVariantes(basePago, lado('pago'))) };
+}
 // "Traslado $1.018 + gastos $427 = $1.445". Delfi no veía que la comida se sumaba aparte, la
 // metió en el precio y quedó cobrada dos veces (13/10/2026). Sin gastos devuelve ''.
 function textoTotalConGastos(etiqueta, base, gastos){

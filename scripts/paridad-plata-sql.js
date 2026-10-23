@@ -7,7 +7,8 @@
 //   - generar_previstos_fijos: fijos inventados de todos los días (horarios cualquiera, algunos
 //     después de medianoche, tarifas con centavos, con y sin términos) y el cobro y el pago de
 //     cada día que crea;
-//   - precio_sitting (pedido desde WhatsApp): las mismas familias con otros horarios.
+//   - precio_sitting (pedido desde WhatsApp): las mismas familias con otros horarios;
+//   - precio_con_variantes (variantes de precio, 23/10/2026): bases y variantes al azar.
 // Se vuelve a generar cuando cambia el oráculo o el generador (tests/red-plata.spec.js avisa):
 //   node scripts/paridad-plata-sql.js
 // El .sql se corre en un Postgres LOCAL (nunca en producción), como las otras pruebas.
@@ -20,6 +21,7 @@ const DESTINO = path.join(__dirname, '..', 'supabase', 'pruebas', 'paridad_plata
 const FIJOS = 150;
 const MONTOS = 800;
 const PRECIOS = 300;
+const VARIANTES = 400;
 
 function generarSQL() {
   const O = crearOraculoPlata();
@@ -145,6 +147,33 @@ select pg_temp.verificar('precio_sitting igual a la app en ' || (select count(*)
   not exists (select 1 from _precio e cross join lateral public.precio_sitting(e.familia_id, '2026-10-22', e.ini, e.fin) r
               where r.cobro is distinct from e.cobro or r.pago is distinct from e.pago)
   and (select count(*) from _precio e cross join lateral public.precio_sitting(e.familia_id, '2026-10-22', e.ini, e.fin) r) = ${PRECIOS});
+`);
+
+  // ---- 5) precio_con_variantes = aplicarVariantes (core.js): total fijo, porcentajes y sumas.
+  const efecto = () => {
+    const modo = az.de(['sumar', 'sumar', 'total', 'porcentaje']);
+    const valor = modo === 'porcentaje' ? az.de([-100, -50, -33, -10, 10, 15, 50]) : modo === 'total' ? az.entero(0, 3000) + az.de([0, 0, 0.5, 0.49]) : az.de([-1, 1]) * (az.entero(0, 900) + az.de([0, 0.5, 0.25]));
+    return { modo, valor };
+  };
+  const variantes = [];
+  for (let i = 0; i < VARIANTES; i++) {
+    const cobro = az.entero(0, 4000) + az.de([0, 0.5, 0.4]), pago = az.entero(0, 3000) + az.de([0, 0.5, 0.6]);
+    const aplicadas = Array.from({ length: az.entero(0, 3) }, (_, k) => ({ id: 'v' + k, cobro: az.si(0.75) ? efecto() : null, pago: az.si(0.75) ? efecto() : null }));
+    const r = O.aplicarVariantes(cobro, pago, aplicadas);
+    variantes.push(`(${cobro}::numeric, ${pago}::numeric, '${JSON.stringify(aplicadas)}'::jsonb, ${r.cobro}::numeric, ${r.pago}::numeric)`);
+  }
+  sql(`-- 5) precio_con_variantes = aplicarVariantes (core.js) en ${VARIANTES} casos.
+create temporary table _variantes (cobro numeric, pago numeric, aplicadas jsonb, e_cobro numeric, e_pago numeric);
+insert into _variantes values
+${valores(variantes, 1)};
+select pg_temp.verificar('precio_con_variantes igual a la app en ' || (select count(*) from _variantes) || ' casos'
+  || coalesce(': ' || (select string_agg(x.cobro || '/' || x.pago || ' ' || x.aplicadas::text || ' da ' || x.r::text || ' (app ' || x.e_cobro || '/' || x.e_pago || ')', '; ')
+                     from (select v.*, public.precio_con_variantes(v.cobro, v.pago, v.aplicadas) r from _variantes v
+                           where (public.precio_con_variantes(v.cobro, v.pago, v.aplicadas)->>'cobro')::numeric <> v.e_cobro
+                              or (public.precio_con_variantes(v.cobro, v.pago, v.aplicadas)->>'pago')::numeric <> v.e_pago limit 5) x), ''),
+  not exists (select 1 from _variantes v
+              where (public.precio_con_variantes(v.cobro, v.pago, v.aplicadas)->>'cobro')::numeric <> v.e_cobro
+                 or (public.precio_con_variantes(v.cobro, v.pago, v.aplicadas)->>'pago')::numeric <> v.e_pago));
 
 rollback;
 `);
@@ -153,6 +182,6 @@ rollback;
 
 if (require.main === module) {
   fs.writeFileSync(DESTINO, generarSQL());
-  console.log(`Generada ${path.relative(path.join(__dirname, '..'), DESTINO)}: 2880 minutos, ${MONTOS} montos, ${FIJOS} fijos, ${PRECIOS} precios.`);
+  console.log(`Generada ${path.relative(path.join(__dirname, '..'), DESTINO)}: 2880 minutos, ${MONTOS} montos, ${FIJOS} fijos, ${PRECIOS} precios, ${VARIANTES} variantes.`);
 }
 module.exports = { generarSQL };

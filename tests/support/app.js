@@ -245,12 +245,19 @@ async function abrirApp(page, opciones = {}) {
       const simular = estado.rpc[tabla.slice(4)];
       return route.fulfill({ json: simular ? simular(cuerpo, db) : [] });
     }
-    if (baseSinMigrar && ['sittings_historial', 'finanzas_historial', 'ajustes_saldo', 'gastos_extra'].includes(tabla)) {
+    if (baseSinMigrar && ['sittings_historial', 'finanzas_historial', 'ajustes_saldo', 'gastos_extra', 'variantes_precio'].includes(tabla)) {
       return route.fulfill({ status: 404, json: { code: 'PGRST205', message: `Could not find the table 'public.${tabla}' in the schema cache` } });
     }
     // Términos y condiciones (20/10/2026): sin la migración, familias no tiene la columna.
     if (baseSinMigrar && tabla === 'familias' && /terminos_aceptados_el/.test((url.searchParams.get('select') || '') + (req.postData() || ''))) {
       return route.fulfill({ status: 400, json: { code: '42703', message: 'column familias.terminos_aceptados_el does not exist' } });
+    }
+    // Variantes de precio (23/10/2026): sin la migración, sittings_traslados no tiene precio_variantes.
+    if (baseSinMigrar && tabla === 'sittings_traslados' && ['POST', 'PATCH'].includes(metodo) && /"precio_variantes"/.test(req.postData() || '')) {
+      return route.fulfill({ status: 400, json: { code: 'PGRST204', message: "Could not find the 'precio_variantes' column of 'sittings_traslados' in the schema cache" } });
+    }
+    if (baseSinMigrar && tabla === 'sittings_traslados' && metodo === 'GET' && /precio_variantes/.test(url.searchParams.get('select') || '')) {
+      return route.fulfill({ status: 400, json: { code: '42703', message: 'column sittings_traslados.precio_variantes does not exist' } });
     }
     // Precio a mano (21/10/2026): sin la migración, sittings_traslados no tiene precio_motivo.
     if (baseSinMigrar && tabla === 'sittings_traslados' && ['POST', 'PATCH'].includes(metodo) && /"precio_motivo"/.test(req.postData() || '')) {
