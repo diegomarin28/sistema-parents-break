@@ -67,8 +67,11 @@ test.describe('Por cobrar: marcar solo una parte', () => {
     await expect(filas.nth(0)).toContainText('$760');
     await expect(filas.nth(1)).toContainText('Carla Ejemplo');
     await expect(filas.nth(1)).toContainText('$1.140');
-    // Todo tildado al abrir: el total de lo tildado es el de la línea.
-    await expect(p.locator('.fin-det-total')).toContainText('$2.660');
+    // Nada tildado al abrir (23/10/2026): "lo tildado" en $0 y deshabilitado, y la ayuda de "¿Cuánto pagó?".
+    for (const f of ['07/09', '14/09', '21/09']) await expect(casilla(p, f)).not.toBeChecked();
+    await expect(p.locator('.fin-det-total')).toHaveText('$0');
+    await expect(p.locator('.fin-det-botones button', { hasText: 'lo tildado' })).toBeDisabled();
+    await expect(p.locator('.fin-det-ayuda')).toHaveText('Escribí lo que transfirió y tildamos los sittings que suman ese monto.');
     await p.screenshot({ path: 'test-results/cobro-parcial-escritorio.png' });
     verificarLimpio(e);
   });
@@ -77,8 +80,7 @@ test.describe('Por cobrar: marcar solo una parte', () => {
     const e = await abrirApp(page, { datos: datos() });
     await irAModulo(page, 'finanzas');
     const p = await abrirDetalle(page);
-    await casilla(p, '07/09').uncheck();
-    await casilla(p, '21/09').uncheck();
+    await casilla(p, '14/09').check();
     await expect(p.locator('.fin-det-total')).toContainText('$1.140');
     await p.locator('button', { hasText: 'Marcar cobrado' }).click();
     const aviso = page.locator('.toaststack .toast', { hasText: 'Marcado como cobrado.' });
@@ -102,13 +104,17 @@ test.describe('Por cobrar: marcar solo una parte', () => {
     verificarLimpio(e);
   });
 
-  test('sin nada tildado no marca nada y lo dice', async ({ page }) => {
+  test('sin nada tildado, "lo tildado" queda deshabilitado; tildar y destildar lo prende y lo apaga', async ({ page }) => {
     const e = await abrirApp(page, { datos: datos() });
     await irAModulo(page, 'finanzas');
     const p = await abrirDetalle(page);
-    for (const f of ['07/09', '14/09', '21/09']) await casilla(p, f).uncheck();
-    await p.locator('button', { hasText: 'Marcar cobrado' }).click();
-    await expect(page.locator('.toaststack .toast', { hasText: 'Tildá al menos un' })).toBeVisible();
+    const boton = p.locator('.fin-det-botones button', { hasText: 'lo tildado' });
+    await expect(boton).toBeDisabled();
+    await casilla(p, '07/09').check();
+    await expect(boton).toBeEnabled();
+    await casilla(p, '07/09').uncheck();
+    await expect(boton).toBeDisabled();
+    await expect(p.locator('.fin-det-botones button', { hasText: 'Marcar todo cobrado' })).toBeEnabled();
     expect(e.escrituras.filter(w => w.tabla === 'sittings_traslados')).toHaveLength(0);
     verificarLimpio(e);
   });
@@ -143,8 +149,7 @@ test.describe('Por cobrar: "¿Cuánto pagó?"', () => {
     await p.locator('.fin-det-pagado').fill('1000');
     await expect(p.locator('.fin-det-aviso')).toContainText('No hay sittings que sumen $1.000: tildalos a mano');
     for (const f of ['07/09', '14/09', '21/09']) await expect(casilla(p, f)).not.toBeChecked();
-    await p.locator('button', { hasText: 'Marcar cobrado' }).click();
-    await expect(page.locator('.toaststack .toast', { hasText: 'Tildá al menos un' })).toBeVisible();
+    await expect(p.locator('.fin-det-botones button', { hasText: 'lo tildado' })).toBeDisabled();
     expect(e.escrituras.filter(w => w.tabla === 'sittings_traslados')).toHaveLength(0);
     verificarLimpio(e);
   });
@@ -183,8 +188,10 @@ test.describe('Por cobrar parcial con gastos extra y saldo a favor', () => {
     await irAModulo(page, 'finanzas');
     const p = await abrirDetalle(page);
     await expect(p.locator('.fin-det-fila', { hasText: 'Pagó de más en agosto' })).toContainText('−$1.000');
-    await casilla(p, '14/09').uncheck();
-    await casilla(p, '21/09').uncheck();
+    // Al tildar el primer sitting se tilda solo el saldo: se aplica a lo primero que se marca.
+    await expect(casilla(p, 'Pagó de más en agosto')).not.toBeChecked();
+    await casilla(p, '07/09').check();
+    await expect(casilla(p, 'Pagó de más en agosto')).toBeChecked();
     // 07/09 ($760) con el saldo (−$1.000): se usan $760 y queda en $0.
     await expect(p.locator('.fin-det-total')).toContainText('$0');
     await p.locator('button', { hasText: 'Marcar cobrado' }).click();
@@ -226,8 +233,7 @@ test.describe('Por cobrar parcial con gastos extra y saldo a favor', () => {
     const e = await abrirApp(page, { datos: datos({ ajustes: [ajuste()] }) });
     await irAModulo(page, 'finanzas');
     const p = await abrirDetalle(page);
-    await casilla(p, '14/09').uncheck();
-    await casilla(p, '21/09').uncheck();
+    await casilla(p, '07/09').check();
     await casilla(p, 'Pagó de más en agosto').uncheck();
     await expect(p.locator('.fin-det-total')).toContainText('$760');
     await p.locator('button', { hasText: 'Marcar cobrado' }).click();
@@ -242,7 +248,8 @@ test('si la otra admin cambia algo (Realtime), el detalle abierto sigue abierto 
   const e = await abrirApp(page, { datos: datos() });
   await irAModulo(page, 'finanzas');
   const p = await abrirDetalle(page);
-  await casilla(p, '07/09').uncheck();
+  await casilla(p, '14/09').check();
+  await casilla(p, '21/09').check();
   // La otra cambia el monto del 21/09 desde su celular.
   e.db.sittings_traslados.find(s => s.id === C).cobro_familia = 800;
   expect(e.emitirRealtime('sittings_traslados', 'UPDATE', { id: C })).toBeGreaterThan(0);
@@ -281,7 +288,7 @@ test.describe('fallas', () => {
     const e = await abrirApp(page, { datos: datos() });
     await irAModulo(page, 'finanzas');
     const p = await abrirDetalle(page);
-    await casilla(p, '07/09').uncheck();
+    await casilla(p, '14/09').check();
     e.fallar = ({ tabla, metodo }) => (tabla === 'sittings_traslados' && metodo === 'PATCH') ? { status: 500, message: 'se cayó' } : undefined;
     await p.locator('button', { hasText: 'Marcar cobrado' }).click();
     await expect(page.locator('.toaststack .toast.bad', { hasText: 'No se pudo actualizar' })).toBeVisible();
@@ -293,8 +300,7 @@ test.describe('fallas', () => {
     const e = await abrirApp(page, { datos: datos() });
     await irAModulo(page, 'finanzas');
     const p = await abrirDetalle(page);
-    await casilla(p, '07/09').uncheck();
-    await casilla(p, '21/09').uncheck();
+    await casilla(p, '14/09').check();
     await p.locator('button', { hasText: 'Marcar cobrado' }).click();
     const aviso = page.locator('.toaststack .toast', { hasText: 'Marcado como cobrado.' });
     await expect(aviso).toBeVisible();
@@ -333,7 +339,7 @@ test('Por pagar: paga solo algunos registros de la semana de una fija', async ({
   await expect(p.locator('.fin-det-fila')).toHaveCount(2);
   await expect(p.locator('.fin-det-pagado')).toHaveCount(0); // "¿Cuánto pagó?" es solo de Por cobrar
   await expect(p.locator('.fin-det-fila').first()).toContainText('Familia Prueba Uno');
-  await casilla(p, '30/09').uncheck();
+  await casilla(p, '28/09').check();
   await p.locator('button', { hasText: 'Copiar monto' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('750');
   await p.locator('button', { hasText: 'Marcar pagado' }).click();

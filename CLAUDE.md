@@ -487,7 +487,9 @@ reporte.
   pendientes (`armarTarjetasPendientes`, finanzas.js; lo que trae solo el nombre va a la de esa
   persona), aunque cobre "diario". El saldo a favor se aplica sobre la tarjeta entera y el total se
   redondea una vez. Cerrada: el total y "Marcar todo cobrado / pagado". Abierta: el detalle en un
-  recuadro, agrupado por fecha, y abajo "Marcar cobrado lo tildado ($X)" y "Marcar todo cobrado ($Y)".
+  recuadro, agrupado por fecha, con nada tildado; abajo "Marcar cobrado lo tildado ($X)" (gris hasta que
+  haya algo tildado) y "Marcar todo cobrado ($Y)". El saldo a favor se tilda solo con el primer sitting y
+  "¿Cuánto pagó?" prueba primero con el saldo y después sin él.
   La semana en curso de las fijas y las intermediaciones siguen aparte. `calcularPendientesAgrupados`
   sigue por período (la usa la conciliación).
 - Cobro parcial (23/10/2026): en Por cobrar / Por pagar, tocar la tarjeta abre el detalle (un renglón

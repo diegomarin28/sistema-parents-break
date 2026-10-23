@@ -83,10 +83,13 @@ test('cerrada tiene un solo "Marcar todo cobrado"; abierta, los dos botones abaj
   const tildado = t.locator('.fin-det-botones button', { hasText: 'Marcar cobrado lo tildado' });
   const todo = t.locator('.fin-det-botones button', { hasText: 'Marcar todo cobrado' });
   await expect(t.locator('button', { hasText: /^Marcar/ })).toHaveCount(2); // el de arriba se va
-  await expect(tildado).toHaveText('Marcar cobrado lo tildado ($4.370)');
+  // Nada tildado al abrir: "lo tildado" en $0 y deshabilitado; "todo" con el total.
+  await expect(tildado).toHaveText('Marcar cobrado lo tildado ($0)');
+  await expect(tildado).toBeDisabled();
   await expect(todo).toHaveText('Marcar todo cobrado ($4.370)');
-  await casillaDia(t, '22/10').uncheck();
+  for (const f of ['13/10', '15/10', '20/10']) await casillaDia(t, f).check();
   await expect(tildado).toHaveText('Marcar cobrado lo tildado ($2.850)');
+  await expect(tildado).toBeEnabled();
   await expect(todo).toHaveText('Marcar todo cobrado ($4.370)');
   // "Marcar todo" marca todo aunque haya algo destildado.
   await todo.click();
@@ -147,7 +150,8 @@ test('Por pagar: una tarjeta por niñera con la semana del fijo y los puntuales;
   await expect(t.locator('button', { hasText: 'Marcar todo pagado' })).toHaveCount(1);
   await abrir(t);
   await expect(t.locator('.fin-det-dia')).toHaveCount(3);
-  await casillaDia(t, '20/10').uncheck();
+  await casillaDia(t, '12/10').check();
+  await casillaDia(t, '14/10').check();
   await expect(t.locator('.fin-det-botones button', { hasText: 'Marcar pagado lo tildado' })).toHaveText('Marcar pagado lo tildado ($1.500)');
   await t.locator('button', { hasText: 'Copiar monto' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('1500');

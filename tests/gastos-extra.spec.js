@@ -151,7 +151,7 @@ test.describe('Por cobrar y Por pagar', () => {
     await expect(pagar).toContainText('$300');
     await pagar.locator('.fin-pend-cabeza').click();
     await expect(pagar.locator('.fin-det-dia', { hasText: 'Reintegros de sittings ya pagados' })).toContainText('Almuerzo para la niña');
-    await pagar.locator('.fin-det-dia', { hasText: '28/09' }).locator('input[type=checkbox]').uncheck();
+    await pagar.locator('.fin-det-fila', { hasText: 'Almuerzo para la niña' }).locator('input[type=checkbox]').check();
     await pagar.locator('.fin-det-botones button', { hasText: 'Marcar pagado lo tildado ($300)' }).click();
     await expect(page.locator('#pago-total')).toHaveText('$300');
     await page.locator('#pago-confirmar').click();

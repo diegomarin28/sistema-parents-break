@@ -1235,7 +1235,7 @@ async function cargarDetallePendiente(lado, i){
   pintarDetallePendiente(lado, i);
 }
 /* Realtime vuelve a pintar la lista cuando la otra admin cambia algo (recarga liviana de
-   Finanzas): lo que estaba abierto sigue abierto, con lo mismo destildado y el monto escrito.
+   Finanzas): lo que estaba abierto sigue abierto, con lo mismo tildado y el monto escrito.
    Después de marcar o deshacer, en cambio, la lista vuelve cerrada. */
 function clavePendiente(g){ return `${g.familia_id || g.ninera_id || normaliza(g.nombre||'')}|${g.inter ? 'i' : ''}`; }
 function detallesAbiertos(lado){
@@ -1243,9 +1243,9 @@ function detallesAbiertos(lado){
     const cont = document.getElementById(`fin-det-${lado}-${i}`);
     if(!g.abierto || !g.detalle || !cont) return null;
     const d = g.detalle;
-    const destildados = attr => [...cont.querySelectorAll(`input[${attr}]`)].filter(c=>!c.checked).map(c=>Number(c.getAttribute(attr)));
+    const tildados = attr => [...cont.querySelectorAll(`input[${attr}]`)].filter(c=>c.checked).map(c=>Number(c.getAttribute(attr)));
     return { clave: clavePendiente(g), montoEscrito: cont.querySelector('.fin-det-pagado')?.value || '',
-      sinTildar: new Set([...destildados('data-reg').map(k=>d.regs[k].id), ...destildados('data-gasto').map(k=>d.gastos[k].id), ...destildados('data-aj').map(k=>d.ajustes[k].id)]) };
+      tildados: new Set([...tildados('data-reg').map(k=>d.regs[k].id), ...tildados('data-gasto').map(k=>d.gastos[k].id), ...tildados('data-aj').map(k=>d.ajustes[k].id)]) };
   }).filter(Boolean);
 }
 async function reabrirDetalles(lado, abiertos){
@@ -1257,7 +1257,7 @@ async function reabrirDetalles(lado, abiertos){
     const cont = document.getElementById(`fin-det-${lado}-${i}`);
     if(finPendientes[lado][i] !== g || !g.detalle || !cont) continue;
     const d = g.detalle;
-    const marcar = (attr, lista) => lista.forEach((x, k)=>{ if(a.sinTildar.has(x.id)) cont.querySelector(`input[${attr}="${k}"]`).checked = false; });
+    const marcar = (attr, lista) => lista.forEach((x, k)=>{ if(a.tildados.has(x.id)) cont.querySelector(`input[${attr}="${k}"]`).checked = true; });
     marcar('data-reg', d.regs); marcar('data-gasto', d.gastos); marcar('data-aj', d.ajustes);
     const campo = cont.querySelector('.fin-det-pagado');
     if(campo) campo.value = a.montoEscrito;
@@ -1275,7 +1275,7 @@ function pintarDetallePendiente(lado, i){
   const fmtF = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'2-digit',month:'2-digit'}) : '—';
   const plata = n => '$'+Number(n).toLocaleString('es-UY', {maximumFractionDigits:2});
   const fila = (attr, texto, monto, sub=false) => `<label class="fin-det-fila${sub ? ' fin-det-sub' : ''}">
-      <input type="checkbox" checked ${attr} onchange="cambioCasillaPendiente(${argJs(lado)}, ${i}, this)">
+      <input type="checkbox" ${attr} onchange="cambioCasillaPendiente(${argJs(lado)}, ${i}, this)">
       <span class="fin-det-texto">${texto}</span><span class="pago-monto">${monto}</span>
     </label>`;
   const filaGasto = (x, k) => fila(`data-gasto="${k}"`, `${cobrar ? 'Gasto extra' : 'Reintegro de gasto'}: ${escaparHtml(x.concepto)}`, plata(x.monto), x.de >= 0);
@@ -1293,7 +1293,8 @@ function pintarDetallePendiente(lado, i){
       ${cobrar ? `<div class="fin-det-pagado-campo">
         <label class="helper" style="margin:0;" for="fin-det-pagado-${i}">¿Cuánto pagó?</label>
         <input type="number" inputmode="decimal" min="0" class="fin-det-pagado" id="fin-det-pagado-${i}" placeholder="$" oninput="programarTildarPorMonto(${i}, this.value)">
-      </div>` : ''}
+      </div>
+      <div class="helper fin-det-ayuda">Escribí lo que transfirió y tildamos los sittings que suman ese monto.</div>` : ''}
       <div class="fin-det-aviso"></div>
       ${dias.map(dd=>`<div class="fin-det-dia">
         <div class="fin-det-fecha">${fmtF(dd.fecha)}</div>
@@ -1305,7 +1306,7 @@ function pintarDetallePendiente(lado, i){
       ${d.ajustes.length ? `<div class="fin-det-saldos">${d.ajustes.map((a, k)=>fila(`data-aj="${k}"`, `Saldo a favor: ${escaparHtml(a.motivo)}`, textoMontoAjuste(a.monto))).join('')}</div>` : ''}
     </div>
     <div class="fin-det-botones">
-      <button class="btn primary" onclick="conGuardado(this, ()=>marcarPendiente(${argJs(lado)}, ${i}))">Marcar ${verbo} lo tildado (<span class="fin-det-total"></span>)</button>
+      <button class="btn primary fin-det-tildado" disabled onclick="conGuardado(this, ()=>marcarPendiente(${argJs(lado)}, ${i}))">Marcar ${verbo} lo tildado (<span class="fin-det-total"></span>)</button>
       <button class="btn ghost" onclick="conGuardado(this, ()=>marcarTodoPendiente(${argJs(lado)}, ${i}))">Marcar todo ${verbo} ($${montoGrupo(g, cobrar ? 'familia' : 'ninera').toLocaleString('es-UY')})</button>
       ${cobrar ? '' : `<button class="btn ghost fin-copiar-monto" onclick="copiarMontoPendiente(${i})">Copiar monto</button>`}
     </div>`;
@@ -1369,7 +1370,11 @@ function actualizarTotalPendiente(lado, i){
   const el = document.querySelector(`#fin-det-${lado}-${i} .fin-det-total`);
   if(!el) return;
   const s = seleccionPendiente(lado, i);
-  el.textContent = s.vacio ? 'nada tildado' : `$${s.total.toLocaleString('es-UY')}`;
+  el.textContent = `$${(s.vacio ? 0 : s.total).toLocaleString('es-UY')}`;
+  const cont = document.getElementById(`fin-det-${lado}-${i}`);
+  // Nada tildado al abrir (23/10/2026): "lo tildado" queda gris hasta que haya algo.
+  cont.querySelector('.fin-det-tildado').disabled = s.vacio;
+  cont.dataset.algo = s.vacio ? '' : '1';
 }
 function cambioCasillaPendiente(lado, i, chk){
   const cont = document.getElementById(`fin-det-${lado}-${i}`);
@@ -1378,6 +1383,13 @@ function cambioCasillaPendiente(lado, i, chk){
     finPendientes[lado][i].detalle.gastos.forEach((x, gk)=>{
       if(x.de===k) cont.querySelector(`input[data-gasto="${gk}"]`).checked = chk.checked;
     });
+  }
+  // El saldo a favor se aplica a lo primero que se marca: se tilda solo con el primer sitting o
+  // gasto y se destilda cuando no queda ninguno. En el medio se puede destildar a mano.
+  if(chk.dataset.aj === undefined){
+    const antes = cont.dataset.algo === '1';
+    const ahora = [...cont.querySelectorAll('input[data-reg], input[data-gasto]')].some(c=>c.checked);
+    if(antes !== ahora) cont.querySelectorAll('input[data-aj]').forEach(c=>{ c.checked = ahora; });
   }
   cont.querySelector('.fin-det-aviso').innerHTML = '';
   actualizarTotalPendiente(lado, i);
@@ -1401,8 +1413,12 @@ function tildarPorMonto(i, valor){
     ...d.regs.map((r, k)=>({ reg: k, monto: r.monto + d.gastos.filter(x=>x.de===k).reduce((t,x)=>t+(Number(x.monto)||0), 0) })),
     ...d.gastos.map((x, gk)=>({ gasto: gk, monto: Number(x.monto)||0, suelto: x.de < 0 })).filter(u=>u.suelto),
   ];
-  const ajustes = [...cont.querySelectorAll('input[data-aj]')].filter(c=>c.checked).map(c=>d.ajustes[Number(c.dataset.aj)]);
-  const elegidas = new Set(combinacionExacta(unidades, objetivo, ajustes, 'familia') || []);
+  // Primero con el saldo a favor (se aplica a lo primero que se marca); si así no da, sin él.
+  let conSaldo = d.ajustes.length > 0;
+  let combinacion = conSaldo ? combinacionExacta(unidades, objetivo, d.ajustes, 'familia') : null;
+  if(!combinacion){ conSaldo = false; combinacion = combinacionExacta(unidades, objetivo, [], 'familia'); }
+  const elegidas = new Set(combinacion || []);
+  cont.querySelectorAll('input[data-aj]').forEach(c=>{ c.checked = conSaldo; });
   // Sin combinación no queda nada tildado: así "Marcar cobrado" no marca de más por error.
   unidades.forEach((u, k)=>{
     if(u.reg === undefined){ cont.querySelector(`input[data-gasto="${u.gasto}"]`).checked = elegidas.has(k); return; }
