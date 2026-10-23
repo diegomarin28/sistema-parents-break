@@ -335,6 +335,7 @@ function verFamilia(id){
     ${f.notas?`<div class="helper">${escaparHtml(f.notas)}</div>`:''}
     ${historialHtml}
     <div id="fam-saldo" style="margin-top:14px;"></div>
+    <div id="fam-variantes" style="margin-top:14px;"></div>
     <div id="fam-incidentes" style="margin-top:14px;"></div>
     <div class="card-section-title">Niñeras asignadas</div>
     <div class="tablewrap"><table class="asigtable"><thead><tr><th>Niñera asignada</th><th>Días y horario</th><th></th></tr></thead>
@@ -363,6 +364,7 @@ function verFamilia(id){
     <button class="smallbtn" onclick="conGuardado(this, ()=>addAsignacion(${argJs(f.id)}))">+ Asignar niñera</button>`);
   renderIncidentesEnFicha('fam-incidentes', 'familia', f.id, f.nombre);
   pintarSaldoEnFicha('fam-saldo', 'familia', f.id, f.nombre);
+  pintarVariantesEnFicha(f.id);
 }
 /* Términos y condiciones (20/10/2026): la admin marca que la familia los aceptó y desde qué
    fecha. Desde ese día, el fin de cada sitting se le cobra redondeado (horasSitting, core.js).
@@ -517,3 +519,363 @@ async function eliminarFamilia(id){
   restaurarScrollMainarea(scrollF2);
 }
 
+
+/* ================= VARIANTES DE PRECIO (23/10/2026) =================
+   Los casos especiales de una familia ("la llevó a la casa", "no se hizo: se cobra igual y a la
+   niñera se le paga un monto fijo") dejan de ser notas y montos cambiados a mano. Al registrar (y en el
+   Cierre de los fijos de Hoy) hay un ajuste libre siempre a mano y, con un toque, se guarda como
+   botón de esa familia. Las variantes se ven, editan y borran en la ficha; pueden ser solo de
+   un fijo y programarse para aplicarse solas desde una fecha y en ciertos días (la carga de
+   previstos de la base). Cuáles se aplicaron queda en sittings_traslados.precio_variantes, con
+   la base, copiadas tal cual (no cambian si después se edita o se borra la variante). La cuenta
+   la hace aplicarVariantes (core.js). Pensado para que la app de niñeras use lo mismo. Con la
+   base sin migrar no se muestra nada y todo sigue como antes. */
+let variantesPrecioDisponible = true;
+async function cargarVariantesFamilia(familiaId){
+  if(!variantesPrecioDisponible || !familiaId) return [];
+  const { data, error } = await sb.from('variantes_precio').select('*').eq('familia_id', familiaId).order('created_at').order('id');
+  if(error){
+    if(esFaltaTabla(error)) variantesPrecioDisponible = false;
+    else toast('No se pudieron leer las variantes de precio: '+error.message, 'bad');
+    return [];
+  }
+  return data||[];
+}
+// La fila de la tabla como se guarda en un registro: { id, nombre, motivo, cobro, pago }.
+function aplicadaDeVariante(v){
+  const efecto = (modo, valor) => modo ? { modo, valor: Number(valor)||0 } : null;
+  return { id: v.id, nombre: v.nombre, motivo: v.motivo || null, cobro: efecto(v.cobro_modo, v.cobro_valor), pago: efecto(v.pago_modo, v.pago_valor) };
+}
+// "Familia +$450 · Niñera +$250", "Niñera: total $180", "Familia −50%".
+function textoEfectoVariante(a){
+  const plata = n => Math.abs(Number(n)||0).toLocaleString('es-UY', {maximumFractionDigits:2});
+  const lado = (e, quien) => {
+    if(!e || !e.modo) return '';
+    const v = Number(e.valor)||0;
+    if(e.modo==='total') return `${quien}: total $${plata(v)}`;
+    if(e.modo==='porcentaje') return `${quien} ${v<0 ? '−' : '+'}${plata(v)}%`;
+    return `${quien} ${v<0 ? '−' : '+'}$${plata(v)}`;
+  };
+  return [lado(a.cobro, 'Familia'), lado(a.pago, 'Niñera')].filter(Boolean).join(' · ');
+}
+// Nombres de las variantes de un registro, para mostrarlos (Por cobrar / Por pagar, PDF).
+function nombresVariantes(precioVariantes){
+  return (precioVariantes?.aplicadas||[]).map(a=>a.nombre).filter(Boolean).join(' + ');
+}
+// Un solo motivo para el registro: el de las variantes; si son distintos, 'otro'.
+function motivoDeVariantes(aplicadas){
+  const motivos = [...new Set((aplicadas||[]).map(a=>a.motivo).filter(Boolean))];
+  return motivos.length > 1 ? 'otro' : (motivos[0] || null);
+}
+
+/* ---- Botones de variantes + ajuste libre: uno por prefijo ('sit' en el registro, 'cierre' en
+   el Cierre de los fijos). El que lo usa da la base (cobro y pago sin variantes) y se entera
+   de cada cambio para actualizar lo suyo (margen, etc.). ---- */
+const variantesUI = {};
+async function prepararVariantesPrecio(prefijo, { familiaId, tipo, asignacionId=null, aplicadas=null, base, alCambiar=null }){
+  const box = document.getElementById(prefijo+'-variantes');
+  if(!box) return;
+  const anterior = variantesUI[prefijo];
+  // Si se vuelve a preparar en el mismo formulario (cambió el tipo o la familia), lo ya
+  // marcado que sigue valiendo se conserva.
+  const yaElegidas = aplicadas ?? (anterior && anterior.familiaId===familiaId ? anterior.elegidas : []);
+  const libreAnterior = aplicadas ? (aplicadas.find(a=>a.libre) || null) : (anterior?.libre || null);
+  const ui = { familiaId, tipo, asignacionId, base, alCambiar, lista: [], chips: [], elegidas: [], libre: libreAnterior, libreAbierto: !!libreAnterior, inactivo: true };
+  variantesUI[prefijo] = ui;
+  const lista = familiaId ? await cargarVariantesFamilia(familiaId) : [];
+  if(variantesUI[prefijo] !== ui) return; // se volvió a preparar mientras tanto
+  if(!variantesPrecioDisponible || !familiaId || !document.getElementById(prefijo+'-variantes')){
+    box.innerHTML = '';
+    alCambiar?.();
+    return;
+  }
+  ui.inactivo = false;
+  ui.lista = lista;
+  const aplica = v => v.activa && (v.aplica_a==='ambos' || v.aplica_a===tipo) && (!v.asignacion_id || v.asignacion_id===asignacionId);
+  // Las guardadas en el registro van como se aplicaron (aunque la variante se haya editado o
+  // borrado); las demás, las de esta familia que aplican a este tipo y a este fijo.
+  const guardadas = (yaElegidas||[]).filter(a=>!a.libre);
+  const idsGuardadas = new Set(guardadas.map(a=>a.id).filter(Boolean));
+  ui.chips = [
+    ...guardadas.map(a=>({ aplicada: a, elegida: true })),
+    ...lista.filter(v=>aplica(v) && !idsGuardadas.has(v.id)).map(v=>({ aplicada: aplicadaDeVariante(v), elegida: false })),
+  ];
+  pintarVariantesPrecio(prefijo);
+}
+function pintarVariantesPrecio(prefijo){
+  const ui = variantesUI[prefijo], box = document.getElementById(prefijo+'-variantes');
+  if(!ui || ui.inactivo || !box) return;
+  const motivoOpts = sel => `<option value="">Elegí el motivo…</option>${MOTIVOS_PRECIO.map(([v, t])=>`<option value="${v}"${sel===v ? ' selected' : ''}>${t}</option>`).join('')}`;
+  const l = ui.libre || {};
+  box.innerHTML = `<div class="variantes-box">
+    <div class="variantes-titulo">Variantes y ajustes <span class="helper" style="margin:0;">de esta familia</span></div>
+    ${ui.chips.length ? `<div class="variantes-chips">${ui.chips.map((c, k)=>`<button type="button" class="variante-chip${c.elegida ? ' on' : ''}" aria-pressed="${c.elegida}" onclick="tocarVariantePrecio(${argJs(prefijo)}, ${k})">
+        <b>${escaparHtml(c.aplicada.nombre)}</b><span>${escaparHtml(textoEfectoVariante(c.aplicada))}</span></button>`).join('')}</div>`
+      : '<div class="helper" style="margin:2px 0 6px;">Todavía no tiene variantes. Hacé un ajuste y guardalo como botón.</div>'}
+    ${ui.libreAbierto ? `<div class="variante-libre">
+      <div class="grid2">
+        <div class="field"><label for="${prefijo}-libre-cobro">A la familia (+ o −)</label><input type="number" id="${prefijo}-libre-cobro" value="${l.cobro?.valor ?? ''}" placeholder="ej. 500" oninput="cambioAjusteLibre(${argJs(prefijo)})"></div>
+        <div class="field"><label for="${prefijo}-libre-pago">A la niñera (+ o −)</label><input type="number" id="${prefijo}-libre-pago" value="${l.pago?.valor ?? ''}" placeholder="ej. 300" oninput="cambioAjusteLibre(${argJs(prefijo)})"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="${prefijo}-libre-texto">Por qué</label><input type="text" id="${prefijo}-libre-texto" maxlength="60" value="${escaparHtml(l.nombre && l.nombre!=='Ajuste' ? l.nombre : '')}" placeholder="ej. La llevó a la casa" oninput="cambioAjusteLibre(${argJs(prefijo)})"></div>
+        <div class="field"><label for="${prefijo}-libre-motivo">Motivo</label><select id="${prefijo}-libre-motivo" onchange="cambioAjusteLibre(${argJs(prefijo)})">${motivoOpts(l.motivo || '')}</select></div>
+      </div>
+      <div class="variante-libre-btns">
+        <button type="button" class="smallbtn" onclick="conGuardado(this, ()=>guardarAjusteComoBoton(${argJs(prefijo)}))">Guardar como botón</button>
+        <button type="button" class="smallbtn" onclick="quitarAjusteLibre(${argJs(prefijo)})">Quitar ajuste</button>
+      </div>
+    </div>` : `<button type="button" class="smallbtn variante-libre-abrir" onclick="abrirAjusteLibre(${argJs(prefijo)})">+ Ajuste libre</button>`}
+    <div class="helper variantes-resumen" style="margin:6px 0 0;"></div>
+  </div>`;
+  actualizarResumenVariantes(prefijo);
+}
+function tocarVariantePrecio(prefijo, k){
+  const ui = variantesUI[prefijo];
+  if(!ui?.chips[k]) return;
+  ui.chips[k].elegida = !ui.chips[k].elegida;
+  const chip = document.querySelectorAll(`#${prefijo}-variantes .variante-chip`)[k];
+  if(chip){ chip.classList.toggle('on', ui.chips[k].elegida); chip.setAttribute('aria-pressed', String(ui.chips[k].elegida)); }
+  actualizarResumenVariantes(prefijo);
+}
+function abrirAjusteLibre(prefijo){
+  const ui = variantesUI[prefijo];
+  if(!ui) return;
+  ui.libreAbierto = true;
+  pintarVariantesPrecio(prefijo);
+  document.getElementById(prefijo+'-libre-cobro')?.focus();
+}
+function quitarAjusteLibre(prefijo){
+  const ui = variantesUI[prefijo];
+  if(!ui) return;
+  ui.libre = null; ui.libreAbierto = false;
+  pintarVariantesPrecio(prefijo);
+}
+// El ajuste libre tal como está escrito (o null si no suma ni resta nada).
+function leerAjusteLibre(prefijo){
+  const ui = variantesUI[prefijo];
+  if(!ui?.libreAbierto) return ui?.libre || null;
+  const val = id => { const t = document.getElementById(prefijo+'-libre-'+id)?.value; return t==='' || t==null ? null : Number(t); };
+  const cobro = val('cobro'), pago = val('pago');
+  const texto = (document.getElementById(prefijo+'-libre-texto')?.value || '').trim();
+  const motivo = document.getElementById(prefijo+'-libre-motivo')?.value || null;
+  if(!cobro && !pago) return null;
+  return { id: null, libre: true, nombre: texto || 'Ajuste', motivo,
+    cobro: cobro ? { modo: 'sumar', valor: cobro } : null, pago: pago ? { modo: 'sumar', valor: pago } : null };
+}
+function cambioAjusteLibre(prefijo){
+  const ui = variantesUI[prefijo];
+  if(!ui) return;
+  ui.libre = leerAjusteLibre(prefijo);
+  actualizarResumenVariantes(prefijo);
+}
+// Lo que se aplica: los botones marcados, en el orden de la lista, y el ajuste libre al final.
+// error: el ajuste libre sin motivo. inactivo: sin variantes en la base (no se manda nada).
+function leerVariantesPrecio(prefijo){
+  const ui = variantesUI[prefijo];
+  if(!ui || ui.inactivo) return { inactivo: true, aplicadas: null };
+  const libre = leerAjusteLibre(prefijo);
+  if(libre && !libre.motivo) return { error: 'Elegí el motivo del ajuste: descuento, extra, se cobra sin servicio u otro.' };
+  const aplicadas = [...ui.chips.filter(c=>c.elegida).map(c=>c.aplicada), ...(libre ? [libre] : [])];
+  return { aplicadas: aplicadas.length ? aplicadas : null, motivo: motivoDeVariantes(aplicadas) };
+}
+// Cobro y pago con lo elegido, sobre la base que da el formulario (null si no hay nada elegido).
+function precioConVariantesUI(prefijo){
+  const ui = variantesUI[prefijo];
+  if(!ui || ui.inactivo) return null;
+  const libre = leerAjusteLibre(prefijo);
+  const aplicadas = [...ui.chips.filter(c=>c.elegida).map(c=>c.aplicada), ...(libre ? [libre] : [])];
+  if(!aplicadas.length) return null;
+  const b = ui.base ? ui.base() : { cobro: 0, pago: 0 };
+  return aplicarVariantes(b.cobro, b.pago, aplicadas);
+}
+// avisar = false cuando lo llama quien ya actualiza lo suyo (calcSitMargen).
+function actualizarResumenVariantes(prefijo, avisar=true){
+  const ui = variantesUI[prefijo];
+  const el = document.querySelector(`#${prefijo}-variantes .variantes-resumen`);
+  const p = precioConVariantesUI(prefijo);
+  if(el) el.innerHTML = p ? `Con los ajustes: <b>cobro $${p.cobro.toLocaleString('es-UY')} · pago $${p.pago.toLocaleString('es-UY')}</b>. Se guarda esto.` : '';
+  if(avisar) ui?.alCambiar?.();
+}
+// "Guardar como botón": el ajuste libre pasa a ser una variante de la familia (sumar lo escrito,
+// para este tipo de servicio) y queda marcado como botón.
+async function guardarAjusteComoBoton(prefijo){
+  const ui = variantesUI[prefijo];
+  if(!ui || ui.inactivo) return;
+  const libre = leerAjusteLibre(prefijo);
+  if(!libre){ toast('Escribí cuánto suma o resta a la familia o a la niñera.', 'bad'); return; }
+  if(libre.nombre==='Ajuste'){ toast('Escribí por qué (es el nombre del botón).', 'bad'); document.getElementById(prefijo+'-libre-texto')?.focus(); return; }
+  if(!libre.motivo){ toast('Elegí el motivo del ajuste.', 'bad'); return; }
+  const fila = { familia_id: ui.familiaId, nombre: libre.nombre, aplica_a: ui.tipo==='traslado' ? 'traslado' : 'sitting', asignacion_id: null,
+    cobro_modo: libre.cobro ? 'sumar' : null, cobro_valor: libre.cobro ? libre.cobro.valor : null,
+    pago_modo: libre.pago ? 'sumar' : null, pago_valor: libre.pago ? libre.pago.valor : null,
+    motivo: libre.motivo, auto_desde: null, auto_hasta: null, auto_dias: null, activa: true, creado_por: registradoPorUsuario() || null };
+  const { data, error } = await sb.from('variantes_precio').insert(fila).select().single();
+  if(error){ toast('No se pudo guardar el botón: '+error.message, 'bad'); return; }
+  ui.lista.push(data);
+  ui.chips.push({ aplicada: aplicadaDeVariante(data), elegida: true });
+  ui.libre = null; ui.libreAbierto = false;
+  pintarVariantesPrecio(prefijo);
+  toast('Guardado como botón de esta familia.');
+}
+
+/* ---- En la ficha de la familia: la lista, nueva / editar / borrar. El formulario va en una
+   capa encima de la ficha, para no perderla (como el saldo a favor). ---- */
+async function pintarVariantesEnFicha(familiaId){
+  const cont = document.getElementById('fam-variantes');
+  if(!cont) return;
+  const lista = await cargarVariantesFamilia(familiaId);
+  if(!variantesPrecioDisponible || !document.getElementById('fam-variantes')){ cont.innerHTML = ''; return; }
+  const f = familiasItems.find(x=>x.id===familiaId);
+  const fijo = id => (f?.asignaciones||[]).find(a=>a.id===id);
+  const fmtF = iso => iso ? `${iso.slice(8,10)}/${iso.slice(5,7)}` : '';
+  const aplica = { ambos: 'Sittings y traslados', sitting: 'Sittings', traslado: 'Traslados' };
+  cont.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
+      <div class="card-section-title" style="margin:0;">Variantes de precio</div>
+      <button class="smallbtn" style="min-height:36px;" onclick="abrirModalVariantePrecio(${argJs(familiaId)}, null)">+ Nueva variante</button>
+    </div>
+    ${lista.length ? lista.map(v=>{
+      const a = fijo(v.asignacion_id);
+      const deFijo = a ? ` · solo el fijo de ${escaparHtml(a.ninera_nombre)}` : '';
+      const dias = (v.auto_dias||[]).map(d=>DIAS_CORTO[d]||d).join(' ');
+      const programada = v.auto_desde ? `<div class="helper" style="margin:2px 0 0;">Se aplica sola desde el ${fmtF(v.auto_desde)}${v.auto_hasta ? ' hasta el '+fmtF(v.auto_hasta) : ''}${dias ? ', los '+dias : ''}</div>` : '';
+      return `<div class="agendarow variante-ficha" style="border-bottom:1px solid var(--line);flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;">${escaparHtml(v.nombre)}${v.activa ? '' : ' <span class="badge warn">Pausada</span>'}</div>
+          <div class="helper" style="margin:2px 0 0;">${escaparHtml(textoEfectoVariante(aplicadaDeVariante(v)))} · ${aplica[v.aplica_a] || ''}${deFijo}</div>
+          ${programada}
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="smallbtn" style="min-height:36px;" onclick="abrirModalVariantePrecio(${argJs(familiaId)}, ${argJs(v.id)})">Editar</button>
+          <button class="smallbtn danger" style="min-height:36px;" onclick="conGuardado(this, ()=>eliminarVariantePrecio(${argJs(familiaId)}, ${argJs(v.id)}))">Borrar</button>
+        </div>
+      </div>`;
+    }).join('') : '<div class="helper" style="margin:4px 0;">Sin variantes. Se crean acá o con "Guardar como botón" al registrar.</div>'}`;
+}
+async function abrirModalVariantePrecio(familiaId, id){
+  const lista = await cargarVariantesFamilia(familiaId);
+  const v = id ? lista.find(x=>x.id===id) : null;
+  if(id && !v){ toast('Esa variante ya no existe.', 'bad'); pintarVariantesEnFicha(familiaId); return; }
+  const f = familiasItems.find(x=>x.id===familiaId);
+  const fijos = (f?.asignaciones||[]).filter(a=>!asignacionTerminada(a, todayISO()));
+  const modoOpts = sel => `<option value="">No cambia</option>${MODOS_VARIANTE.map(([m, t])=>`<option value="${m}"${sel===m ? ' selected' : ''}>${t}</option>`).join('')}`;
+  const overlay = document.createElement('div');
+  overlay.className = 'confirmoverlay';
+  overlay.id = 'variante-overlay';
+  overlay.innerHTML = `
+    <div class="confirmbox wide" role="dialog" aria-label="Variante de precio">
+      <h2 style="margin:0 0 4px;">${v ? 'Editar variante' : 'Nueva variante'}</h2>
+      <div class="helper" style="margin:0 0 12px;">${escaparHtml(f?.nombre || '')} · aparece como botón al registrar.</div>
+      <div class="field"><label for="var-nombre">Nombre</label><input type="text" id="var-nombre" maxlength="60" value="${escaparHtml(v?.nombre || '')}" placeholder="ej. La llevó a la casa"></div>
+      <div class="grid2">
+        <div class="field"><label for="var-aplica">Para</label><select id="var-aplica">
+          ${[['ambos','Sittings y traslados'],['sitting','Sittings'],['traslado','Traslados']].map(([k, t])=>`<option value="${k}"${(v?.aplica_a||'ambos')===k ? ' selected' : ''}>${t}</option>`).join('')}
+        </select></div>
+        <div class="field"><label for="var-motivo">Motivo</label><select id="var-motivo"><option value="">Sin motivo</option>${MOTIVOS_PRECIO.map(([k, t])=>`<option value="${k}"${v?.motivo===k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="var-cobro-modo">A la familia</label><select id="var-cobro-modo">${modoOpts(v?.cobro_modo || '')}</select>
+          <input type="number" id="var-cobro-valor" style="margin-top:6px;" value="${v?.cobro_valor ?? ''}" placeholder="Monto o %"></div>
+        <div class="field"><label for="var-pago-modo">A la niñera</label><select id="var-pago-modo">${modoOpts(v?.pago_modo || '')}</select>
+          <input type="number" id="var-pago-valor" style="margin-top:6px;" value="${v?.pago_valor ?? ''}" placeholder="Monto o %"></div>
+      </div>
+      <div class="helper" style="margin:-4px 0 10px;">Sumar o restar (ej. 500 o −200), total fijo (reemplaza el precio) o porcentaje (−50 = la mitad).</div>
+      <div class="field"><label for="var-fijo">Solo para un fijo (opcional)</label><select id="var-fijo" onchange="pintarDiasVariante()">
+        <option value="">Para cualquier sitting o traslado de la familia</option>
+        ${fijos.map(a=>`<option value="${escaparHtml(a.id)}" data-dias="${escaparHtml((a.dias||[]).join(','))}"${v?.asignacion_id===a.id ? ' selected' : ''}>${escaparHtml(a.ninera_nombre)} · ${tipoAsignacion(a)==='traslado' ? 'Traslado' : 'Sitting'} · ${escaparHtml((a.dias||[]).join(' '))}${a.hora_inicio ? ' · '+escaparHtml(a.hora_inicio.slice(0,5)) : ''}</option>`).join('')}
+      </select></div>
+      <div id="var-programa-box">
+        <label class="chk" style="margin:0 0 8px;"><input type="checkbox" id="var-programar"${v?.auto_desde ? ' checked' : ''} onchange="pintarDiasVariante()"> Que se aplique sola a ese fijo desde una fecha</label>
+        <div id="var-programa" style="display:none;">
+          <div class="grid2">
+            <div class="field"><label for="var-desde">Desde</label><input type="date" id="var-desde" value="${v?.auto_desde || ''}"></div>
+            <div class="field"><label for="var-hasta">Hasta (opcional)</label><input type="date" id="var-hasta" value="${v?.auto_hasta || ''}"></div>
+          </div>
+          <div class="field"><label>Qué días</label><div class="dayrow" id="var-dias" data-elegidos="${escaparHtml((v?.auto_dias||[]).join(','))}"></div>
+          <div class="helper" style="margin:4px 0 0;">Sin días marcados: todos los días del fijo.</div></div>
+        </div>
+      </div>
+      <div id="variante-warn"></div>
+      <div class="confirmbtns">
+        <button class="btn ghost" id="variante-cancelar">Cancelar</button>
+        <button class="btn primary" id="variante-guardar" onclick="conGuardado(this, ()=>guardarVariantePrecio(${argJs(familiaId)}, ${argJs(id)}))">Guardar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=>overlay.classList.add('show'));
+  overlay.querySelector('#variante-cancelar').addEventListener('click', cerrarModalVariantePrecio);
+  pintarDiasVariante();
+}
+// Los días de la programación son los del fijo elegido; arrancan sin marcar (= todos).
+function pintarDiasVariante(){
+  const sel = document.getElementById('var-fijo'), box = document.getElementById('var-programa-box');
+  if(!sel || !box) return;
+  const opcion = sel.selectedOptions[0];
+  box.style.display = sel.value ? '' : 'none';
+  const programar = !!sel.value && document.getElementById('var-programar').checked;
+  document.getElementById('var-programa').style.display = programar ? '' : 'none';
+  const dias = document.getElementById('var-dias');
+  const elegidos = new Set([...dias.querySelectorAll('.daybtn.selected')].map(b=>b.dataset.dia).concat((dias.dataset.elegidos||'').split(',').filter(Boolean)));
+  dias.dataset.elegidos = '';
+  dias.innerHTML = (opcion?.dataset.dias||'').split(',').filter(Boolean).map(d=>`<button type="button" class="daybtn${elegidos.has(d) ? ' selected' : ''}" data-dia="${escaparHtml(d)}" onclick="this.classList.toggle('selected')">${escaparHtml(DIAS_CORTO[d]||d)}</button>`).join('');
+}
+function cerrarModalVariantePrecio(){
+  const o = document.getElementById('variante-overlay');
+  if(!o) return;
+  o.classList.remove('show');
+  o.id = '';
+  setTimeout(()=>o.remove(), 180);
+}
+async function guardarVariantePrecio(familiaId, id){
+  const warn = document.getElementById('variante-warn');
+  const val = k => document.getElementById(k)?.value ?? '';
+  const nombre = val('var-nombre').trim();
+  if(!nombre){ warn.innerHTML = '<div class="warnbox">Ponele un nombre: es lo que dice el botón.</div>'; return; }
+  const lado = k => {
+    const modo = val(`var-${k}-modo`), txt = val(`var-${k}-valor`);
+    if(!modo) return { modo: null, valor: null };
+    if(txt==='' || !isFinite(Number(txt))) return { error: `Poné el monto o el porcentaje ${k==='cobro' ? 'de la familia' : 'de la niñera'}.` };
+    if(modo==='total' && Number(txt) < 0) return { error: 'Un total fijo no puede ser negativo.' };
+    return { modo, valor: Number(txt) };
+  };
+  const cobro = lado('cobro'), pago = lado('pago');
+  if(cobro.error || pago.error){ warn.innerHTML = `<div class="warnbox">${escaparHtml(cobro.error || pago.error)}</div>`; return; }
+  if(!cobro.modo && !pago.modo){ warn.innerHTML = '<div class="warnbox">Decí qué le cambia al cobro o al pago (o a los dos).</div>'; return; }
+  const asignacionId = val('var-fijo') || null;
+  const programar = !!asignacionId && document.getElementById('var-programar').checked;
+  const desde = programar ? val('var-desde') : '', hasta = programar ? val('var-hasta') : '';
+  if(programar && !desde){ warn.innerHTML = '<div class="warnbox">Elegí desde qué fecha se aplica sola.</div>'; return; }
+  if(hasta && hasta < desde){ warn.innerHTML = '<div class="warnbox">El "hasta" tiene que ser después del "desde".</div>'; return; }
+  const dias = programar ? [...document.querySelectorAll('#var-dias .daybtn.selected')].map(b=>b.dataset.dia) : [];
+  const fila = { familia_id: familiaId, nombre, aplica_a: val('var-aplica') || 'ambos', motivo: val('var-motivo') || null, asignacion_id: asignacionId,
+    cobro_modo: cobro.modo, cobro_valor: cobro.valor, pago_modo: pago.modo, pago_valor: pago.valor,
+    auto_desde: desde || null, auto_hasta: hasta || null, auto_dias: dias.length ? dias : null };
+  const antes = id ? (await cargarVariantesFamilia(familiaId)).find(x=>x.id===id) : null;
+  const { error } = id
+    ? await sb.from('variantes_precio').update({ ...fila, updated_at: new Date().toISOString() }).eq('id', id)
+    : await sb.from('variantes_precio').insert({ ...fila, activa: true, creado_por: registradoPorUsuario() || null });
+  if(error){ warn.innerHTML = errBox(error); return; }
+  cerrarModalVariantePrecio();
+  toast(id ? 'Variante actualizada.' : 'Variante guardada.');
+  await pintarVariantesEnFicha(familiaId);
+  // Programada (o lo era): los previstos de ese fijo se recalculan ya, sin esperar a la noche.
+  if(fila.auto_desde || antes?.auto_desde) await sincronizarPrevistosFijos();
+}
+async function eliminarVariantePrecio(familiaId, id){
+  const v = (await cargarVariantesFamilia(familiaId)).find(x=>x.id===id);
+  if(!v) return;
+  if(!(await confirmarAccion(`¿Borrar la variante "${v.nombre}"? Los registros donde ya se usó la conservan.`, 'Borrar'))) return;
+  const { error } = await sb.from('variantes_precio').delete().eq('id', id);
+  if(error){ toast('No se pudo borrar: '+error.message, 'bad'); return; }
+  toast('Variante borrada.');
+  await pintarVariantesEnFicha(familiaId);
+  if(v.auto_desde) await sincronizarPrevistosFijos();
+}
+// Cuando un fijo cambia "desde una fecha" (otra niñera u otro horario) se crea otro: sus
+// variantes lo siguen. Sin la tabla, no hace nada.
+async function moverVariantesAlFijoNuevo(viejoId, nuevoId){
+  if(!variantesPrecioDisponible || !viejoId || !nuevoId) return;
+  const { error } = await sb.from('variantes_precio').update({ asignacion_id: nuevoId, updated_at: new Date().toISOString() }).eq('asignacion_id', viejoId);
+  if(error && !esFaltaTabla(error)) toast('El fijo cambió, pero sus variantes de precio quedaron en el anterior: revisalas en la ficha de la familia.', 'bad');
+}

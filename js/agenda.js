@@ -1027,6 +1027,7 @@ async function guardarHorarioAsignacionFija(asigId){
       return;
     }
     aHoy = creada;
+    await moverVariantesAlFijoNuevo(asigId, creada.id); // sus variantes de precio lo siguen (23/10/2026)
   }
   cerrarModal();
   await sincronizarPrevistosFijos();
@@ -1328,6 +1329,7 @@ async function cambiarNineraAsignacionFija(asigId){
       return;
     }
     aHoy = creada;
+    await moverVariantesAlFijoNuevo(asigId, creada.id); // sus variantes de precio lo siguen (23/10/2026)
   }
   cerrarModal();
   await sincronizarPrevistosFijos();

@@ -1,5 +1,5 @@
 // Oráculo de plata: copia EXACTA de las funciones que calculan plata en js/, tal como estaban el
-// 23/10/2026 (commit bbeac29). La generó scripts/congelar-oraculo-plata.js: no se edita a mano.
+// 23/10/2026 (commit 785b348). La generó scripts/congelar-oraculo-plata.js: no se edita a mano.
 // tests/red-plata.spec.js compara la app con esta copia en miles de casos (docs/rediseno-panel.md,
 // 4.10). Si una regla cambia a propósito, se vuelve a generar en el mismo PR y el PR lo dice.
 // Lo que no es plata (supabase, normaliza, todayISO, sumarDiasISO...) es el de la app.
@@ -55,6 +55,18 @@ function crearOraculoPlata(){
     const mfCobro = familiaRedondeaFin(familia, fechaISO) ? Math.max(mi, redondearFinCobro(mf)) : mf;
     const hhmm = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
     return { real: (mf-mi)/60, cobro: (mfCobro-mi)/60, finCobro: mfCobro!==mf ? hhmm(mfCobro) : null };
+  }
+  function efectoVariantes(base, efectos){
+    const n = x => Number(x)||0;
+    const total = efectos.filter(e=>e.modo==='total').pop();
+    let v = total ? n(total.valor) : n(base);
+    efectos.filter(e=>e.modo==='porcentaje').forEach(e=>{ v = v * (1 + n(e.valor)/100); });
+    efectos.filter(e=>e.modo==='sumar').forEach(e=>{ v = v + n(e.valor); });
+    return Math.max(Math.round(v*100)/100, 0);
+  }
+  function aplicarVariantes(baseCobro, basePago, aplicadas){
+    const lado = k => (aplicadas||[]).map(a=>a && a[k]).filter(e=>e && e.modo);
+    return { cobro: redondearCobro(efectoVariantes(baseCobro, lado('cobro'))), pago: redondearPago(efectoVariantes(basePago, lado('pago'))) };
   }
   // ---- js/sittings.js
   function precioSegunHorario(familia, horaIni, horaFin, cruza, fechaISO){
@@ -432,7 +444,7 @@ function crearOraculoPlata(){
     });
     return mejor;
   }
-  return { agendaMinutos, gastoACargoFamilia, redondearMonto, redondearPago, redondearCobro, asignacionVigenteEn, asignacionTerminada, redondearFinCobro, familiaRedondeaFin, cruceMedianocheMalMarcado, horasSitting, precioSegunHorario, construirEsTrabajoFijo, filtrarFijosSemanaIncompleta, resumenFinancieroMes, resumenIntermediaciones, intermediacionesPendientes, lunesDeSemana, inicioSemanaPago, finSemanaPago, finEnMinutos, construirFinUltimoFijo, cierreSemanaFijo, semanaFijoCerrada, construirEsEnCurso, finDeSemanaDesde, bucketKeyFecha, bucketPagoFecha, cargarAjustesSaldo, pendienteAjuste, aplicarAjustesAGrupos, calcularPendientesAgrupados, armarTarjetasPendientes, esFaltaTabla, cargarGastosExtraPendientes, montoGrupo, cuentasDeFicha, montoParaCopiar, totalParcial, combinacionExacta };
+  return { agendaMinutos, gastoACargoFamilia, redondearMonto, redondearPago, redondearCobro, asignacionVigenteEn, asignacionTerminada, redondearFinCobro, familiaRedondeaFin, cruceMedianocheMalMarcado, horasSitting, efectoVariantes, aplicarVariantes, precioSegunHorario, construirEsTrabajoFijo, filtrarFijosSemanaIncompleta, resumenFinancieroMes, resumenIntermediaciones, intermediacionesPendientes, lunesDeSemana, inicioSemanaPago, finSemanaPago, finEnMinutos, construirFinUltimoFijo, cierreSemanaFijo, semanaFijoCerrada, construirEsEnCurso, finDeSemanaDesde, bucketKeyFecha, bucketPagoFecha, cargarAjustesSaldo, pendienteAjuste, aplicarAjustesAGrupos, calcularPendientesAgrupados, armarTarjetasPendientes, esFaltaTabla, cargarGastosExtraPendientes, montoGrupo, cuentasDeFicha, montoParaCopiar, totalParcial, combinacionExacta };
 }
-const ORACULO_PLATA_CONGELADO = { fecha: "23/10/2026", commit: "bbeac29" };
+const ORACULO_PLATA_CONGELADO = { fecha: "23/10/2026", commit: "785b348" };
 if (typeof module !== 'undefined') module.exports = { crearOraculoPlata, ORACULO_PLATA_CONGELADO };

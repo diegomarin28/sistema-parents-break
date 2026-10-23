@@ -201,9 +201,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   app con el oráculo (`tests/support/oraculo-plata.js`, copia congelada de las funciones de plata) y
   con la regla escrita: ~2.000 horarios (con barridos minuto a minuto), 1.600 montos y precios, 400
   meses de resumen y 400 bases chicas de Por cobrar / Por pagar en miércoles, sábado, domingo y lunes,
-  60 pantallas de Finanzas y 400 cobros parciales (lo tildado con saldo y "¿Cuánto pagó?" contra probar
-  todas las combinaciones). La base, contra el mismo oráculo: `supabase/pruebas/paridad_plata.sql`
-  (2.880 minutos, 800 montos, 450 días de fijos y 300 precios de `precio_sitting`; Postgres local).
+  60 pantallas de Finanzas, 400 cobros parciales (lo tildado con saldo y "¿Cuánto pagó?" contra probar
+  todas las combinaciones) y 600 casos de variantes de precio. La base, contra el mismo oráculo: `supabase/pruebas/paridad_plata.sql`
+  (2.880 minutos, 800 montos, 450 días de fijos, 300 precios de `precio_sitting` y 400 de
+  `precio_con_variantes`; Postgres local).
 - `supabase/pruebas/pedidos_whatsapp.sql`: la tabla del pedido desde WhatsApp (estados, límites,
   política), `precio_sitting()` con casos a mano y el tope diario (`reservar_llamada_pedido`: la
   101 no pasa, lo de ayer no cuenta). `supabase/functions/pedido-whatsapp/ticket_test.ts`: la Edge
@@ -218,6 +219,10 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/tarjetas-pendientes.spec.js`: una tarjeta por familia que cobra "diario", registro con solo el
   nombre, botones cerrada / abierta con el monto, "¿Cuánto pagó?" en todos los días, gasto debajo de su
   sitting y saldo al final, Por pagar con semanas y puntuales, y capturas a 390 y 1280 px.
+- `tests/variantes-precio.spec.js`: variantes de precio (ajuste libre con motivo, "Guardar como botón", varias a
+  la vez, editar con la base, variante borrada que el registro conserva, ficha: ver / editar / borrar / programar,
+  fijo que cambia de niñera, Cierre de los fijos, Por cobrar / Por pagar y PDF, base sin migrar, escape, 390 y
+  1280 px). En la base: `supabase/pruebas/variantes_precio.sql` (la regla, la tabla y las programadas en la carga).
 - `tests/cobro-parcial.spec.js`: marcar solo una parte en Por cobrar / Por pagar (1 de 3, "¿Cuánto
   pagó?" exacto y sin combinación, gasto extra con su sitting, saldo a favor, "Deshacer", Realtime con
   el detalle abierto, fallas, escape y 390 px).
@@ -504,6 +509,15 @@ reporte.
   que usa los más viejos (`combinacionExacta`) o avisa y no deja nada tildado. El detalle se lee al
   abrirlo. Después de marcar, `toast(msg, tipo, {deshacer})` (core.js) muestra "Deshacer" 8 s:
   desmarca solo lo que marcó ese toque y devuelve el saldo usado (`deshacerMarca`).
+- Variantes de precio (23/10/2026): los casos especiales de una familia ya no van en las notas. Al
+  registrar (y en el Cierre de los fijos) hay botones con las variantes de esa familia y un ajuste
+  libre con motivo (`precio_motivo`), que con "Guardar como botón" pasa a ser variante. Se ven,
+  editan y borran en la ficha (`variantes_precio`); pueden ser solo de un fijo y programarse desde una
+  fecha y en ciertos días (las aplica `generar_previstos_fijos`; siguen al fijo cuando cambia desde
+  una fecha). Efectos: sumar, total fijo o porcentaje; de cada lado primero el total, después los
+  porcentajes y al final las sumas, sin centavos (`aplicarVariantes`, core.js; en la base,
+  `precio_con_variantes`). Los campos de cobro y pago del registro son la base; se guarda con las
+  variantes y en `precio_variantes` la base y cuáles se aplicaron, copiadas tal cual.
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3). La semana de una
   fija va de lunes a sábado y se paga el sábado; lo que se trabaja un domingo, fijo o puntual, se

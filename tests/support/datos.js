@@ -87,6 +87,7 @@ function datosBase() {
     intermediaciones_enrique_pool: [],
     intermediaciones_eventos: [],
     intermediaciones_eventos_ninieras: [],
+    variantes_precio: [],
   };
 }
 

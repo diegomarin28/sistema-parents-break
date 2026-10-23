@@ -1214,10 +1214,14 @@ async function cargarDetallePendiente(lado, i){
   if(!g || !cont) return;
   cont.innerHTML = '<div class="helper" style="margin:6px 0;">Cargando el detalle…</div>';
   const gastoIds = (g.gastos||[]).map(x=>x.id);
-  const [rs, rg] = await Promise.all([
-    g.ids.length ? sb.from('sittings_traslados').select('id,tipo,fecha,hora_inicio,hora_fin,termina_dia_siguiente,familia_nombre,ninera_nombre,cobro_familia,pago_ninera').in('id', g.ids) : { data: [] },
+  // Con las variantes de precio que se aplicaron (23/10/2026); sin la columna, sin ellas.
+  const columnas = 'id,tipo,fecha,hora_inicio,hora_fin,termina_dia_siguiente,familia_nombre,ninera_nombre,cobro_familia,pago_ninera';
+  const leerRegistros = conVariantes => sb.from('sittings_traslados').select(columnas + (conVariantes ? ',precio_variantes' : '')).in('id', g.ids);
+  let [rs, rg] = await Promise.all([
+    g.ids.length ? leerRegistros(variantesPrecioDisponible) : { data: [] },
     gastoIds.length ? sb.from('gastos_extra').select('id,sitting_id').in('id', gastoIds) : { data: [] },
   ]);
+  if(esFaltaColumnaVariantes(rs.error)){ variantesPrecioDisponible = false; rs = await leerRegistros(false); }
   if(finPendientes[lado][i] !== g) return; // se volvió a pintar la lista mientras tanto
   const error = rs.error || rg.error;
   if(error){
@@ -1299,7 +1303,8 @@ function pintarDetallePendiente(lado, i){
       ${dias.map(dd=>`<div class="fin-det-dia">
         <div class="fin-det-fecha">${fmtF(dd.fecha)}</div>
         ${dd.ks.map(k=>{ const r = d.regs[k];
-          return fila(`data-reg="${k}"`, `${horarioPendiente(r)} · ${persona(r)}${r.tipo==='traslado' ? ' (traslado)' : ''}`, plata(r.monto))
+          const variantes = nombresVariantes(r.precio_variantes);
+          return fila(`data-reg="${k}"`, `${horarioPendiente(r)} · ${persona(r)}${r.tipo==='traslado' ? ' (traslado)' : ''}${variantes ? `<span class="fin-det-variantes">${escaparHtml(variantes)}</span>` : ''}`, plata(r.monto))
             + d.gastos.map((x, gk)=>x.de===k ? filaGasto(x, gk) : '').join(''); }).join('')}
       </div>`).join('')}
       ${sueltos ? `<div class="fin-det-dia"><div class="fin-det-fecha">${cobrar ? 'Gastos de sittings ya cobrados' : 'Reintegros de sittings ya pagados'}</div>${sueltos}</div>` : ''}

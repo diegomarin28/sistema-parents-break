@@ -41,7 +41,8 @@ test.describe('Cierre de los fijos en Hoy', () => {
     await expect(card.locator('h2')).toHaveText('Cierre de los fijos');
     await expect(card).toContainText('Ana Ficticia en Familia Prueba Uno');
     await expect(card).toContainText('Sitting previsto 16:00–19:00 · cobro $1.140 · pago $750. ¿Terminó a las 19:00?');
-    await expect(card.locator('.autoconf-btns button')).toHaveText(['Sí, terminó 19:00', 'Otra hora', 'No fue', 'Fue otra']);
+    // "Variantes" (23/10/2026): las variantes de precio de la familia y el ajuste libre (variantes-precio.spec.js).
+    await expect(card.locator('.autoconf-btns button')).toHaveText(['Sí, terminó 19:00', 'Otra hora', 'Variantes', 'No fue', 'Fue otra']);
     await card.locator('button', { hasText: 'Sí, terminó 19:00' }).click();
     await expect(card).toHaveCount(0);
     const [revision] = patches(e);
