@@ -57,15 +57,16 @@ test.describe('semanas y rangos (Por cobrar / Por pagar y Agenda)', () => {
     const e = await abrirApp(page);
     const r = await page.evaluate(() => ({
       domingo: lunesDeSemana('2026-10-04'), lunes: lunesDeSemana('2026-09-28'), cruce: lunesDeSemana('2026-10-01'),
-      // Cobro semanal de una familia: lunes a domingo. Pago de una fija (23/10/2026): domingo a sábado.
-      finDomingo: finDeSemanaDesde('2026-09-28'), domingoPago: domingoDeSemana('2026-10-03'), finSabado: finDeSemanaDesde(domingoDeSemana('2026-09-28')),
-      domingoMismo: domingoDeSemana('2026-10-04'), domingoCruce: domingoDeSemana('2027-01-01'),
+      // Cobro semanal de una familia: lunes a domingo. Pago de una fija (23/10/2026): lunes a sábado,
+      // y el domingo es un pago aparte, ese mismo día.
+      finDomingo: finDeSemanaDesde('2026-09-28'), inicioPago: inicioSemanaPago('2026-10-03'), finSabado: finSemanaPago(inicioSemanaPago('2026-09-30')),
+      domingoMismo: inicioSemanaPago('2026-10-04'), finDomingoPago: finSemanaPago('2026-10-04'), inicioCruce: inicioSemanaPago('2027-01-01'),
       anio: lunesDeSemana('2027-01-01'), rango: rangoFechas('2026-09-29', '2026-10-02'),
     }));
     expect(r).toEqual({
       domingo: '2026-09-28', lunes: '2026-09-28', cruce: '2026-09-28',
-      finDomingo: '2026-10-04', domingoPago: '2026-09-27', finSabado: '2026-10-03',
-      domingoMismo: '2026-10-04', domingoCruce: '2026-12-27',
+      finDomingo: '2026-10-04', inicioPago: '2026-09-28', finSabado: '2026-10-03',
+      domingoMismo: '2026-10-04', finDomingoPago: '2026-10-04', inicioCruce: '2026-12-28',
       anio: '2026-12-28', rango: ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02'],
     });
     verificarLimpio(e);

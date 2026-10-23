@@ -25,7 +25,7 @@ const FUNCIONES = {
     'asignacionTerminada', 'redondearFinCobro', 'familiaRedondeaFin', 'cruceMedianocheMalMarcado', 'horasSitting'],
   'js/sittings.js': ['precioSegunHorario'],
   'js/finanzas.js': ['construirEsTrabajoFijo', 'filtrarFijosSemanaIncompleta', 'resumenFinancieroMes',
-    'resumenIntermediaciones', 'intermediacionesPendientes', 'lunesDeSemana', 'domingoDeSemana', 'finEnMinutos', 'construirFinUltimoFijo',
+    'resumenIntermediaciones', 'intermediacionesPendientes', 'lunesDeSemana', 'inicioSemanaPago', 'finSemanaPago', 'finEnMinutos', 'construirFinUltimoFijo',
     'cierreSemanaFijo', 'semanaFijoCerrada', 'construirEsEnCurso', 'finDeSemanaDesde', 'bucketKeyFecha', 'bucketPagoFecha',
     'cargarAjustesSaldo', 'pendienteAjuste', 'aplicarAjustesAGrupos', 'calcularPendientesAgrupados', 'armarTarjetasPendientes', 'esFaltaTabla',
     'cargarGastosExtraPendientes', 'montoGrupo', 'cuentasDeFicha', 'montoParaCopiar', 'totalParcial', 'combinacionExacta'],

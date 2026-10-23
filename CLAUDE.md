@@ -224,8 +224,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
 - `tests/por-pagar-en-curso.spec.js`: semana en curso de las fijas en Por pagar (cuándo cierra,
   sin botón, fija con finde, saldo a favor, 390px) y el pago el mismo día que cierra: sábado
   desde temprano, sábado después del último fijo, fijo que pasa la medianoche, día registrado
-  más largo, día sin registrar, resumen del mes, aparato en otra zona horaria, el domingo en la
-  semana siguiente y el margen un sábado.
+  más largo, día sin registrar, resumen del mes, aparato en otra zona horaria, lo del domingo (fijo
+  o puntual) pagado ese domingo y el margen un sábado.
 - `tests/arranque.spec.js`: pantalla de carga (símbolo latiendo), error si no carga supabase-js,
   "Entrando…", carga entre el login y Hoy, símbolo chico al cambiar de sección (> 300 ms).
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
@@ -499,10 +499,10 @@ reporte.
   desmarca solo lo que marcó ese toque y devuelve el saldo usado (`deshacerMarca`).
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3). La semana de una
-  fija se paga siempre el sábado (23/10/2026, regla de Paulina y Delfina del 21/10: también las que
-  trabajan el fin de semana; la semana de pago va de domingo a sábado, `domingoDeSemana`, y lo del
-  domingo entra en la semana siguiente), cuando terminó el último fijo de ese día (de sus fijos vigentes o de lo registrado ese día, lo que
-  termine más tarde; `cierreSemanaFijo`, 21/10/2026). Antes se ve aparte como "Semana en curso,
+  fija va de lunes a sábado y se paga el sábado; lo que se trabaja un domingo, fijo o puntual, se
+  paga ese mismo domingo (23/10/2026, regla de Paulina y Delfina; `inicioSemanaPago` /
+  `finSemanaPago`). Se paga cuando terminó el último fijo de ese día (de sus fijos vigentes o de
+  lo registrado ese día, lo que termine más tarde; `cierreSemanaFijo`, 21/10/2026). Antes se ve aparte como "Semana en curso,
   cierra hoy a las HH:MM" con lo que lleva hasta hoy, sin botón y sin saldo a favor
   (`porPagarEnCursoHtml`, 20/10/2026). El margen del mes usa la misma regla (`esEnCurso`). El
   cobro semanal de una familia sigue de lunes a domingo. El "Por pagar a niñeras" del resumen tampoco la cuenta: va

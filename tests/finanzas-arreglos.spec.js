@@ -5,7 +5,7 @@
 //    el mes actual cuánto de la lista es de meses anteriores.
 // 3. El puntito rojo de Finanzas avisa también por niñeras de eventos sin pagar.
 // 4. Si la base falla al leer Finanzas, nada queda en "Cargando…": error y Reintentar.
-// Datos ficticios: Ana es fija de Familia Prueba Uno (su semana de pago va de domingo a sábado).
+// Datos ficticios: Ana es fija de Familia Prueba Uno (su semana de pago va de lunes a sábado).
 const { test, expect } = require('@playwright/test');
 const { abrirApp, irAModulo, esperarQuieta, verificarLimpio } = require('./support/app');
 const { datosBase, sitting, ID } = require('./support/datos');
@@ -46,7 +46,7 @@ test.describe('Por pagar: copiar cuenta y monto', () => {
     const e = await abrirApp(page, { datos: datos(), ahora: AHORA });
     await irAModulo(page, 'finanzas');
     await espiarPortapapeles(page);
-    const ana = porPagar(page).locator('.agendarow', { hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 11/ });
+    const ana = porPagar(page).locator('.agendarow', { hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 12/ });
     await expect(ana.locator('.fin-cuenta')).toContainText('0099887766');
     await ana.locator('.fin-cuenta button', { hasText: 'Copiar' }).click();
     await expect(toasts(page).last()).toContainText('Cuenta copiada');
@@ -78,7 +78,7 @@ test.describe('Por pagar: copiar cuenta y monto', () => {
     const e = await abrirApp(page, { datos: datos(), ahora: AHORA });
     await irAModulo(page, 'finanzas');
     await espiarPortapapeles(page, { falla: true });
-    await porPagar(page).locator('.agendarow', { hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 11/ }).locator('.fin-cuenta button').click();
+    await porPagar(page).locator('.agendarow', { hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 12/ }).locator('.fin-cuenta button').click();
     await expect(page.locator('#copiar-a-mano')).toHaveValue('0099887766');
     verificarLimpio(e);
   });
@@ -87,7 +87,7 @@ test.describe('Por pagar: copiar cuenta y monto', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const e = await abrirApp(page, { datos: datos(), ahora: AHORA });
     await irAModulo(page, 'finanzas');
-    const ana = porPagar(page).locator('.agendarow', { hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 11/ });
+    const ana = porPagar(page).locator('.agendarow', { hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 12/ });
     for (const texto of ['Copiar', 'Copiar monto', 'Marcar todo pagado']) {
       const box = await ana.locator('button', { hasText: new RegExp(`^${texto}$`) }).boundingBox();
       expect(box.height).toBeGreaterThanOrEqual(30);

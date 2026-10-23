@@ -691,12 +691,16 @@ function lunesDeSemana(fechaISO){
   const dow = new Date(fechaISO+'T12:00:00').getDay();
   return sumarDiasISO(fechaISO, dow===0 ? -6 : 1-dow);
 }
-// La semana de pago de las fijas va de domingo a sábado (23/10/2026, regla de Paulina y Delfina
-// del 21/10): todas cobran el sábado, también las que trabajan el fin de semana, y lo del
-// domingo entra en la semana que se paga el sábado siguiente. Hasta el 23/10 iba de lunes a
-// domingo y quien tenía fijos el fin de semana cobraba el domingo.
-function domingoDeSemana(fechaISO){
-  return sumarDiasISO(fechaISO, -new Date(fechaISO+'T12:00:00').getDay());
+// Período de pago de las fijas (23/10/2026, regla de Paulina y Delfina): la semana va de lunes a
+// sábado y se paga el sábado; lo que se trabaja un domingo se paga ese mismo domingo, aparte.
+// Hasta el 23/10 la semana iba de lunes a domingo y quien tenía fijos el fin de semana cobraba
+// el domingo. inicioSemanaPago: el lunes de la semana, o el mismo domingo; finSemanaPago: el
+// día que se paga (el sábado, o ese domingo).
+function inicioSemanaPago(fechaISO){
+  return new Date(fechaISO+'T12:00:00').getDay()===0 ? fechaISO : lunesDeSemana(fechaISO);
+}
+function finSemanaPago(inicioISO){
+  return new Date(inicioISO+'T12:00:00').getDay()===0 ? inicioISO : sumarDiasISO(inicioISO, 5);
 }
 /* Cuándo se puede pagar la semana de un fijo (21/10/2026, regla de Paulina y Delfina): el mismo
    día que cierra la semana (el sábado), recién cuando terminó el último fijo de ese día. Antes
@@ -725,9 +729,9 @@ function construirFinUltimoFijo(asigs){
     return fin;
   };
 }
-// {fecha, min}: desde qué día y minuto se puede pagar la semana que empieza el domingo domingoISO.
-function cierreSemanaFijo(domingoISO, finUltimoFijo){
-  const dia = finDeSemanaDesde(domingoISO);
+// {fecha, min}: desde qué día y minuto se puede pagar el período que empieza en inicioISO.
+function cierreSemanaFijo(inicioISO, finUltimoFijo){
+  const dia = finSemanaPago(inicioISO);
   const m = Math.max(Number(finUltimoFijo)||0, 0);
   return { fecha: sumarDiasISO(dia, Math.floor(m/1440)), min: m % 1440 };
 }
@@ -752,17 +756,16 @@ function construirEsEnCurso(sits, asigs){
   const cierres = {};
   return function esEnCurso(r){
     if(!esTrabajoFijo(r)) return false;
-    const domingo = domingoDeSemana(r.fecha);
-    const dia = finDeSemanaDesde(domingo);
+    const inicio = inicioSemanaPago(r.fecha);
+    const dia = finSemanaPago(inicio);
     const k = clave(r, dia);
-    cierres[k] ??= cierreSemanaFijo(domingo, Math.max(finUltimoFijo(r.ninera_id, r.ninera_nombre, dia) ?? 0, registrados[k] ?? 0));
+    cierres[k] ??= cierreSemanaFijo(inicio, Math.max(finUltimoFijo(r.ninera_id, r.ninera_nombre, dia) ?? 0, registrados[k] ?? 0));
     return !semanaFijoCerrada(cierres[k]);
   };
 }
-// Último día de la semana que empieza en inicioISO: el domingo para el cobro semanal de una
-// familia (lunes a domingo), el sábado para el pago de una fija (domingo a sábado).
-function finDeSemanaDesde(inicioISO){
-  return sumarDiasISO(inicioISO, 6);
+// Último día de la semana de cobro de una familia (lunes a domingo).
+function finDeSemanaDesde(lunesISO){
+  return sumarDiasISO(lunesISO, 6);
 }
 function fmtFechaCortaFin(fechaISO){
   return new Date(fechaISO+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short'});
@@ -772,13 +775,15 @@ function bucketKeyFecha(fechaISO, frecuencia){
   if(frecuencia==='semanal') return lunesDeSemana(fechaISO);
   return fechaISO;
 }
-// Por pagar: la semana de una fija empieza el domingo (domingoDeSemana); lo puntual va por día.
+// Por pagar: el período de una fija (inicioSemanaPago); lo puntual va por día.
 function bucketPagoFecha(fechaISO, frecuencia){
-  return frecuencia==='semanal' ? domingoDeSemana(fechaISO) : bucketKeyFecha(fechaISO, frecuencia);
+  return frecuencia==='semanal' ? inicioSemanaPago(fechaISO) : bucketKeyFecha(fechaISO, frecuencia);
 }
-function bucketLabelFecha(bucketKey, frecuencia){
+// hasta: el último día, cuando no es el domingo de la semana de cobro (el pago de una fija).
+function bucketLabelFecha(bucketKey, frecuencia, hasta=null){
   if(frecuencia==='mensual') return monthLabel(bucketKey);
-  if(frecuencia==='semanal') return `Semana del ${fmtFechaCortaFin(bucketKey)} al ${fmtFechaCortaFin(finDeSemanaDesde(bucketKey))}`;
+  if(frecuencia==='semanal' && hasta===bucketKey) return `Domingo ${fmtFechaCortaFin(bucketKey)}`;
+  if(frecuencia==='semanal') return `Semana del ${fmtFechaCortaFin(bucketKey)} al ${fmtFechaCortaFin(hasta || finDeSemanaDesde(bucketKey))}`;
   return fmtFechaCortaFin(bucketKey);
 }
 /* ============================================================
@@ -1029,7 +1034,8 @@ async function calcularPendientesAgrupados(){
   const finUltimoFijo = construirFinUltimoFijo(asigs);
   Object.values(gruposPagar).forEach(g=>{
     if(g.frec!=='semanal') return;
-    const dia = finDeSemanaDesde(g.bucket);
+    const dia = finSemanaPago(g.bucket);
+    g.hasta = dia;
     g.cierre = cierreSemanaFijo(g.bucket, Math.max(finUltimoFijo(g.ninera_id, g.nombre, dia) ?? 0, g.finesPorDia?.[dia] ?? 0));
   });
   return { gruposCobrar:Object.values(gruposCobrar), gruposPagar:Object.values(gruposPagar), fams:fams||[], nins:nins||[], error:e1||e2 };
@@ -1156,7 +1162,7 @@ function subtituloPendienteHtml(g){
   const grupos = g.grupos || [g];
   const n = g.ids.length, ng = (g.gastos||[]).length;
   const cuantos = n ? `${n} ${n===1 ? 'pendiente' : 'pendientes'}` : `${ng} ${ng===1 ? 'gasto' : 'gastos'}`;
-  const periodos = grupos.map(x=>bucketLabelFecha(x.bucket, x.frec));
+  const periodos = grupos.map(x=>bucketLabelFecha(x.bucket, x.frec, x.hasta));
   const cuando = periodos.length <= 3 ? periodos.join(' · ') : `${periodos[0]} a ${periodos[periodos.length-1]}`;
   return `${cuantos} · ${cuando}${g.frec ? ' · '+escaparHtml(g.frec) : ''}`;
 }
@@ -1950,7 +1956,7 @@ async function procesarExtractoConciliacion(){
     gastos: p.grupos.flatMap(g=>g.gastos||[]),
     pendiente: p.grupos.reduce((t,g)=>t+g.total,0),
     nombre: p.grupos[0].nombre,
-    periodo: p.grupos.map(g=>bucketLabelFecha(g.bucket, g.frec)).join(' + '),
+    periodo: p.grupos.map(g=>bucketLabelFecha(g.bucket, g.frec, g.hasta)).join(' + '),
     hecha:false }));
   concPropuestas = { cobro: conCodigo(cobros.props, 'cobro'), pago: conCodigo(pagos.props, 'pago') };
 
