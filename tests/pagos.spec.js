@@ -10,6 +10,9 @@ const { datosBase, sitting, ID } = require('./support/datos');
 const FUTURO = '70000000-0000-4000-8000-0000000000f1';
 function datosConFuturo() {
   const d = datosBase();
+  // El traslado de Bruno del 19/09 ya pagado: desde el 23/10 todo lo de una niñera va en una
+  // sola tarjeta, y estos tests miran solo el sitting futuro.
+  d.sittings_traslados.find(s => s.id === '70000000-0000-4000-8000-000000000004').pagado = true;
   // Puntual de Bruno con Familia Dos, cargado hoy (04/10) para el sábado 10/10.
   d.sittings_traslados.push(sitting(FUTURO, '2026-10-10', {
     familia_id: ID.fDos, familia_nombre: 'Familia Prueba Dos', ninera_id: ID.nBruno, ninera_nombre: 'Bruno Inventado',
@@ -44,7 +47,7 @@ test.describe('E3: confirmar antes de marcar pagado', () => {
     const e = await abrirApp(page, { datos: datosConFuturo(), ahora: '2026-10-10T09:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     const fila = porPagar(page).locator('.agendarow', { hasText: 'Bruno Inventado' }).filter({ hasText: '$780' });
-    await fila.locator('button', { hasText: 'Marcar pagado' }).click();
+    await fila.locator('button', { hasText: 'Marcar todo pagado' }).click();
     const modal = modalPago(page);
     await expect(modal).toBeVisible();
     await expect(modal.locator('h2')).toHaveText('Confirmar pago a Bruno Inventado');
@@ -62,7 +65,7 @@ test.describe('E3: confirmar antes de marcar pagado', () => {
     const e = await abrirApp(page, { datos: datosConFuturo(), ahora: '2026-10-10T09:00:00-03:00' });
     await irAModulo(page, 'finanzas');
     const fila = porPagar(page).locator('.agendarow', { hasText: 'Bruno Inventado' }).filter({ hasText: '$780' });
-    await fila.locator('button', { hasText: 'Marcar pagado' }).click();
+    await fila.locator('button', { hasText: 'Marcar todo pagado' }).click();
     await modalPago(page).locator('button', { hasText: 'Confirmar pago' }).click();
     await expect(page.locator('.toaststack .toast').last()).toContainText('Marcado como pagado');
     const w = e.escrituras.filter(x => x.tabla === 'sittings_traslados');
@@ -81,7 +84,7 @@ test.describe('E3: confirmar antes de marcar pagado', () => {
     );
     const e = await abrirApp(page, { datos: d });
     await irAModulo(page, 'finanzas');
-    await porPagar(page).locator('.agendarow', { hasText: 'Carla Ejemplo' }).locator('button', { hasText: 'Marcar pagado' }).click();
+    await porPagar(page).locator('.agendarow', { hasText: 'Carla Ejemplo' }).locator('button', { hasText: 'Marcar todo pagado' }).click();
     const modal = modalPago(page);
     // Con la compu cargada el modal tarda: se espera a que estén las tres filas antes de leerlas.
     await expect(modal.locator('#pago-detalle .pago-fila:not(.pago-total-fila)')).toHaveCount(3);

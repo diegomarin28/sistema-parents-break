@@ -17,8 +17,8 @@ const { generarSQL } = require('../scripts/paridad-plata-sql');
 const SEMILLA = Number(process.env.SEMILLA || SEMILLA_FIJA);
 const FUENTE_ORACULO = fs.readFileSync(path.join(__dirname, 'support', 'oraculo-plata.js'), 'utf8');
 // Fechas de "hoy" que cambian lo que se debe: un miércoles (semanas en curso), el sábado en que
-// cierran todas las fijas (23/10/2026; antes las que tenían finde cerraban el domingo), el domingo
-// (empieza otra semana de pago) y el lunes siguiente. Sin el lunes, correr el cierre un día no lo
+// cierran las semanas de las fijas, el domingo (lo de ese día se paga ese día, 23/10/2026) y el lunes
+// siguiente. Sin el lunes, correr el cierre un día no lo
 // atrapaba ningún caso.
 const HOYS = [['miércoles', '2026-10-21T10:00:00-03:00'], ['sábado', '2026-10-24T10:00:00-03:00'], ['domingo', '2026-10-25T10:00:00-03:00'], ['lunes', '2026-10-26T10:00:00-03:00']];
 
@@ -155,15 +155,16 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
         if (!cerca(s.resultado, s.facturado - s.costoNinieras - s.gastos - s.absorbidos)) malos.push({ escenario: i, que: 'resultado', s });
         const sinPagar = esc.sits.filter(x => !x.pagado).reduce((t, x) => t + x.pago_ninera, 0) + it.porPagar + it.porPagarFuturo;
         if (!cerca(s.porPagar + s.porPagarEnCurso + s.porPagarFuturo, sinPagar)) malos.push({ escenario: i, que: 'por pagar + en curso + futuro', s });
-        // El margen (23/10/2026): un fijo cuenta cuando su semana de pago (domingo a sábado) cerró.
-        // Antes del sábado nunca; desde el lunes siguiente siempre (el sábado y el domingo dependen
-        // de la hora del último fijo). Lo puntual cuenta siempre.
+        // El margen (23/10/2026): un fijo cuenta cuando su período de pago cerró: la semana de lunes
+        // a sábado, o el mismo domingo si es de un domingo. Antes de ese día nunca; desde el subsiguiente
+        // siempre (ese día y el siguiente dependen de la hora del último fijo). Lo puntual, siempre.
         for (const x of esc.sits) {
           const enMargen = r.app.margen.includes(x.id);
           if (!r.app.fijos.includes(x.id)) { if (!enMargen) malos.push({ escenario: i, que: 'puntual fuera del margen', x }); continue; }
-          const sabado = sumarDiasRegla(x.fecha, 6 - diaSemanaRegla(x.fecha));
-          if (hoy < sabado && enMargen) malos.push({ escenario: i, que: 'fijo en el margen antes del sábado', x, hoy });
-          if (hoy > sumarDiasRegla(sabado, 1) && !enMargen) malos.push({ escenario: i, que: 'fijo de una semana cerrada fuera del margen', x, hoy });
+          const dow = diaSemanaRegla(x.fecha);
+          const cierra = dow === 0 ? x.fecha : sumarDiasRegla(x.fecha, 6 - dow);
+          if (hoy < cierra && enMargen) malos.push({ escenario: i, que: 'fijo en el margen antes de que cierre', x, hoy });
+          if (hoy > sumarDiasRegla(cierra, 1) && !enMargen) malos.push({ escenario: i, que: 'fijo de un período cerrado fuera del margen', x, hoy });
         }
       });
       sinDiferencias(malos, `resúmenes (${dia})`);
@@ -254,6 +255,8 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
           cobrar: filas('#fin-porcobrar-wrap .agendarow'),
           pagar: filas('#fin-porpagar-wrap .agendarow:not(.fin-semana-en-curso)'),
           enCurso: filas('#fin-porpagar-wrap .fin-semana-en-curso'),
+          cobrarTarjetas: [...document.querySelectorAll('#fin-porcobrar-wrap .fin-pend-cabeza')].map(c => c.children[0].textContent.trim()),
+          pagarTarjetas: [...document.querySelectorAll('#fin-porpagar-wrap .fin-pend-cabeza')].map(c => c.children[0].textContent.trim()),
         };
         // Misma composición que cargarPorCobrarPorPagar (finanzas.js), con las funciones del oráculo.
         const O = ORACULO, hoyISO = todayISO();
@@ -263,11 +266,14 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
         const enCurso = g => g.frec === 'semanal' && !O.semanaFijoCerrada(g.cierre);
         const listaPagar = gruposPagar.filter(g => !enCurso(g));
         const ajustes = await O.cargarAjustesSaldo();
-        O.aplicarAjustesAGrupos(listaCobrar, ajustes, 'familia');
-        O.aplicarAjustesAGrupos(listaPagar, ajustes, 'ninera');
+        // Una tarjeta por persona (23/10/2026) y el saldo a favor sobre la tarjeta entera.
+        const tarjetasCobrar = O.armarTarjetasPendientes(listaCobrar, 'familia');
+        const tarjetasPagar = O.armarTarjetasPendientes(listaPagar, 'ninera');
+        O.aplicarAjustesAGrupos(tarjetasCobrar, ajustes, 'familia');
+        O.aplicarAjustesAGrupos(tarjetasPagar, ajustes, 'ninera');
         const oraculo = {
-          cobrar: [...listaCobrar, ...inter.cobrar].map(g => [g.nombre, O.montoGrupo(g, 'familia')]),
-          pagar: [...listaPagar, ...inter.pagar].map(g => [g.nombre, O.montoGrupo(g, 'ninera')]),
+          cobrar: [...tarjetasCobrar, ...inter.cobrar].map(g => [g.nombre, O.montoGrupo(g, 'familia')]),
+          pagar: [...tarjetasPagar, ...inter.pagar].map(g => [g.nombre, O.montoGrupo(g, 'ninera')]),
           enCurso: gruposPagar.filter(enCurso).map(g => [g.nombre, O.redondearPago(g.total)]),
         };
         return { visto, oraculo };
@@ -275,6 +281,11 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
       const ordenar = l => l.map(x => x.join(' $')).sort();
       for (const k of ['cobrar', 'pagar', 'enCurso']) {
         if (!igual(ordenar(r.visto[k]), ordenar(r.oraculo[k]))) malos.push({ escenario: i, lista: k, visto: r.visto[k], oraculo: r.oraculo[k] });
+      }
+      // La regla escrita: una sola tarjeta por familia o niñera (sin contar las intermediaciones).
+      for (const k of ['cobrar', 'pagar']) {
+        const nombres = r.visto[k + 'Tarjetas'];
+        if (new Set(nombres).size !== nombres.length) malos.push({ escenario: i, que: 'una persona en dos tarjetas', lista: k, nombres });
       }
     }
     sinDiferencias(malos, 'pantallas de Por cobrar y Por pagar');

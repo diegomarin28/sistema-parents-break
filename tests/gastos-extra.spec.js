@@ -127,14 +127,14 @@ test.describe('Por cobrar y Por pagar', () => {
     await esperarQuieta(page);
     await expect(page.locator('#fin-facturado')).toHaveText('$3.870'); // sin el gasto
 
-    await pagar.locator('button', { hasText: 'Marcar pagado' }).click();
+    await pagar.locator('button', { hasText: 'Marcar todo pagado' }).click();
     await expect(page.locator('#pago-detalle')).toContainText('Reintegro de gasto extra');
     await expect(page.locator('#pago-total')).toHaveText('$1.050');
     await page.locator('#pago-confirmar').click();
     await expect(toasts(page).filter({ hasText: 'Marcado como pagado.' })).toBeVisible();
     expect(e.db.gastos_extra[0]).toMatchObject({ reintegrado: true, cobrado: false });
 
-    await page.locator('#fin-porcobrar-wrap .agendarow', { hasText: 'Familia Prueba Uno' }).locator('button', { hasText: 'Marcar cobrado' }).click();
+    await page.locator('#fin-porcobrar-wrap .agendarow', { hasText: 'Familia Prueba Uno' }).locator('button', { hasText: 'Marcar todo cobrado' }).click();
     await expect(toasts(page).filter({ hasText: 'Marcado como cobrado.' })).toBeVisible();
     expect(e.db.gastos_extra[0]).toMatchObject({ reintegrado: true, cobrado: true });
     verificarLimpio(e);
@@ -144,10 +144,15 @@ test.describe('Por cobrar y Por pagar', () => {
     const d = datosCon(gasto({ sitting_id: '70000000-0000-4000-8000-000000000001' })); // 14/09, cobrado y pagado
     const e = await abrirApp(page, { datos: d });
     await irAModulo(page, 'finanzas');
-    const pagar = page.locator('#fin-porpagar-wrap .agendarow', { hasText: 'Reintegro de gasto' });
+    // Desde el 23/10 va en la tarjeta de Ana, junto con lo que tiene pendiente (28/09): se
+    // abre el detalle y se paga solo el reintegro.
+    const pagar = page.locator('#fin-porpagar-wrap .fin-pend', { hasText: 'Reintegro de gasto' });
     await expect(pagar).toContainText('Ana Ficticia');
     await expect(pagar).toContainText('$300');
-    await pagar.locator('button', { hasText: 'Marcar pagado' }).click();
+    await pagar.locator('.fin-pend-cabeza').click();
+    await expect(pagar.locator('.fin-det-dia', { hasText: 'Reintegros de sittings ya pagados' })).toContainText('Almuerzo para la niña');
+    await pagar.locator('.fin-det-fila', { hasText: 'Almuerzo para la niña' }).locator('input[type=checkbox]').check();
+    await pagar.locator('.fin-det-botones button', { hasText: 'Marcar pagado lo tildado ($300)' }).click();
     await expect(page.locator('#pago-total')).toHaveText('$300');
     await page.locator('#pago-confirmar').click();
     await expect(toasts(page).filter({ hasText: 'Marcado como pagado.' })).toBeVisible();

@@ -215,14 +215,17 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   pedido sin hora de fin (sin total, registro en $0, traslados con su cobro) y precio puesto a mano
   que no se pisa al tocar la hora.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
+- `tests/tarjetas-pendientes.spec.js`: una tarjeta por familia que cobra "diario", registro con solo el
+  nombre, botones cerrada / abierta con el monto, "¿Cuánto pagó?" en todos los días, gasto debajo de su
+  sitting y saldo al final, Por pagar con semanas y puntuales, y capturas a 390 y 1280 px.
 - `tests/cobro-parcial.spec.js`: marcar solo una parte en Por cobrar / Por pagar (1 de 3, "¿Cuánto
   pagó?" exacto y sin combinación, gasto extra con su sitting, saldo a favor, "Deshacer", Realtime con
   el detalle abierto, fallas, escape y 390 px).
 - `tests/por-pagar-en-curso.spec.js`: semana en curso de las fijas en Por pagar (cuándo cierra,
   sin botón, fija con finde, saldo a favor, 390px) y el pago el mismo día que cierra: sábado
   desde temprano, sábado después del último fijo, fijo que pasa la medianoche, día registrado
-  más largo, día sin registrar, resumen del mes, aparato en otra zona horaria, el domingo en la
-  semana siguiente y el margen un sábado.
+  más largo, día sin registrar, resumen del mes, aparato en otra zona horaria, lo del domingo (fijo
+  o puntual) pagado ese domingo y el margen un sábado.
 - `tests/arranque.spec.js`: pantalla de carga (símbolo latiendo), error si no carga supabase-js,
   "Entrando…", carga entre el login y Hoy, símbolo chico al cambiar de sección (> 300 ms).
 - `tests/alta-ninera.spec.js`: alta de niñera con solo el nombre.
@@ -480,8 +483,17 @@ reporte.
   cambian las dos. Nunca `Math.round` para calcular lo que se cobra o se paga. El saldo a favor
   se aplica completo; solo se redondea el total que queda. Lo tipeado a mano también se guarda
   sin centavos (registro, Agenda, editar en Finanzas).
-- Cobro parcial (23/10/2026): en Por cobrar / Por pagar, tocar la línea abre el detalle (un renglón
-  por registro, gasto extra y saldo, con casilla) y el botón marca solo lo tildado; cerrado marca todo.
+- Por cobrar / Por pagar en tarjetas (23/10/2026): una sola tarjeta por familia o niñera con todos sus
+  pendientes (`armarTarjetasPendientes`, finanzas.js; lo que trae solo el nombre va a la de esa
+  persona), aunque cobre "diario". El saldo a favor se aplica sobre la tarjeta entera y el total se
+  redondea una vez. Cerrada: el total y "Marcar todo cobrado / pagado". Abierta: el detalle en un
+  recuadro, agrupado por fecha, con nada tildado; abajo "Marcar cobrado lo tildado ($X)" (gris hasta que
+  haya algo tildado) y "Marcar todo cobrado ($Y)". El saldo a favor se tilda solo con el primer sitting y
+  "¿Cuánto pagó?" prueba primero con el saldo y después sin él.
+  La semana en curso de las fijas y las intermediaciones siguen aparte. `calcularPendientesAgrupados`
+  sigue por período (la usa la conciliación).
+- Cobro parcial (23/10/2026): en Por cobrar / Por pagar, tocar la tarjeta abre el detalle (un renglón
+  por registro, gasto extra y saldo, con casilla) y el botón marca solo lo tildado.
   El gasto va con su sitting; el saldo a favor se aplica a lo que se marca (`totalParcial`, finanzas.js)
   y lo que sobra queda para lo pendiente. "¿Cuánto pagó?" (solo Por cobrar) tilda la combinación exacta
   que usa los más viejos (`combinacionExacta`) o avisa y no deja nada tildado. El detalle se lee al
@@ -489,10 +501,10 @@ reporte.
   desmarca solo lo que marcó ese toque y devuelve el saldo usado (`deshacerMarca`).
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3). La semana de una
-  fija se paga siempre el sábado (23/10/2026, regla de Paulina y Delfina del 21/10: también las que
-  trabajan el fin de semana; la semana de pago va de domingo a sábado, `domingoDeSemana`, y lo del
-  domingo entra en la semana siguiente), cuando terminó el último fijo de ese día (de sus fijos vigentes o de lo registrado ese día, lo que
-  termine más tarde; `cierreSemanaFijo`, 21/10/2026). Antes se ve aparte como "Semana en curso,
+  fija va de lunes a sábado y se paga el sábado; lo que se trabaja un domingo, fijo o puntual, se
+  paga ese mismo domingo (23/10/2026, regla de Paulina y Delfina; `inicioSemanaPago` /
+  `finSemanaPago`). Se paga cuando terminó el último fijo de ese día (de sus fijos vigentes o de
+  lo registrado ese día, lo que termine más tarde; `cierreSemanaFijo`, 21/10/2026). Antes se ve aparte como "Semana en curso,
   cierra hoy a las HH:MM" con lo que lleva hasta hoy, sin botón y sin saldo a favor
   (`porPagarEnCursoHtml`, 20/10/2026). El margen del mes usa la misma regla (`esEnCurso`). El
   cobro semanal de una familia sigue de lunes a domingo. El "Por pagar a niñeras" del resumen tampoco la cuenta: va
