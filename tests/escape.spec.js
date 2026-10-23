@@ -87,8 +87,10 @@ async function cerrarTodo(page) {
 }
 
 // Abre cada tipo de "ver..."/"abrir..." que haya en pantalla (el primero de cada uno).
-const VISTAS = /^(ver(Familia|Ninera|FichaIntake|Detalle|HistorialSitting)|abrirModal(Solicitud|SitForm|Juguete|InterPoolNinera|InterEnriqueDetalle|InterEventoDetalle|Asignar|VigenciaAsignacion|Incidente)|editar(Familia|Ninera|FechaMarketing|GastoFijo|GastoGeneral|MovimientoSitting)|abrirLightboxFoto)\(/;
+const VISTAS = /^(ver(Familia|Ninera|FichaIntake|Detalle|HistorialSitting)|abrirModal(Solicitud|SitForm|Juguete|InterPoolNinera|InterEnriqueDetalle|InterEventoDetalle|Asignar|VigenciaAsignacion|Incidente)|elegirNuevaIntermediacion|abrirForm(InterEnrique|InterEvento)|editar(Familia|Ninera|FechaMarketing|GastoFijo|GastoGeneral|MovimientoSitting)|abrirLightboxFoto)\(/;
 async function abrirVistas(page, modulo) {
+  // Las secciones plegables (Niñeras de Enrique, 23/10/2026) se abren para revisar lo de adentro.
+  await page.evaluate(() => document.querySelectorAll('#modcontent details').forEach(d => { d.open = true; }));
   const handlers = await page.evaluate(re => {
     const vistos = new Map();
     for (const el of document.querySelectorAll('#modcontent [onclick]')) {
@@ -110,7 +112,9 @@ async function abrirVistas(page, modulo) {
 }
 
 // Cuántas fichas/formularios distintos se abren hoy en cada módulo con estos datos.
-const MINIMO_VISTAS = { agenda: 1, rrhh: 5, ninieras: 3, familias: 2, sittings: 2, intermediaciones: 5, finanzas: 1, marketing: 1, juguetes: 2 };
+// Intermediaciones (23/10/2026): sin pestañas, cada ficha se cuenta una vez (colocación, evento,
+// niñera de Enrique y "+ Nueva"); antes las mismas se contaban de nuevo en cada pestaña.
+const MINIMO_VISTAS = { agenda: 1, rrhh: 5, ninieras: 3, familias: 2, sittings: 2, intermediaciones: 4, finanzas: 1, marketing: 1, juguetes: 2 };
 const MODULOS = [null, 'agenda', 'rrhh', 'ninieras', 'familias', 'sittings', 'intermediaciones', 'finanzas', 'marketing', 'legal', 'juguetes', 'notificaciones'];
 
 test.describe('datos con comillas, apóstrofos y HTML', () => {

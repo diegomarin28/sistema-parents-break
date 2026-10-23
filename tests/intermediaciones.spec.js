@@ -11,11 +11,13 @@ const toasts = page => page.locator('.toaststack .toast');
 const boton = page => page.locator('button', { hasText: 'Guardar colocación' });
 const postsEnrique = e => e.escrituras.filter(w => w.tabla === 'intermediaciones_enrique' && w.metodo === 'POST');
 
+// Desde el 23/10/2026 el formulario se abre con "+ Nueva" → "Colocación de Enrique", en un modal.
 async function abrirForm(page, opciones) {
   const e = await abrirApp(page, opciones);
   await irAModulo(page, 'intermediaciones');
-  await page.evaluate(() => setInterTab('enrique'));
-  await esperarQuieta(page);
+  await page.locator('#modcontent button', { hasText: '+ Nueva' }).click();
+  await page.locator('#editmodal button', { hasText: 'Colocación de Enrique' }).click();
+  await expect(page.locator('#editmodal #inter-enrique-ninera')).toBeVisible();
   return e;
 }
 // Tipea de verdad (no fill) para que corran los listeners de input del autocompletar.
