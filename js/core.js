@@ -956,14 +956,31 @@ function edadHijo(hijo){
   return edadDesdeDeclarada(hijo?.edad_declarada, hijo?.edad_declarada_en);
 }
 
-function toast(msg, type='good'){
+// opciones.deshacer (23/10/2026): suma un botón "Deshacer" y el aviso queda 8 segundos, para
+// volver atrás algo reversible (marcar cobrado / pagado) sin un diálogo previo.
+function toast(msg, type='good', opciones={}){
   let stack = document.querySelector('.toaststack');
   if(!stack){ stack = document.createElement('div'); stack.className='toaststack'; document.body.appendChild(stack); }
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   el.textContent = msg;
+  const irse = () => { if(!el.isConnected || el.classList.contains('leaving')) return; el.classList.add('leaving'); setTimeout(()=>el.remove(), 220); };
+  if(opciones.deshacer){
+    el.classList.add('con-accion');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-accion';
+    btn.textContent = 'Deshacer';
+    btn.addEventListener('click', async ()=>{
+      if(btn.disabled) return;
+      btn.disabled = true;
+      irse();
+      await opciones.deshacer();
+    });
+    el.appendChild(btn);
+  }
   stack.appendChild(el);
-  setTimeout(()=>{ el.classList.add('leaving'); setTimeout(()=>el.remove(), 220); }, 3200);
+  setTimeout(irse, opciones.deshacer ? 8000 : 3200);
 }
 
 /* ============================================================

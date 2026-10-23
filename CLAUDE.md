@@ -201,7 +201,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   app con el oráculo (`tests/support/oraculo-plata.js`, copia congelada de las funciones de plata) y
   con la regla escrita: ~2.000 horarios (con barridos minuto a minuto), 1.600 montos y precios, 400
   meses de resumen y 400 bases chicas de Por cobrar / Por pagar en miércoles, sábado, domingo y lunes,
-  y 60 pantallas de Finanzas. La base, contra el mismo oráculo: `supabase/pruebas/paridad_plata.sql`
+  60 pantallas de Finanzas y 400 cobros parciales (lo tildado con saldo y "¿Cuánto pagó?" contra probar
+  todas las combinaciones). La base, contra el mismo oráculo: `supabase/pruebas/paridad_plata.sql`
   (2.880 minutos, 800 montos, 450 días de fijos y 300 precios de `precio_sitting`; Postgres local).
 - `supabase/pruebas/pedidos_whatsapp.sql`: la tabla del pedido desde WhatsApp (estados, límites,
   política), `precio_sitting()` con casos a mano y el tope diario (`reservar_llamada_pedido`: la
@@ -214,6 +215,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   pedido sin hora de fin (sin total, registro en $0, traslados con su cobro) y precio puesto a mano
   que no se pisa al tocar la hora.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
+- `tests/cobro-parcial.spec.js`: marcar solo una parte en Por cobrar / Por pagar (1 de 3, "¿Cuánto
+  pagó?" exacto y sin combinación, gasto extra con su sitting, saldo a favor, "Deshacer", Realtime con
+  el detalle abierto, fallas, escape y 390 px).
 - `tests/por-pagar-en-curso.spec.js`: semana en curso de las fijas en Por pagar (cuándo cierra,
   sin botón, fija con finde, saldo a favor, 390px) y el pago el mismo día que cierra: sábado
   desde temprano, domingo después del último fijo, fijo que pasa la medianoche, día registrado
@@ -466,6 +470,13 @@ reporte.
   cambian las dos. Nunca `Math.round` para calcular lo que se cobra o se paga. El saldo a favor
   se aplica completo; solo se redondea el total que queda. Lo tipeado a mano también se guarda
   sin centavos (registro, Agenda, editar en Finanzas).
+- Cobro parcial (23/10/2026): en Por cobrar / Por pagar, tocar la línea abre el detalle (un renglón
+  por registro, gasto extra y saldo, con casilla) y el botón marca solo lo tildado; cerrado marca todo.
+  El gasto va con su sitting; el saldo a favor se aplica a lo que se marca (`totalParcial`, finanzas.js)
+  y lo que sobra queda para lo pendiente. "¿Cuánto pagó?" (solo Por cobrar) tilda la combinación exacta
+  que usa los más viejos (`combinacionExacta`) o avisa y no deja nada tildado. El detalle se lee al
+  abrirlo. Después de marcar, `toast(msg, tipo, {deshacer})` (core.js) muestra "Deshacer" 8 s:
+  desmarca solo lo que marcó ese toque y devuelve el saldo usado (`deshacerMarca`).
 - Pagos a niñeras: "Por pagar" no muestra sittings con fecha futura (E7) y marcar pagado
   siempre pasa por `confirmarPagoSittings()` con el detalle y el total (E3). La semana de una
   fija se paga el mismo día que cierra (sábado, o domingo si tiene fijos el finde), cuando

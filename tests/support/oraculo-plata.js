@@ -1,5 +1,5 @@
 // Oráculo de plata: copia EXACTA de las funciones que calculan plata en js/, tal como estaban el
-// 21/10/2026 (commit 2b07289). La generó scripts/congelar-oraculo-plata.js: no se edita a mano.
+// 23/10/2026 (commit 6e6c0dc). La generó scripts/congelar-oraculo-plata.js: no se edita a mano.
 // tests/red-plata.spec.js compara la app con esta copia en miles de casos (docs/rediseno-panel.md,
 // 4.10). Si una regla cambia a propósito, se vuelve a generar en el mismo PR y el PR lo dice.
 // Lo que no es plata (supabase, normaliza, todayISO, sumarDiasISO...) es el de la app.
@@ -373,7 +373,45 @@ function crearOraculoPlata(){
   }
   function cuentasDeFicha(info){ return (info?.cuenta_bancaria||[]).filter(Boolean); }
   function montoParaCopiar(n){ return String(redondearPago(n)); }
-  return { agendaMinutos, gastoACargoFamilia, redondearMonto, redondearPago, redondearCobro, asignacionVigenteEn, asignacionTerminada, redondearFinCobro, familiaRedondeaFin, cruceMedianocheMalMarcado, horasSitting, precioSegunHorario, construirEsTrabajoFijo, construirTrabajaFinde, filtrarFijosSemanaIncompleta, resumenFinancieroMes, resumenIntermediaciones, intermediacionesPendientes, lunesDeSemana, finEnMinutos, construirFinUltimoFijo, cierreSemanaFijo, semanaFijoCerrada, construirEsEnCurso, finDeSemanaDesde, bucketKeyFecha, cargarAjustesSaldo, pendienteAjuste, aplicarAjustesAGrupos, calcularPendientesAgrupados, esFaltaTabla, cargarGastosExtraPendientes, montoGrupo, cuentasDeFicha, montoParaCopiar };
+  function totalParcial(subtotal, ajustes, sujeto){
+    let neto = subtotal;
+    const usados = [];
+    (ajustes||[]).forEach(a=>{
+      const m = Number(a.monto)||0;
+      const usar = m > 0 ? m : -Math.min(-m, Math.max(neto, 0));
+      if(!usar) return;
+      usados.push({ ...a, monto: Math.round(usar*100)/100 });
+      neto = Math.round((neto + usar)*100)/100;
+    });
+    return { total: sujeto==='familia' ? redondearCobro(neto) : redondearPago(neto), usados };
+  }
+  function combinacionExacta(unidades, objetivo, ajustes, sujeto){
+    const cent = unidades.map(u=>Math.round((Number(u.monto)||0)*100));
+    const n = cent.length;
+    // alcanzables[k]: las sumas que se pueden armar con las unidades k..n-1.
+    const alcanzables = Array(n+1);
+    alcanzables[n] = new Set([0]);
+    for(let k=n-1; k>=0; k--){
+      const s = new Set(alcanzables[k+1]);
+      alcanzables[k+1].forEach(x=>s.add(x + cent[k]));
+      if(s.size > 200000) return null; // demasiadas combinaciones: mejor a mano
+      alcanzables[k] = s;
+    }
+    let mejor = null;
+    alcanzables[0].forEach(suma=>{
+      if(!suma || totalParcial(suma/100, ajustes, sujeto).total !== objetivo) return;
+      // De la más vieja a la más nueva, cada una entra si con ella todavía se llega a la suma.
+      const elegidas = [];
+      let resto = suma;
+      for(let k=0; k<n; k++){
+        if(alcanzables[k+1].has(resto - cent[k])){ elegidas.push(k); resto -= cent[k]; }
+      }
+      const masVieja = (a, b) => { for(let j=0; j<Math.min(a.length, b.length); j++) if(a[j]!==b[j]) return a[j] < b[j]; return a.length < b.length; };
+      if(!mejor || masVieja(elegidas, mejor)) mejor = elegidas;
+    });
+    return mejor;
+  }
+  return { agendaMinutos, gastoACargoFamilia, redondearMonto, redondearPago, redondearCobro, asignacionVigenteEn, asignacionTerminada, redondearFinCobro, familiaRedondeaFin, cruceMedianocheMalMarcado, horasSitting, precioSegunHorario, construirEsTrabajoFijo, construirTrabajaFinde, filtrarFijosSemanaIncompleta, resumenFinancieroMes, resumenIntermediaciones, intermediacionesPendientes, lunesDeSemana, finEnMinutos, construirFinUltimoFijo, cierreSemanaFijo, semanaFijoCerrada, construirEsEnCurso, finDeSemanaDesde, bucketKeyFecha, cargarAjustesSaldo, pendienteAjuste, aplicarAjustesAGrupos, calcularPendientesAgrupados, esFaltaTabla, cargarGastosExtraPendientes, montoGrupo, cuentasDeFicha, montoParaCopiar, totalParcial, combinacionExacta };
 }
-const ORACULO_PLATA_CONGELADO = { fecha: "21/10/2026", commit: "2b07289" };
+const ORACULO_PLATA_CONGELADO = { fecha: "23/10/2026", commit: "6e6c0dc" };
 if (typeof module !== 'undefined') module.exports = { crearOraculoPlata, ORACULO_PLATA_CONGELADO };

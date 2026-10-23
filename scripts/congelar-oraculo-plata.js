@@ -28,7 +28,7 @@ const FUNCIONES = {
     'resumenIntermediaciones', 'intermediacionesPendientes', 'lunesDeSemana', 'finEnMinutos', 'construirFinUltimoFijo',
     'cierreSemanaFijo', 'semanaFijoCerrada', 'construirEsEnCurso', 'finDeSemanaDesde', 'bucketKeyFecha',
     'cargarAjustesSaldo', 'pendienteAjuste', 'aplicarAjustesAGrupos', 'calcularPendientesAgrupados', 'esFaltaTabla',
-    'cargarGastosExtraPendientes', 'montoGrupo', 'cuentasDeFicha', 'montoParaCopiar'],
+    'cargarGastosExtraPendientes', 'montoGrupo', 'cuentasDeFicha', 'montoParaCopiar', 'totalParcial', 'combinacionExacta'],
 };
 
 // Constantes que son regla de plata (se copian como "const NOMBRE = valor;").

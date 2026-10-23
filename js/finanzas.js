@@ -1136,30 +1136,269 @@ function montoGrupo(g, sujeto){
   const n = g.totalNeto ?? g.total;
   return sujeto==='familia' ? redondearCobro(n) : redondearPago(n);
 }
+/* ---- Marcar solo una parte de un pendiente (23/10/2026, pedido de Paulina y Delfina) ----
+   Por cobrar juntaba todo lo de una familia en una línea y "Marcar cobrado" marcaba el grupo
+   entero: cuando una madre pagaba un solo sitting, o semanal, el monto no cuadraba con lo que
+   había transferido. La línea sigue con el total; al tocarla se abre el detalle (un renglón por
+   registro, gasto extra y saldo, cada uno con su casilla) y el botón marca solo lo tildado.
+   Cerrado, marca todo, como antes. Mismo detalle en Por pagar, para pagar solo una parte.
+   - Un gasto extra va con su sitting: se tilda y se destilda con él.
+   - El saldo a favor se aplica a lo que se marca primero (un descuento hasta dejarlo en $0);
+     lo que sobra queda para lo que sigue pendiente. Destildado, queda entero para después.
+   El detalle se lee recién al abrirlo: la lista no espera datos que capaz no se miran. */
+let finPendientes = { cobrar: [], pagar: [] };
+function cabezaPendienteHtml(lado, i, g, lineas){
+  const titulo = `<div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
+    <div class="helper" style="margin:2px 0 0;">${subtituloPendienteHtml(g)}</div>${lineas}`;
+  // Una intermediación es un solo cobro: no tiene detalle.
+  if(g.inter) return `<div>${titulo}</div>`;
+  return `<div class="fin-pend-cabeza" role="button" tabindex="0" aria-expanded="false" aria-controls="fin-det-${lado}-${i}"
+      onclick="alternarDetallePendiente(${argJs(lado)}, ${i}, event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alternarDetallePendiente(${argJs(lado)}, ${i}, event);}">
+      ${titulo}<div class="fin-pend-vermas">Ver detalle</div>
+    </div>`;
+}
+async function alternarDetallePendiente(lado, i, ev){
+  if(ev?.target?.closest?.('button,a,input')) return; // "Copiar" la cuenta o el link a la ficha
+  const g = finPendientes[lado][i];
+  const cont = document.getElementById(`fin-det-${lado}-${i}`);
+  if(!g || !cont) return;
+  g.abierto = !g.abierto;
+  cont.hidden = !g.abierto;
+  const cabeza = cont.parentElement.querySelector('.fin-pend-cabeza');
+  cabeza.setAttribute('aria-expanded', String(g.abierto));
+  cabeza.querySelector('.fin-pend-vermas').textContent = g.abierto ? 'Ocultar detalle' : 'Ver detalle';
+  if(g.abierto && !g.detalle) await cargarDetallePendiente(lado, i);
+}
+async function cargarDetallePendiente(lado, i){
+  const g = finPendientes[lado][i];
+  const cont = document.getElementById(`fin-det-${lado}-${i}`);
+  if(!g || !cont) return;
+  cont.innerHTML = '<div class="helper" style="margin:6px 0;">Cargando el detalle…</div>';
+  const gastoIds = (g.gastos||[]).map(x=>x.id);
+  const [rs, rg] = await Promise.all([
+    g.ids.length ? sb.from('sittings_traslados').select('id,tipo,fecha,hora_inicio,hora_fin,termina_dia_siguiente,familia_nombre,ninera_nombre,cobro_familia,pago_ninera').in('id', g.ids) : { data: [] },
+    gastoIds.length ? sb.from('gastos_extra').select('id,sitting_id').in('id', gastoIds) : { data: [] },
+  ]);
+  if(finPendientes[lado][i] !== g) return; // se volvió a pintar la lista mientras tanto
+  const error = rs.error || rg.error;
+  if(error){
+    cont.innerHTML = `<div class="warnbox" style="margin:6px 0;">No se pudo cargar el detalle (${escaparHtml(error.message)}).</div>
+      <button class="smallbtn" style="min-height:36px;" onclick="cargarDetallePendiente(${argJs(lado)}, ${i})">Reintentar</button>`;
+    return;
+  }
+  const campo = lado==='cobrar' ? 'cobro_familia' : 'pago_ninera';
+  const regs = (rs.data||[]).map(r=>({ ...r, monto: Number(r[campo])||0 }))
+    .sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||'') || (a.hora_inicio||'').localeCompare(b.hora_inicio||''));
+  const sittingDe = Object.fromEntries((rg.data||[]).map(x=>[x.id, x.sitting_id]));
+  // de: el renglón del sitting del gasto (-1 si ese sitting ya estaba cobrado / pagado).
+  const gastos = (g.gastos||[]).map(x=>({ ...x, de: regs.findIndex(r=>r.id===sittingDe[x.id]) }));
+  g.detalle = { regs, gastos, ajustes: g.ajustes||[] };
+  pintarDetallePendiente(lado, i);
+}
+/* Realtime vuelve a pintar la lista cuando la otra admin cambia algo (recarga liviana de
+   Finanzas): lo que estaba abierto sigue abierto, con lo mismo destildado y el monto escrito.
+   Después de marcar o deshacer, en cambio, la lista vuelve cerrada. */
+function clavePendiente(g){ return `${g.familia_id || g.ninera_id || g.nombre}|${g.bucket}|${g.inter ? 'i' : ''}`; }
+function detallesAbiertos(lado){
+  return finPendientes[lado].map((g, i)=>{
+    const cont = document.getElementById(`fin-det-${lado}-${i}`);
+    if(!g.abierto || !g.detalle || !cont) return null;
+    const d = g.detalle;
+    const destildados = attr => [...cont.querySelectorAll(`input[${attr}]`)].filter(c=>!c.checked).map(c=>Number(c.getAttribute(attr)));
+    return { clave: clavePendiente(g), montoEscrito: cont.querySelector('.fin-det-pagado')?.value || '',
+      sinTildar: new Set([...destildados('data-reg').map(k=>d.regs[k].id), ...destildados('data-gasto').map(k=>d.gastos[k].id), ...destildados('data-aj').map(k=>d.ajustes[k].id)]) };
+  }).filter(Boolean);
+}
+async function reabrirDetalles(lado, abiertos){
+  for(const a of abiertos){
+    const i = finPendientes[lado].findIndex(g=>clavePendiente(g)===a.clave);
+    if(i < 0) continue;
+    const g = finPendientes[lado][i];
+    await alternarDetallePendiente(lado, i);
+    const cont = document.getElementById(`fin-det-${lado}-${i}`);
+    if(finPendientes[lado][i] !== g || !g.detalle || !cont) continue;
+    const d = g.detalle;
+    const marcar = (attr, lista) => lista.forEach((x, k)=>{ if(a.sinTildar.has(x.id)) cont.querySelector(`input[${attr}="${k}"]`).checked = false; });
+    marcar('data-reg', d.regs); marcar('data-gasto', d.gastos); marcar('data-aj', d.ajustes);
+    const campo = cont.querySelector('.fin-det-pagado');
+    if(campo) campo.value = a.montoEscrito;
+    actualizarTotalPendiente(lado, i);
+  }
+}
+function horarioPendiente(r){
+  if(!r.hora_inicio) return 'sin horario';
+  return `${r.hora_inicio.slice(0,5)}${r.hora_fin ? '–'+r.hora_fin.slice(0,5) : ''}${r.termina_dia_siguiente ? ' (+1 día)' : ''}`;
+}
+function pintarDetallePendiente(lado, i){
+  const d = finPendientes[lado][i].detalle;
+  const cont = document.getElementById(`fin-det-${lado}-${i}`);
+  const fmtF = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'short',day:'2-digit',month:'2-digit'}) : '—';
+  const plata = n => '$'+Number(n).toLocaleString('es-UY', {maximumFractionDigits:2});
+  const fila = (attr, texto, monto, sub=false) => `<label class="fin-det-fila${sub ? ' sub' : ''}">
+      <input type="checkbox" checked ${attr} onchange="cambioCasillaPendiente(${argJs(lado)}, ${i}, this)">
+      <span class="fin-det-texto">${texto}</span><span class="pago-monto">${monto}</span>
+    </label>`;
+  const filaGasto = (x, k) => fila(`data-gasto="${k}"`, `${lado==='cobrar' ? 'Gasto extra' : 'Reintegro de gasto'}: ${escaparHtml(x.concepto)}`, plata(x.monto), x.de >= 0);
+  const persona = r => escaparHtml((lado==='cobrar' ? r.ninera_nombre : r.familia_nombre) || '—');
+  cont.innerHTML = `
+    ${lado==='cobrar' ? `<div class="fin-det-pagado-campo">
+      <label class="helper" style="margin:0;" for="fin-det-pagado-${i}">¿Cuánto pagó?</label>
+      <input type="number" inputmode="decimal" min="0" class="fin-det-pagado" id="fin-det-pagado-${i}" placeholder="$" oninput="programarTildarPorMonto(${i}, this.value)">
+    </div>` : ''}
+    <div class="fin-det-aviso"></div>
+    ${d.regs.map((r, k)=>fila(`data-reg="${k}"`, `<b>${fmtF(r.fecha)}</b> · ${horarioPendiente(r)} · ${persona(r)}${r.tipo==='traslado' ? ' (traslado)' : ''}`, plata(r.monto))
+      + d.gastos.map((x, gk)=>x.de===k ? filaGasto(x, gk) : '').join('')).join('')}
+    ${d.gastos.map((x, gk)=>x.de < 0 ? filaGasto(x, gk) : '').join('')}
+    ${d.ajustes.map((a, k)=>fila(`data-aj="${k}"`, `Saldo: ${escaparHtml(a.motivo)}`, textoMontoAjuste(a.monto))).join('')}
+    <div class="fin-det-pie"><div class="helper fin-det-total" style="margin:0;"></div></div>`;
+  actualizarTotalPendiente(lado, i);
+}
+// Lo que se cobra o se paga de una parte de un grupo, con la misma regla que
+// aplicarAjustesAGrupos: un descuento nunca deja el total en negativo. Devuelve el total sin
+// centavos y cuánto se usa de cada ajuste (para anotarlo al marcar).
+function totalParcial(subtotal, ajustes, sujeto){
+  let neto = subtotal;
+  const usados = [];
+  (ajustes||[]).forEach(a=>{
+    const m = Number(a.monto)||0;
+    const usar = m > 0 ? m : -Math.min(-m, Math.max(neto, 0));
+    if(!usar) return;
+    usados.push({ ...a, monto: Math.round(usar*100)/100 });
+    neto = Math.round((neto + usar)*100)/100;
+  });
+  return { total: sujeto==='familia' ? redondearCobro(neto) : redondearPago(neto), usados };
+}
+// Qué unidades (de la más vieja a la más nueva) suman exacto lo que pagó, con el saldo
+// tildado. Si hay varias, la que usa las más viejas. null si no hay ninguna.
+function combinacionExacta(unidades, objetivo, ajustes, sujeto){
+  const cent = unidades.map(u=>Math.round((Number(u.monto)||0)*100));
+  const n = cent.length;
+  // alcanzables[k]: las sumas que se pueden armar con las unidades k..n-1.
+  const alcanzables = Array(n+1);
+  alcanzables[n] = new Set([0]);
+  for(let k=n-1; k>=0; k--){
+    const s = new Set(alcanzables[k+1]);
+    alcanzables[k+1].forEach(x=>s.add(x + cent[k]));
+    if(s.size > 200000) return null; // demasiadas combinaciones: mejor a mano
+    alcanzables[k] = s;
+  }
+  let mejor = null;
+  alcanzables[0].forEach(suma=>{
+    if(!suma || totalParcial(suma/100, ajustes, sujeto).total !== objetivo) return;
+    // De la más vieja a la más nueva, cada una entra si con ella todavía se llega a la suma.
+    const elegidas = [];
+    let resto = suma;
+    for(let k=0; k<n; k++){
+      if(alcanzables[k+1].has(resto - cent[k])){ elegidas.push(k); resto -= cent[k]; }
+    }
+    const masVieja = (a, b) => { for(let j=0; j<Math.min(a.length, b.length); j++) if(a[j]!==b[j]) return a[j] < b[j]; return a.length < b.length; };
+    if(!mejor || masVieja(elegidas, mejor)) mejor = elegidas;
+  });
+  return mejor;
+}
+function seleccionPendiente(lado, i){
+  const d = finPendientes[lado][i].detalle;
+  const cont = document.getElementById(`fin-det-${lado}-${i}`);
+  const tildados = attr => [...cont.querySelectorAll(`input[${attr}]`)].filter(c=>c.checked).map(c=>Number(c.getAttribute(attr)));
+  const regs = tildados('data-reg').map(k=>d.regs[k]);
+  const gastos = tildados('data-gasto').map(k=>{ const { de, ...x } = d.gastos[k]; return x; });
+  const ajustes = tildados('data-aj').map(k=>d.ajustes[k]);
+  const subtotal = regs.reduce((t,r)=>t+r.monto, 0) + gastos.reduce((t,x)=>t+(Number(x.monto)||0), 0);
+  return { ids: regs.map(r=>r.id), gastos, vacio: !regs.length && !gastos.length,
+    ...totalParcial(subtotal, ajustes, lado==='cobrar' ? 'familia' : 'ninera') };
+}
+function actualizarTotalPendiente(lado, i){
+  const el = document.querySelector(`#fin-det-${lado}-${i} .fin-det-total`);
+  if(!el) return;
+  const s = seleccionPendiente(lado, i);
+  el.innerHTML = s.vacio ? 'No hay nada tildado.' : `Tildado: <b>$${s.total.toLocaleString('es-UY')}</b>`;
+}
+function cambioCasillaPendiente(lado, i, chk){
+  const cont = document.getElementById(`fin-det-${lado}-${i}`);
+  if(chk.dataset.reg !== undefined){
+    const k = Number(chk.dataset.reg);
+    finPendientes[lado][i].detalle.gastos.forEach((x, gk)=>{
+      if(x.de===k) cont.querySelector(`input[data-gasto="${gk}"]`).checked = chk.checked;
+    });
+  }
+  cont.querySelector('.fin-det-aviso').innerHTML = '';
+  actualizarTotalPendiente(lado, i);
+}
+// Espera a que termine de escribir: si no, con "1900" probaba 1, 19 y 190 y avisaba de más.
+let finTildarTimer = null;
+function programarTildarPorMonto(i, valor){
+  clearTimeout(finTildarTimer);
+  finTildarTimer = setTimeout(()=>tildarPorMonto(i, valor), 350);
+}
+function tildarPorMonto(i, valor){
+  const g = finPendientes.cobrar[i];
+  const cont = document.getElementById(`fin-det-cobrar-${i}`);
+  if(!g?.detalle || !cont) return;
+  const aviso = cont.querySelector('.fin-det-aviso');
+  const objetivo = Number(valor);
+  if(String(valor).trim()==='' || !(objetivo > 0)){ aviso.innerHTML = ''; return; }
+  const d = g.detalle;
+  // Cada sitting cuenta con sus gastos; un gasto cuyo sitting ya se cobró va solo.
+  const unidades = [
+    ...d.regs.map((r, k)=>({ reg: k, monto: r.monto + d.gastos.filter(x=>x.de===k).reduce((t,x)=>t+(Number(x.monto)||0), 0) })),
+    ...d.gastos.map((x, gk)=>({ gasto: gk, monto: Number(x.monto)||0, suelto: x.de < 0 })).filter(u=>u.suelto),
+  ];
+  const ajustes = [...cont.querySelectorAll('input[data-aj]')].filter(c=>c.checked).map(c=>d.ajustes[Number(c.dataset.aj)]);
+  const elegidas = new Set(combinacionExacta(unidades, objetivo, ajustes, 'familia') || []);
+  // Sin combinación no queda nada tildado: así "Marcar cobrado" no marca de más por error.
+  unidades.forEach((u, k)=>{
+    if(u.reg === undefined){ cont.querySelector(`input[data-gasto="${u.gasto}"]`).checked = elegidas.has(k); return; }
+    cont.querySelector(`input[data-reg="${u.reg}"]`).checked = elegidas.has(k);
+    d.gastos.forEach((x, gk)=>{ if(x.de===u.reg) cont.querySelector(`input[data-gasto="${gk}"]`).checked = elegidas.has(k); });
+  });
+  aviso.innerHTML = elegidas.size ? '' : `<div class="warnbox" style="margin:4px 0;">No hay sittings que sumen $${objetivo.toLocaleString('es-UY')}: tildalos a mano.</div>`;
+  actualizarTotalPendiente('cobrar', i);
+}
+async function marcarPendiente(lado, i){
+  const g = finPendientes[lado][i];
+  if(!g) return;
+  if(g.inter) return marcarIntermediacionResuelta(g.inter);
+  const campo = lado==='cobrar' ? 'cobrado' : 'pagado';
+  // Para cobrar se pasan los ids de los gastos; para pagar, el gasto entero (va en la confirmación).
+  const comoGastos = gs => lado==='cobrar' ? gs.map(x=>x.id) : gs;
+  if(!g.abierto) return marcarGrupoResuelto(g.ids, campo, g.ajustes||[], comoGastos(g.gastos||[]));
+  if(!g.detalle){ toast('Todavía no cargó el detalle: esperá un momento o cerralo para marcar todo.', 'bad'); return; }
+  const s = seleccionPendiente(lado, i);
+  if(s.vacio){ toast(`Tildá al menos un registro o gasto para marcarlo ${campo}.`, 'bad'); return; }
+  return marcarGrupoResuelto(s.ids, campo, s.usados, comoGastos(s.gastos));
+}
+function copiarMontoPendiente(i){
+  const g = finPendientes.pagar[i];
+  if(!g) return;
+  const monto = g.abierto && g.detalle ? seleccionPendiente('pagar', i).total : montoGrupo(g, 'ninera');
+  copiarAlPortapapeles(montoParaCopiar(monto), 'Monto copiado.');
+}
 function renderPorCobrar(lista, sueltos=[]){
   const box = document.getElementById('fin-porcobrar-wrap');
   if(!box) return;
   if(!lista.length){ box.innerHTML = `<h2>Por cobrar</h2><div class="empty">No hay cobros pendientes.</div>${saldosSueltosHtml(sueltos, 'cobro')}`; return; }
   const total = lista.reduce((s,g)=>s+montoGrupo(g, 'familia'),0);
+  const abiertos = detallesAbiertos('cobrar');
+  finPendientes.cobrar = lista;
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;">Por cobrar</h2>
       <div class="helper" style="margin:0;">${lista.length} pendiente${lista.length===1?'':'s'} · $${total.toLocaleString('es-UY')}</div>
     </div>
-    ${lista.map(g=>`
-      <div class="agendarow" style="border-bottom:1px solid var(--line);">
-        <div>
-          <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
-          <div class="helper" style="margin:2px 0 0;">${subtituloPendienteHtml(g)}</div>
-          ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Gasto extra')}${lineasAjustesHtml(g.ajustes)}
+    ${lista.map((g, i)=>`
+      <div class="fin-pend">
+        <div class="agendarow" style="border-bottom:1px solid var(--line);">
+          ${cabezaPendienteHtml('cobrar', i, g, `${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Gasto extra')}${lineasAjustesHtml(g.ajustes)}`)}
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${montoGrupo(g, 'familia').toLocaleString('es-UY')}</span>
+            <button class="smallbtn" style="min-height:36px;" onclick="conGuardado(this, ()=>marcarPendiente('cobrar', ${i}))">Marcar cobrado</button>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${montoGrupo(g, 'familia').toLocaleString('es-UY')}</span>
-          <button class="smallbtn" onclick="conGuardado(this, ()=>${g.inter ? `marcarIntermediacionResuelta(${argJs(g.inter)})` : `marcarGrupoResuelto(${argJs(g.ids)}, 'cobrado', ${argJs(g.ajustes||[])}, ${argJs((g.gastos||[]).map(x=>x.id))})`})">Marcar cobrado</button>
-        </div>
+        <div class="fin-det" id="fin-det-cobrar-${i}" hidden></div>
       </div>`).join('')}
     ${saldosSueltosHtml(sueltos, 'cobro')}
   `;
+  reabrirDetalles('cobrar', abiertos);
 }
 // "Semana en curso" de las fijas: lo que llevan hasta hoy (los días que no pasaron no entran,
 // E7). No tiene botón: se paga cuando la semana cierra y pasa a la lista de arriba. El saldo
@@ -1211,28 +1450,30 @@ function renderPorPagar(lista, sueltos=[], enCurso=[]){
   if(!box) return;
   if(!lista.length){ box.innerHTML = `<h2>Por pagar</h2><div class="empty">No hay pagos pendientes.</div>${porPagarEnCursoHtml(enCurso)}${saldosSueltosHtml(sueltos, 'pago')}`; return; }
   const total = lista.reduce((s,g)=>s+montoGrupo(g, 'ninera'),0);
+  const abiertos = detallesAbiertos('pagar');
+  finPendientes.pagar = lista;
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
       <h2 style="margin:0;">Por pagar</h2>
       <div class="helper" style="margin:0;">${lista.length} pendiente${lista.length===1?'':'s'} · $${total.toLocaleString('es-UY')}</div>
     </div>
-    ${lista.map(g=>`
-      <div class="agendarow" style="border-bottom:1px solid var(--line);">
-        <div>
-          <div style="font-weight:600;">${escaparHtml(g.nombre)}</div>
-          <div class="helper" style="margin:2px 0 0;">${subtituloPendienteHtml(g)}</div>
-          ${cuentasPorPagarHtml(g)}
-          ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Reintegro de gasto')}${lineasAjustesHtml(g.ajustes)}
+    ${lista.map((g, i)=>`
+      <div class="fin-pend">
+        <div class="agendarow" style="border-bottom:1px solid var(--line);">
+          ${cabezaPendienteHtml('pagar', i, g, `${cuentasPorPagarHtml(g)}
+            ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Reintegro de gasto')}${lineasAjustesHtml(g.ajustes)}`)}
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${montoGrupo(g, 'ninera').toLocaleString('es-UY')}</span>
+            <button class="smallbtn fin-copiar-monto" style="min-height:36px;" onclick="copiarMontoPendiente(${i})">Copiar monto</button>
+            <button class="smallbtn" style="min-height:36px;" onclick="conGuardado(this, ()=>marcarPendiente('pagar', ${i}))">Marcar pagado</button>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${montoGrupo(g, 'ninera').toLocaleString('es-UY')}</span>
-          <button class="smallbtn fin-copiar-monto" style="min-height:36px;" onclick="copiarAlPortapapeles(${argJs(montoParaCopiar(montoGrupo(g, 'ninera')))}, 'Monto copiado.')">Copiar monto</button>
-          <button class="smallbtn" style="min-height:36px;" onclick="conGuardado(this, ()=>${g.inter ? `marcarIntermediacionResuelta(${argJs(g.inter)})` : `marcarGrupoResuelto(${argJs(g.ids)}, 'pagado', ${argJs(g.ajustes||[])}, ${argJs(g.gastos||[])})`})">Marcar pagado</button>
-        </div>
+        <div class="fin-det" id="fin-det-pagar-${i}" hidden></div>
       </div>`).join('')}
     ${porPagarEnCursoHtml(enCurso)}
     ${saldosSueltosHtml(sueltos, 'pago')}
   `;
+  reabrirDetalles('pagar', abiertos);
 }
 // gastos: ids (cobro) o {id, concepto, monto} (pago, para mostrarlos en la confirmación).
 async function marcarGrupoResuelto(ids, campo, ajustes=[], gastos=[]){
@@ -1241,27 +1482,66 @@ async function marcarGrupoResuelto(ids, campo, ajustes=[], gastos=[]){
   // Las dos marcando lo mismo a la vez (06/10/2026, testing de la noche): se marca solo lo
   // que seguía sin marcar. Si la otra ya lo había marcado, no se descuenta el saldo a favor
   // por segunda vez (se perdía lo que sobraba) y se avisa en vez de decir "Marcado".
-  let nuevos = 0;
+  // Lo que se marcó de verdad (sin lo que ya había marcado la otra) es lo que "Deshacer" vuelve atrás.
+  let marcados = [], gastosMarcados = [];
+  finPendientes = { cobrar: [], pagar: [] }; // después de marcar, la lista vuelve cerrada
   if(ids.length){
     const { data, error } = await sb.from('sittings_traslados').update({[campo]:true}).in('id', ids).eq(campo, false).select('id');
     if(error){ toast('No se pudo actualizar: '+error.message, 'bad'); return; }
-    nuevos += (data||[]).length;
+    marcados = (data||[]).map(r=>r.id);
   }
   let okGastos = true;
   if(gastosIds.length){
     const col = campo==='cobrado' ? 'cobrado' : 'reintegrado';
     const { data: dg, error: eg } = await sb.from('gastos_extra').update({[col]:true}).in('id', gastosIds).eq(col, false).select('id');
     if(eg){ okGastos = false; toast(`Se marcó ${campo}, pero no se pudieron marcar los gastos extra (${eg.message}). Van a seguir apareciendo: avisale a Diego.`, 'bad'); }
-    else nuevos += (dg||[]).length;
+    else gastosMarcados = (dg||[]).map(r=>r.id);
   }
-  if(!nuevos && okGastos){
+  if(!marcados.length && !gastosMarcados.length && okGastos){
     toast(`Ya estaba marcado como ${campo}: lo marcó alguien más hace un momento. No se cambió nada.`, 'bad');
     refrescarFinanzasCompleto();
     return;
   }
   const okSaldo = await registrarAplicacionAjustes(ajustes, ids, campo);
-  if(okSaldo && okGastos) toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.');
+  if(okSaldo && okGastos) toast(campo==='cobrado' ? 'Marcado como cobrado.' : 'Marcado como pagado.', 'good',
+    { deshacer: ()=>deshacerMarca(campo, marcados, gastosMarcados, ajustes, ids) });
   refrescarFinanzasCompleto();
+}
+/* "Deshacer" del aviso (23/10/2026): desmarca solo lo que marcó ese toque (si la otra lo
+   desmarcó mientras tanto, no se toca) y devuelve el saldo a favor que se había usado. */
+async function deshacerMarca(campo, ids, gastosIds, ajustes, idsAplicacion){
+  const colGasto = campo==='cobrado' ? 'cobrado' : 'reintegrado';
+  finPendientes = { cobrar: [], pagar: [] };
+  let fallo = null;
+  if(ids.length){
+    const { error } = await sb.from('sittings_traslados').update({[campo]:false}).in('id', ids).eq(campo, true);
+    fallo = error;
+  }
+  if(!fallo && gastosIds.length){
+    const { error } = await sb.from('gastos_extra').update({[colGasto]:false}).in('id', gastosIds).eq(colGasto, true);
+    fallo = error;
+  }
+  if(!fallo && ajustes.length) fallo = await devolverAplicacionAjustes(ajustes, idsAplicacion, campo);
+  refrescarFinanzasCompleto();
+  if(fallo){ toast(`No se pudo deshacer todo (${fallo.message}). Revisalo en Movimientos o en la ficha.`, 'bad'); return; }
+  toast(campo==='cobrado' ? 'Se deshizo: volvió a Por cobrar.' : 'Se deshizo: volvió a Por pagar.');
+}
+// Lo contrario de registrarAplicacionAjustes: resta lo usado y saca la anotación de ese cobro o pago.
+async function devolverAplicacionAjustes(aplicados, ids, campo){
+  const { data: actuales, error } = await sb.from('ajustes_saldo').select('id,aplicado,aplicaciones').in('id', aplicados.map(a=>a.id));
+  if(error) return error;
+  const mismaAnotacion = (x, ap) => x.en===campo && Number(x.monto)===Number(ap.monto) && JSON.stringify(x.sittings||[])===JSON.stringify(ids);
+  for(const ap of aplicados){
+    const a = (actuales||[]).find(x=>x.id===ap.id);
+    if(!a) return { message: 'no se encontró el saldo a favor' };
+    const aplicaciones = [...(a.aplicaciones||[])];
+    const i = aplicaciones.map(x=>mismaAnotacion(x, ap)).lastIndexOf(true);
+    if(i >= 0) aplicaciones.splice(i, 1);
+    const aplicado = Math.max(0, Math.round(((Number(a.aplicado)||0) - Math.abs(ap.monto))*100)/100);
+    const { error: e2 } = await sb.from('ajustes_saldo').update({ aplicado, aplicaciones }).eq('id', a.id);
+    if(e2) return e2;
+  }
+  return null;
 }
 /* Confirmación antes de marcar pagado (05/10/2026, E3). Un "Marcar pagado" apurado no se
    puede ver después qué incluía: se muestra cada sitting (niñera, familia, fecha, horario y
