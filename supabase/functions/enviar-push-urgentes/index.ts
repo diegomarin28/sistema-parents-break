@@ -15,6 +15,9 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // V9 (06/10/2026, S4): solo la puede disparar el cron. Antes cualquiera con la URL la
 // disparaba. El cron manda el encabezado x-cron-secret con el valor de app_secrets
 // 'cron_push_secret' (migración 20261013_cron_push_secreto); sin esa clave, 401.
+// V10 (23/10/2026): aviso del extracto apagado. Ya no usan Itaú y el lector de Mercado Pago
+// todavía no está (Pendientes, "Cambio de banco"). La app tiene la misma marca (app-shell.js).
+const AVISO_EXTRACTO_ACTIVO = false;
 
 function mismoSecreto(recibido: string | null, esperado: string | undefined): boolean {
   if (!esperado || !recibido) return false;
@@ -149,27 +152,29 @@ Deno.serve(async (req: Request) => {
       }
     });
 
-    // ---- 4) Extracto Itaú: nunca subido, o hace más de 15 días ----
-    const { data: cfg } = await sb.from("app_config").select("actualizado_at").eq("id", "ultima_conciliacion_cobros").maybeSingle();
-    if (!cfg?.actualizado_at) {
-      candidatas.push({
-        id: "extracto:nunca",
-        tipo: "extracto",
-        titulo: "Falta subir el extracto de Itaú",
-        mensaje: "Todavía no se subió ningún extracto para conciliar.",
-        url: "?ir=finanzas",
-      });
-    } else {
-      const limite = new Date(cfg.actualizado_at);
-      limite.setDate(limite.getDate() + 15);
-      if (limite.getTime() <= Date.now()) {
+    // ---- 4) Extracto Itaú: nunca subido, o hace más de 15 días (apagado, ver V10) ----
+    if (AVISO_EXTRACTO_ACTIVO) {
+      const { data: cfg } = await sb.from("app_config").select("actualizado_at").eq("id", "ultima_conciliacion_cobros").maybeSingle();
+      if (!cfg?.actualizado_at) {
         candidatas.push({
-          id: "extracto:" + limite.toISOString().slice(0, 10),
+          id: "extracto:nunca",
           tipo: "extracto",
           titulo: "Falta subir el extracto de Itaú",
-          mensaje: "Hace más de 15 días que no se sube un extracto nuevo para conciliar.",
+          mensaje: "Todavía no se subió ningún extracto para conciliar.",
           url: "?ir=finanzas",
         });
+      } else {
+        const limite = new Date(cfg.actualizado_at);
+        limite.setDate(limite.getDate() + 15);
+        if (limite.getTime() <= Date.now()) {
+          candidatas.push({
+            id: "extracto:" + limite.toISOString().slice(0, 10),
+            tipo: "extracto",
+            titulo: "Falta subir el extracto de Itaú",
+            mensaje: "Hace más de 15 días que no se sube un extracto nuevo para conciliar.",
+            url: "?ir=finanzas",
+          });
+        }
       }
     }
 

@@ -85,7 +85,7 @@ async function renderFinanzas(cont){
 }
 async function cargarAvisoExtracto(){
   const box = document.getElementById('fin-extracto-aviso');
-  if(!box) return;
+  if(!box || !AVISO_EXTRACTO_ACTIVO) return; // apagado hasta el lector de Mercado Pago (app-shell.js)
   const { data:cfg } = await sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle();
   if(!cfg?.actualizado_at){
     box.innerHTML = `<div style="background:var(--clay-soft);color:var(--clay-text);font-size:13px;padding:10px 14px;border-radius:10px;margin-top:10px;border:1px solid var(--clay);">Todavía no se subió ningún extracto de Itaú acá — subilo cuando lo tengas para conciliar los cobros del mes.</div>`;

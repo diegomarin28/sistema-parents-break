@@ -128,7 +128,7 @@ async function actualizarFinanzasBadge(){
   const dot = document.getElementById('finanzas-navdot');
   if(!dot) return;
   const [{data:cfg}, {data:pend}, {data:pendEventos}] = await Promise.all([
-    sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle(),
+    AVISO_EXTRACTO_ACTIVO ? sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle() : { data: null },
     sb.from('sittings_traslados').select('id').eq('pagado', false).gt('pago_ninera', 0).lte('fecha', todayISO()).limit(1),
     sb.from('intermediaciones_eventos_ninieras').select('evento_id').eq('pagado', false).gt('pago', 0),
   ]);
@@ -139,7 +139,7 @@ async function actualizarFinanzasBadge(){
     eventoSinPagar = !!(data && data.length);
   }
   const diasSinExtracto = cfg?.actualizado_at ? (Date.now() - new Date(cfg.actualizado_at).getTime()) / 86400000 : Infinity;
-  const hayAviso = diasSinExtracto > 7 || (pend && pend.length > 0) || eventoSinPagar;
+  const hayAviso = (AVISO_EXTRACTO_ACTIVO && diasSinExtracto > 7) || (pend && pend.length > 0) || eventoSinPagar;
   dot.innerHTML = hayAviso ? '<span class="navdot"></span>' : '';
 }
 
@@ -734,11 +734,16 @@ function notifUsuario(){ return session?.user?.email || 'desconocida'; }
    renderNotifConfig() (la pantalla de ajustes) y, en paralelo, la Edge Function (con su
    propia copia en Deno, ver enviar-push-urgentes) para saber qué mandar por push y con qué
    default cuando el usuario nunca tocó el switch. */
+/* Aviso de "falta subir el extracto" apagado (23/10/2026): ya no usan Itaú y el lector de
+   Mercado Pago todavía no está (ver Pendientes, "Cambio de banco"). Apaga el aviso de Finanzas,
+   el de la campanita, el puntito y el switch de las preferencias; la Edge Function
+   enviar-push-urgentes tiene su propia marca. El día del lector, se vuelve a prender acá y allá. */
+const AVISO_EXTRACTO_ACTIVO = false;
 const TIPOS_NOTIF = [
   {tipo:'sin_asignar', label:'Sitting sin asignar', sub:'Hoy, sin niñera confirmada', icono:'agenda', defaultPush:true},
   {tipo:'sin_registrar', label:'Sitting sin registrar', sub:'Ya pasó y falta cargarlo en el sistema', icono:'sittings', defaultPush:false},
   {tipo:'cv_desactualizado', label:'CV de niñera desactualizado', sub:'Cumplió años después de generarlo', icono:'ninieras', defaultPush:true},
-  {tipo:'extracto', label:'Falta subir extracto Itaú', sub:'Hace más de 15 días que no se sube uno nuevo', icono:'finanzas', defaultPush:true},
+  ...(AVISO_EXTRACTO_ACTIVO ? [{tipo:'extracto', label:'Falta subir extracto Itaú', sub:'Hace más de 15 días que no se sube uno nuevo', icono:'finanzas', defaultPush:true}] : []),
   {tipo:'temporada', label:'Pedir la temporada de Punta', sub:'Cada 1 de octubre, con el mensaje listo para mandar', icono:'ninieras', defaultPush:true},
 ];
 
@@ -802,7 +807,7 @@ async function cargarNotificaciones(){
   // vez por período atrasado (no se repite cada 10 minutos) — recién vuelve a avisar si
   // pasan otros 15 días desde la próxima vez que se suba. Si nunca se subió ninguno (no hay
   // fila todavía), es el caso más urgente de todos, no el motivo para no avisar.
-  try{
+  if(AVISO_EXTRACTO_ACTIVO) try{
     const { data: cfg } = await sb.from('app_config').select('actualizado_at').eq('id','ultima_conciliacion_cobros').maybeSingle();
     if(!cfg?.actualizado_at){
       items.push({
