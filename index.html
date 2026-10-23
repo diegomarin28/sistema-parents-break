@@ -403,18 +403,27 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .confirmbox h2,.confirmbox .helper,.confirmbox td,.person-list .name,.agendarow{overflow-wrap:anywhere;}
 .pago-fila{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
 .pago-fila .pago-monto{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
-/* Por cobrar / Por pagar: detalle de cada pendiente para marcar solo una parte (23/10/2026). */
-.fin-pend-cabeza{cursor:pointer;min-height:44px;min-width:0;flex:1;}
+/* Por cobrar / Por pagar: una tarjeta por familia o niñera, con el detalle para marcar solo una
+   parte (23/10/2026). Renglones de 44 px y casillas grandes: lo usan desde el celular. */
+.fin-pend-cabeza{cursor:pointer;min-height:44px;min-width:0;flex:1 1 230px;}
 .fin-pend-cabeza:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px;}
 .fin-pend-vermas{color:var(--accent);font-size:12.5px;margin-top:3px;}
-.fin-det{padding:4px 0 10px;border-bottom:1px solid var(--line);}
-.fin-det-fila{font-weight:400;display:flex;align-items:center;gap:12px;min-height:44px;padding:4px 0;border-bottom:1px dashed var(--line);cursor:pointer;font-size:13.5px;}
-.fin-det-fila.sub{padding-left:22px;}
-.fin-det-fila input[type=checkbox]{width:24px;height:24px;flex:none;margin:0;accent-color:var(--accent);}
+.fin-pend-acciones{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-left:auto;}
+.fin-pend-monto{font-family:'IBM Plex Mono',monospace;font-weight:600;}
+.fin-det{padding:6px 0 14px;border-bottom:1px solid var(--line);}
+.fin-det-caja{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:6px 12px 10px;}
+.fin-det-dia{margin-top:6px;}
+.fin-det-fecha{font-size:12.5px;font-weight:700;color:var(--ink-soft);text-transform:capitalize;margin:6px 0 0;}
+.fin-det-fila{font-weight:400;display:flex;align-items:center;gap:12px;min-height:44px;padding:4px 0;border-bottom:1px dashed var(--line);cursor:pointer;font-size:15px;color:var(--ink);}
+.fin-det-dia .fin-det-fila:last-child{border-bottom:none;}
+.fin-det-fila.fin-det-sub{padding-left:26px;font-size:13.5px;color:var(--ink-soft);}
+.fin-det-fila input[type=checkbox]{width:26px;height:26px;flex:none;margin:0;accent-color:var(--accent);}
 .fin-det-fila .fin-det-texto{flex:1;min-width:0;overflow-wrap:anywhere;}
-.fin-det-fila .pago-monto{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
-.fin-det-pie{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;}
-.fin-det-pagado-campo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 6px;}
+.fin-det-fila .pago-monto{font-family:'IBM Plex Mono',monospace;font-weight:600;white-space:nowrap;}
+.fin-det-saldos{border-top:1px solid var(--line);margin-top:8px;}
+.fin-det-botones{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.fin-det-botones button{min-height:44px;flex:1 1 auto;}
+.fin-det-pagado-campo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0;}
 .fin-det-pagado-campo input{max-width:160px;min-height:44px;font-size:16px;}
 /* Fijos automáticos (06/10/2026): días previstos en la Agenda, revisión en Hoy, previsto del mes. */
 .agenda-previsto{display:inline-block;font-size:10px;font-weight:700;color:var(--accent);background:var(--accent-soft);border:1px dashed var(--accent);padding:1px 6px;border-radius:100px;flex-shrink:0;}

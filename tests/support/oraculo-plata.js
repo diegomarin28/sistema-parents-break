@@ -1,5 +1,5 @@
 // Oráculo de plata: copia EXACTA de las funciones que calculan plata en js/, tal como estaban el
-// 23/10/2026 (commit 821aa21). La generó scripts/congelar-oraculo-plata.js: no se edita a mano.
+// 23/10/2026 (commit a1288f1). La generó scripts/congelar-oraculo-plata.js: no se edita a mano.
 // tests/red-plata.spec.js compara la app con esta copia en miles de casos (docs/rediseno-panel.md,
 // 4.10). Si una regla cambia a propósito, se vuelve a generar en el mismo PR y el PR lo dice.
 // Lo que no es plata (supabase, normaliza, todayISO, sumarDiasISO...) es el de la app.
@@ -343,6 +343,33 @@ function crearOraculoPlata(){
     });
     return { gruposCobrar:Object.values(gruposCobrar), gruposPagar:Object.values(gruposPagar), fams:fams||[], nins:nins||[], error:e1||e2 };
   }
+  function armarTarjetasPendientes(grupos, sujeto){
+    const campoId = sujeto==='familia' ? 'familia_id' : 'ninera_id';
+    const porId = new Map(), porNombre = new Map(), tarjetas = [];
+    // Primero lo que trae el id; un registro viejo que solo trae el nombre va a la tarjeta de esa
+    // persona (si no, la misma familia salía en dos tarjetas: lo encontró la red de plata).
+    [...grupos].sort((a,b)=> (!a[campoId]) - (!b[campoId]) || a.bucket.localeCompare(b.bucket)).forEach(g=>{
+      const nombre = normaliza(g.nombre||'');
+      let t = g[campoId] ? porId.get(g[campoId]) : porNombre.get(nombre);
+      if(!t){
+        t = { nombre: g.nombre, [campoId]: g[campoId] || null, frec: g.frec, total: 0, ids: [], gastos: [], grupos: [] };
+        if(g.cuentas) t.cuentas = g.cuentas;
+        if(g[campoId]) porId.set(g[campoId], t);
+        if(!porNombre.has(nombre)) porNombre.set(nombre, t);
+        tarjetas.push(t);
+      }
+      t.total += g.total;
+      t.ids.push(...g.ids);
+      t.gastos.push(...(g.gastos||[]));
+      t.grupos.push(g);
+      if(t.frec !== g.frec) t.frec = null; // una fija con semanas y días sueltos: sin frecuencia
+    });
+    tarjetas.forEach(t=>{
+      t.grupos.sort((a,b)=> a.bucket.localeCompare(b.bucket));
+      t.bucket = t.grupos[t.grupos.length-1].bucket;
+    });
+    return tarjetas;
+  }
   function esFaltaTabla(error){ return !!error && (error.code==='PGRST205' || error.code==='42P01'); }
   async function cargarGastosExtraPendientes(){
     if(!gastosExtraDisponible) return { gastos:[], sits:[] };
@@ -401,7 +428,7 @@ function crearOraculoPlata(){
     });
     return mejor;
   }
-  return { agendaMinutos, gastoACargoFamilia, redondearMonto, redondearPago, redondearCobro, asignacionVigenteEn, asignacionTerminada, redondearFinCobro, familiaRedondeaFin, cruceMedianocheMalMarcado, horasSitting, precioSegunHorario, construirEsTrabajoFijo, filtrarFijosSemanaIncompleta, resumenFinancieroMes, resumenIntermediaciones, intermediacionesPendientes, lunesDeSemana, domingoDeSemana, finEnMinutos, construirFinUltimoFijo, cierreSemanaFijo, semanaFijoCerrada, construirEsEnCurso, finDeSemanaDesde, bucketKeyFecha, bucketPagoFecha, cargarAjustesSaldo, pendienteAjuste, aplicarAjustesAGrupos, calcularPendientesAgrupados, esFaltaTabla, cargarGastosExtraPendientes, montoGrupo, cuentasDeFicha, montoParaCopiar, totalParcial, combinacionExacta };
+  return { agendaMinutos, gastoACargoFamilia, redondearMonto, redondearPago, redondearCobro, asignacionVigenteEn, asignacionTerminada, redondearFinCobro, familiaRedondeaFin, cruceMedianocheMalMarcado, horasSitting, precioSegunHorario, construirEsTrabajoFijo, filtrarFijosSemanaIncompleta, resumenFinancieroMes, resumenIntermediaciones, intermediacionesPendientes, lunesDeSemana, domingoDeSemana, finEnMinutos, construirFinUltimoFijo, cierreSemanaFijo, semanaFijoCerrada, construirEsEnCurso, finDeSemanaDesde, bucketKeyFecha, bucketPagoFecha, cargarAjustesSaldo, pendienteAjuste, aplicarAjustesAGrupos, calcularPendientesAgrupados, armarTarjetasPendientes, esFaltaTabla, cargarGastosExtraPendientes, montoGrupo, cuentasDeFicha, montoParaCopiar, totalParcial, combinacionExacta };
 }
-const ORACULO_PLATA_CONGELADO = { fecha: "23/10/2026", commit: "821aa21" };
+const ORACULO_PLATA_CONGELADO = { fecha: "23/10/2026", commit: "a1288f1" };
 if (typeof module !== 'undefined') module.exports = { crearOraculoPlata, ORACULO_PLATA_CONGELADO };

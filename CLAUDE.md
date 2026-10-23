@@ -215,6 +215,9 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   pedido sin hora de fin (sin total, registro en $0, traslados con su cobro) y precio puesto a mano
   que no se pisa al tocar la hora.
 - `tests/pagos.spec.js`: confirmación al marcar pagado y Por pagar sin sittings futuros.
+- `tests/tarjetas-pendientes.spec.js`: una tarjeta por familia que cobra "diario", registro con solo el
+  nombre, botones cerrada / abierta con el monto, "¿Cuánto pagó?" en todos los días, gasto debajo de su
+  sitting y saldo al final, Por pagar con semanas y puntuales, y capturas a 390 y 1280 px.
 - `tests/cobro-parcial.spec.js`: marcar solo una parte en Por cobrar / Por pagar (1 de 3, "¿Cuánto
   pagó?" exacto y sin combinación, gasto extra con su sitting, saldo a favor, "Deshacer", Realtime con
   el detalle abierto, fallas, escape y 390 px).
@@ -480,8 +483,15 @@ reporte.
   cambian las dos. Nunca `Math.round` para calcular lo que se cobra o se paga. El saldo a favor
   se aplica completo; solo se redondea el total que queda. Lo tipeado a mano también se guarda
   sin centavos (registro, Agenda, editar en Finanzas).
-- Cobro parcial (23/10/2026): en Por cobrar / Por pagar, tocar la línea abre el detalle (un renglón
-  por registro, gasto extra y saldo, con casilla) y el botón marca solo lo tildado; cerrado marca todo.
+- Por cobrar / Por pagar en tarjetas (23/10/2026): una sola tarjeta por familia o niñera con todos sus
+  pendientes (`armarTarjetasPendientes`, finanzas.js; lo que trae solo el nombre va a la de esa
+  persona), aunque cobre "diario". El saldo a favor se aplica sobre la tarjeta entera y el total se
+  redondea una vez. Cerrada: el total y "Marcar todo cobrado / pagado". Abierta: el detalle en un
+  recuadro, agrupado por fecha, y abajo "Marcar cobrado lo tildado ($X)" y "Marcar todo cobrado ($Y)".
+  La semana en curso de las fijas y las intermediaciones siguen aparte. `calcularPendientesAgrupados`
+  sigue por período (la usa la conciliación).
+- Cobro parcial (23/10/2026): en Por cobrar / Por pagar, tocar la tarjeta abre el detalle (un renglón
+  por registro, gasto extra y saldo, con casilla) y el botón marca solo lo tildado.
   El gasto va con su sitting; el saldo a favor se aplica a lo que se marca (`totalParcial`, finanzas.js)
   y lo que sobra queda para lo pendiente. "¿Cuánto pagó?" (solo Por cobrar) tilda la combinación exacta
   que usa los más viejos (`combinacionExacta`) o avisa y no deja nada tildado. El detalle se lee al

@@ -261,7 +261,7 @@ test.describe('Por pagar y Por cobrar', () => {
     await ana.locator('button', { hasText: 'Copiar monto' }).click();
     expect(await page.evaluate(() => window.__copiado)).toEqual(['750']);
     // La confirmación: la línea tal cual y el total que se paga, sin centavos.
-    await ana.locator('button', { hasText: 'Marcar pagado' }).click();
+    await ana.locator('button', { hasText: 'Marcar todo pagado' }).click();
     await expect(page.locator('#pago-detalle')).toContainText('$750,5');
     await expect(page.locator('#pago-total')).toHaveText('$750');
     await page.locator('#pago-confirmar').click();
@@ -304,7 +304,7 @@ test.describe('Por pagar y Por cobrar', () => {
     const ana = filaDe(porPagar(page), 'Ana Ficticia');
     await expect(ana.locator('span[style*="IBM Plex Mono"]').last()).toHaveText('$450');
     await expect(filaDe(porCobrar(page), 'Familia Prueba Uno').locator('span[style*="IBM Plex Mono"]').last()).toHaveText('$2.001');
-    await ana.locator('button', { hasText: 'Marcar pagado' }).click();
+    await ana.locator('button', { hasText: 'Marcar todo pagado' }).click();
     await expect(page.locator('#pago-total')).toHaveText('$450');
     await page.locator('#pago-confirmar').click();
     await expect(page.locator('.toaststack .toast', { hasText: 'Marcado como pagado.' })).toBeVisible();

@@ -1100,11 +1100,46 @@ async function cargarPorCobrarPorPagar(){
   const pagarEnCurso = gruposPagar.filter(enCurso).sort((a,b)=> a.nombre.localeCompare(b.nombre));
 
   const ajustes = await cargarAjustesSaldo();
-  const sueltosCobrar = aplicarAjustesAGrupos(listaCobrar, ajustes, 'familia');
-  const sueltosPagar = aplicarAjustesAGrupos(listaPagar, ajustes, 'ninera');
+  const tarjetasCobrar = armarTarjetasPendientes(listaCobrar, 'familia');
+  const tarjetasPagar = armarTarjetasPendientes(listaPagar, 'ninera');
+  const sueltosCobrar = aplicarAjustesAGrupos(tarjetasCobrar, ajustes, 'familia');
+  const sueltosPagar = aplicarAjustesAGrupos(tarjetasPagar, ajustes, 'ninera');
   // Las intermediaciones entran después del saldo a favor: no se les aplica.
-  renderPorCobrar([...listaCobrar, ...inter.cobrar].sort(ordenPagar), sueltosCobrar);
-  renderPorPagar([...listaPagar, ...inter.pagar].sort(ordenPagar), sueltosPagar, pagarEnCurso);
+  renderPorCobrar([...tarjetasCobrar, ...inter.cobrar].sort(ordenPagar), sueltosCobrar);
+  renderPorPagar([...tarjetasPagar, ...inter.pagar].sort(ordenPagar), sueltosPagar, pagarEnCurso);
+}
+/* Una tarjeta por familia (o por niñera) con todos sus pendientes (23/10/2026, pedido de Diego
+   con captura): una familia que cobra "diario" aparecía en una línea por día y no se entendía.
+   Junta los grupos de calcularPendientesAgrupados (que siguen siendo por período, para la
+   conciliación) en uno por persona. El saldo a favor se aplica después sobre la tarjeta entera
+   (aplicarAjustesAGrupos) y el total se redondea una sola vez. `bucket` es el período más nuevo,
+   para ordenar la lista como antes; `grupos`, los períodos, del más viejo al más nuevo. */
+function armarTarjetasPendientes(grupos, sujeto){
+  const campoId = sujeto==='familia' ? 'familia_id' : 'ninera_id';
+  const porId = new Map(), porNombre = new Map(), tarjetas = [];
+  // Primero lo que trae el id; un registro viejo que solo trae el nombre va a la tarjeta de esa
+  // persona (si no, la misma familia salía en dos tarjetas: lo encontró la red de plata).
+  [...grupos].sort((a,b)=> (!a[campoId]) - (!b[campoId]) || a.bucket.localeCompare(b.bucket)).forEach(g=>{
+    const nombre = normaliza(g.nombre||'');
+    let t = g[campoId] ? porId.get(g[campoId]) : porNombre.get(nombre);
+    if(!t){
+      t = { nombre: g.nombre, [campoId]: g[campoId] || null, frec: g.frec, total: 0, ids: [], gastos: [], grupos: [] };
+      if(g.cuentas) t.cuentas = g.cuentas;
+      if(g[campoId]) porId.set(g[campoId], t);
+      if(!porNombre.has(nombre)) porNombre.set(nombre, t);
+      tarjetas.push(t);
+    }
+    t.total += g.total;
+    t.ids.push(...g.ids);
+    t.gastos.push(...(g.gastos||[]));
+    t.grupos.push(g);
+    if(t.frec !== g.frec) t.frec = null; // una fija con semanas y días sueltos: sin frecuencia
+  });
+  tarjetas.forEach(t=>{
+    t.grupos.sort((a,b)=> a.bucket.localeCompare(b.bucket));
+    t.bucket = t.grupos[t.grupos.length-1].bucket;
+  });
+  return tarjetas;
 }
 // Saldos de alguien que hoy no tiene nada pendiente: se aplican en su próximo cobro/pago.
 function saldosSueltosHtml(sueltos, cuando){
@@ -1114,10 +1149,16 @@ function saldosSueltosHtml(sueltos, cuando){
     ${sueltos.map(a=>`<div class="helper" style="margin:2px 0 0;"><b>${escaparHtml(a.nombre)}</b>: ${textoMontoAjuste(a.restante)} · ${escaparHtml(a.motivo)}</div>`).join('')}
   </div>`;
 }
-// Intermediación: "Colocación de Ana · 20 oct"; sitting: el período y la frecuencia.
+// Intermediación: "Colocación de Ana · 20 oct". Tarjeta: cuántos pendientes, los períodos
+// (hasta 3; si son más, el primero y el último) y la frecuencia.
 function subtituloPendienteHtml(g){
   if(g.inter) return `<span class="badge brand" style="margin-right:4px;">Intermediación</span>${escaparHtml(g.detalle)} · ${fmtFechaCortaFin(g.bucket)}`;
-  return `${bucketLabelFecha(g.bucket, g.frec)} · ${escaparHtml(g.frec)}`;
+  const grupos = g.grupos || [g];
+  const n = g.ids.length, ng = (g.gastos||[]).length;
+  const cuantos = n ? `${n} ${n===1 ? 'pendiente' : 'pendientes'}` : `${ng} ${ng===1 ? 'gasto' : 'gastos'}`;
+  const periodos = grupos.map(x=>bucketLabelFecha(x.bucket, x.frec));
+  const cuando = periodos.length <= 3 ? periodos.join(' · ') : `${periodos[0]} a ${periodos[periodos.length-1]}`;
+  return `${cuantos} · ${cuando}${g.frec ? ' · '+escaparHtml(g.frec) : ''}`;
 }
 // Lo que se cobra o se paga de un grupo, ya con saldo a favor y gastos, sin centavos
 // (21/10/2026): a la familia con redondearCobro, a la niñera con redondearPago (core.js).
@@ -1153,6 +1194,9 @@ async function alternarDetallePendiente(lado, i, ev){
   if(!g || !cont) return;
   g.abierto = !g.abierto;
   cont.hidden = !g.abierto;
+  // Abierta, los botones van abajo del detalle; cerrada, "Marcar todo" va arriba.
+  cont.parentElement.classList.toggle('abierta', g.abierto);
+  cont.parentElement.querySelector('.fin-pend-acciones').innerHTML = accionesCabezaHtml(lado, i, g);
   const cabeza = cont.parentElement.querySelector('.fin-pend-cabeza');
   cabeza.setAttribute('aria-expanded', String(g.abierto));
   cabeza.querySelector('.fin-pend-vermas').textContent = g.abierto ? 'Ocultar detalle' : 'Ver detalle';
@@ -1187,7 +1231,7 @@ async function cargarDetallePendiente(lado, i){
 /* Realtime vuelve a pintar la lista cuando la otra admin cambia algo (recarga liviana de
    Finanzas): lo que estaba abierto sigue abierto, con lo mismo destildado y el monto escrito.
    Después de marcar o deshacer, en cambio, la lista vuelve cerrada. */
-function clavePendiente(g){ return `${g.familia_id || g.ninera_id || g.nombre}|${g.bucket}|${g.inter ? 'i' : ''}`; }
+function clavePendiente(g){ return `${g.familia_id || g.ninera_id || normaliza(g.nombre||'')}|${g.inter ? 'i' : ''}`; }
 function detallesAbiertos(lado){
   return finPendientes[lado].map((g, i)=>{
     const cont = document.getElementById(`fin-det-${lado}-${i}`);
@@ -1219,27 +1263,46 @@ function horarioPendiente(r){
   return `${r.hora_inicio.slice(0,5)}${r.hora_fin ? '–'+r.hora_fin.slice(0,5) : ''}${r.termina_dia_siguiente ? ' (+1 día)' : ''}`;
 }
 function pintarDetallePendiente(lado, i){
-  const d = finPendientes[lado][i].detalle;
+  const g = finPendientes[lado][i], d = g.detalle;
+  const cobrar = lado==='cobrar';
   const cont = document.getElementById(`fin-det-${lado}-${i}`);
-  const fmtF = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'short',day:'2-digit',month:'2-digit'}) : '—';
+  const fmtF = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('es-UY',{weekday:'long',day:'2-digit',month:'2-digit'}) : '—';
   const plata = n => '$'+Number(n).toLocaleString('es-UY', {maximumFractionDigits:2});
-  const fila = (attr, texto, monto, sub=false) => `<label class="fin-det-fila${sub ? ' sub' : ''}">
+  const fila = (attr, texto, monto, sub=false) => `<label class="fin-det-fila${sub ? ' fin-det-sub' : ''}">
       <input type="checkbox" checked ${attr} onchange="cambioCasillaPendiente(${argJs(lado)}, ${i}, this)">
       <span class="fin-det-texto">${texto}</span><span class="pago-monto">${monto}</span>
     </label>`;
-  const filaGasto = (x, k) => fila(`data-gasto="${k}"`, `${lado==='cobrar' ? 'Gasto extra' : 'Reintegro de gasto'}: ${escaparHtml(x.concepto)}`, plata(x.monto), x.de >= 0);
-  const persona = r => escaparHtml((lado==='cobrar' ? r.ninera_nombre : r.familia_nombre) || '—');
+  const filaGasto = (x, k) => fila(`data-gasto="${k}"`, `${cobrar ? 'Gasto extra' : 'Reintegro de gasto'}: ${escaparHtml(x.concepto)}`, plata(x.monto), x.de >= 0);
+  const persona = r => escaparHtml((cobrar ? r.ninera_nombre : r.familia_nombre) || '—');
+  // Agrupado por fecha, del más viejo al más nuevo; cada gasto debajo de su sitting.
+  const dias = [];
+  d.regs.forEach((r, k)=>{
+    if(!dias.length || dias[dias.length-1].fecha !== r.fecha) dias.push({ fecha: r.fecha, ks: [] });
+    dias[dias.length-1].ks.push(k);
+  });
+  const sueltos = d.gastos.map((x, gk)=>x.de < 0 ? filaGasto(x, gk) : '').join('');
+  const verbo = cobrar ? 'cobrado' : 'pagado';
   cont.innerHTML = `
-    ${lado==='cobrar' ? `<div class="fin-det-pagado-campo">
-      <label class="helper" style="margin:0;" for="fin-det-pagado-${i}">¿Cuánto pagó?</label>
-      <input type="number" inputmode="decimal" min="0" class="fin-det-pagado" id="fin-det-pagado-${i}" placeholder="$" oninput="programarTildarPorMonto(${i}, this.value)">
-    </div>` : ''}
-    <div class="fin-det-aviso"></div>
-    ${d.regs.map((r, k)=>fila(`data-reg="${k}"`, `<b>${fmtF(r.fecha)}</b> · ${horarioPendiente(r)} · ${persona(r)}${r.tipo==='traslado' ? ' (traslado)' : ''}`, plata(r.monto))
-      + d.gastos.map((x, gk)=>x.de===k ? filaGasto(x, gk) : '').join('')).join('')}
-    ${d.gastos.map((x, gk)=>x.de < 0 ? filaGasto(x, gk) : '').join('')}
-    ${d.ajustes.map((a, k)=>fila(`data-aj="${k}"`, `Saldo: ${escaparHtml(a.motivo)}`, textoMontoAjuste(a.monto))).join('')}
-    <div class="fin-det-pie"><div class="helper fin-det-total" style="margin:0;"></div></div>`;
+    <div class="fin-det-caja">
+      ${cobrar ? `<div class="fin-det-pagado-campo">
+        <label class="helper" style="margin:0;" for="fin-det-pagado-${i}">¿Cuánto pagó?</label>
+        <input type="number" inputmode="decimal" min="0" class="fin-det-pagado" id="fin-det-pagado-${i}" placeholder="$" oninput="programarTildarPorMonto(${i}, this.value)">
+      </div>` : ''}
+      <div class="fin-det-aviso"></div>
+      ${dias.map(dd=>`<div class="fin-det-dia">
+        <div class="fin-det-fecha">${fmtF(dd.fecha)}</div>
+        ${dd.ks.map(k=>{ const r = d.regs[k];
+          return fila(`data-reg="${k}"`, `${horarioPendiente(r)} · ${persona(r)}${r.tipo==='traslado' ? ' (traslado)' : ''}`, plata(r.monto))
+            + d.gastos.map((x, gk)=>x.de===k ? filaGasto(x, gk) : '').join(''); }).join('')}
+      </div>`).join('')}
+      ${sueltos ? `<div class="fin-det-dia"><div class="fin-det-fecha">${cobrar ? 'Gastos de sittings ya cobrados' : 'Reintegros de sittings ya pagados'}</div>${sueltos}</div>` : ''}
+      ${d.ajustes.length ? `<div class="fin-det-saldos">${d.ajustes.map((a, k)=>fila(`data-aj="${k}"`, `Saldo a favor: ${escaparHtml(a.motivo)}`, textoMontoAjuste(a.monto))).join('')}</div>` : ''}
+    </div>
+    <div class="fin-det-botones">
+      <button class="btn primary" onclick="conGuardado(this, ()=>marcarPendiente(${argJs(lado)}, ${i}))">Marcar ${verbo} lo tildado (<span class="fin-det-total"></span>)</button>
+      <button class="btn ghost" onclick="conGuardado(this, ()=>marcarTodoPendiente(${argJs(lado)}, ${i}))">Marcar todo ${verbo} ($${montoGrupo(g, cobrar ? 'familia' : 'ninera').toLocaleString('es-UY')})</button>
+      ${cobrar ? '' : `<button class="btn ghost fin-copiar-monto" onclick="copiarMontoPendiente(${i})">Copiar monto</button>`}
+    </div>`;
   actualizarTotalPendiente(lado, i);
 }
 // Lo que se cobra o se paga de una parte de un grupo, con la misma regla que
@@ -1300,7 +1363,7 @@ function actualizarTotalPendiente(lado, i){
   const el = document.querySelector(`#fin-det-${lado}-${i} .fin-det-total`);
   if(!el) return;
   const s = seleccionPendiente(lado, i);
-  el.innerHTML = s.vacio ? 'No hay nada tildado.' : `Tildado: <b>$${s.total.toLocaleString('es-UY')}</b>`;
+  el.textContent = s.vacio ? 'nada tildado' : `$${s.total.toLocaleString('es-UY')}`;
 }
 function cambioCasillaPendiente(lado, i, chk){
   const cont = document.getElementById(`fin-det-${lado}-${i}`);
@@ -1350,11 +1413,19 @@ async function marcarPendiente(lado, i){
   const campo = lado==='cobrar' ? 'cobrado' : 'pagado';
   // Para cobrar se pasan los ids de los gastos; para pagar, el gasto entero (va en la confirmación).
   const comoGastos = gs => lado==='cobrar' ? gs.map(x=>x.id) : gs;
-  if(!g.abierto) return marcarGrupoResuelto(g.ids, campo, g.ajustes||[], comoGastos(g.gastos||[]));
+  if(!g.abierto) return marcarTodoPendiente(lado, i);
   if(!g.detalle){ toast('Todavía no cargó el detalle: esperá un momento o cerralo para marcar todo.', 'bad'); return; }
   const s = seleccionPendiente(lado, i);
   if(s.vacio){ toast(`Tildá al menos un registro o gasto para marcarlo ${campo}.`, 'bad'); return; }
   return marcarGrupoResuelto(s.ids, campo, s.usados, comoGastos(s.gastos));
+}
+// "Marcar todo": todo lo de la tarjeta, esté abierta o no y tildado o no.
+async function marcarTodoPendiente(lado, i){
+  const g = finPendientes[lado][i];
+  if(!g) return;
+  if(g.inter) return marcarIntermediacionResuelta(g.inter);
+  const gastos = g.gastos||[];
+  return marcarGrupoResuelto(g.ids, lado==='cobrar' ? 'cobrado' : 'pagado', g.ajustes||[], lado==='cobrar' ? gastos.map(x=>x.id) : gastos);
 }
 function copiarMontoPendiente(i){
   const g = finPendientes.pagar[i];
@@ -1362,32 +1433,51 @@ function copiarMontoPendiente(i){
   const monto = g.abierto && g.detalle ? seleccionPendiente('pagar', i).total : montoGrupo(g, 'ninera');
   copiarAlPortapapeles(montoParaCopiar(monto), 'Monto copiado.');
 }
-function renderPorCobrar(lista, sueltos=[]){
-  const box = document.getElementById('fin-porcobrar-wrap');
+function renderPorCobrar(lista, sueltos=[]){ renderPendientes('cobrar', lista, sueltos); }
+function renderPorPagar(lista, sueltos=[], enCurso=[]){ renderPendientes('pagar', lista, sueltos, enCurso); }
+function renderPendientes(lado, lista, sueltos, enCurso=[]){
+  const cobrar = lado==='cobrar';
+  const box = document.getElementById(cobrar ? 'fin-porcobrar-wrap' : 'fin-porpagar-wrap');
   if(!box) return;
-  if(!lista.length){ box.innerHTML = `<h2>Por cobrar</h2><div class="empty">No hay cobros pendientes.</div>${saldosSueltosHtml(sueltos, 'cobro')}`; return; }
-  const total = lista.reduce((s,g)=>s+montoGrupo(g, 'familia'),0);
-  const abiertos = detallesAbiertos('cobrar');
-  finPendientes.cobrar = lista;
+  const titulo = cobrar ? 'Por cobrar' : 'Por pagar', cuando = cobrar ? 'cobro' : 'pago';
+  const enCursoHtml = cobrar ? '' : porPagarEnCursoHtml(enCurso);
+  if(!lista.length){ box.innerHTML = `<h2>${titulo}</h2><div class="empty">No hay ${cobrar ? 'cobros' : 'pagos'} pendientes.</div>${enCursoHtml}${saldosSueltosHtml(sueltos, cuando)}`; return; }
+  const total = lista.reduce((s,g)=>s+montoGrupo(g, cobrar ? 'familia' : 'ninera'),0);
+  const abiertos = detallesAbiertos(lado);
+  finPendientes[lado] = lista;
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
-      <h2 style="margin:0;">Por cobrar</h2>
+      <h2 style="margin:0;">${titulo}</h2>
       <div class="helper" style="margin:0;">${lista.length} pendiente${lista.length===1?'':'s'} · $${total.toLocaleString('es-UY')}</div>
     </div>
-    ${lista.map((g, i)=>`
-      <div class="fin-pend">
-        <div class="agendarow" style="border-bottom:1px solid var(--line);">
-          ${cabezaPendienteHtml('cobrar', i, g, `${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Gasto extra')}${lineasAjustesHtml(g.ajustes)}`)}
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);">$${montoGrupo(g, 'familia').toLocaleString('es-UY')}</span>
-            <button class="smallbtn" style="min-height:36px;" onclick="conGuardado(this, ()=>marcarPendiente('cobrar', ${i}))">Marcar cobrado</button>
-          </div>
-        </div>
-        <div class="fin-det" id="fin-det-cobrar-${i}" hidden></div>
-      </div>`).join('')}
-    ${saldosSueltosHtml(sueltos, 'cobro')}
+    ${lista.map((g, i)=>tarjetaPendienteHtml(lado, i, g)).join('')}
+    ${enCursoHtml}
+    ${saldosSueltosHtml(sueltos, cuando)}
   `;
-  reabrirDetalles('cobrar', abiertos);
+  reabrirDetalles(lado, abiertos);
+}
+function tarjetaPendienteHtml(lado, i, g){
+  const lineas = lado==='cobrar'
+    ? `${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Gasto extra')}${lineasAjustesHtml(g.ajustes)}`
+    : `${cuentasPorPagarHtml(g)}${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Reintegro de gasto')}${lineasAjustesHtml(g.ajustes)}`;
+  return `
+    <div class="fin-pend">
+      <div class="agendarow" style="border-bottom:1px solid var(--line);">
+        ${cabezaPendienteHtml(lado, i, g, lineas)}
+        <div class="fin-pend-acciones">${accionesCabezaHtml(lado, i, g)}</div>
+      </div>
+      <div class="fin-det" id="fin-det-${lado}-${i}" hidden></div>
+    </div>`;
+}
+// Cerrada: el total y "Marcar todo cobrado / pagado" (y "Copiar monto" en Por pagar). Abierta,
+// solo el total: los botones van abajo del detalle. Una intermediación es un solo cobro.
+function accionesCabezaHtml(lado, i, g){
+  const cobrar = lado==='cobrar';
+  const monto = `<span class="fin-pend-monto" style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(${cobrar ? '--good' : '--clay-text'});">$${montoGrupo(g, cobrar ? 'familia' : 'ninera').toLocaleString('es-UY')}</span>`;
+  if(g.abierto) return monto;
+  const verbo = cobrar ? 'cobrado' : 'pagado';
+  const copiar = cobrar ? '' : `<button class="smallbtn fin-copiar-monto" style="min-height:36px;" onclick="copiarMontoPendiente(${i})">Copiar monto</button>`;
+  return `${monto}${copiar}<button class="smallbtn" style="min-height:36px;" onclick="conGuardado(this, ()=>marcarTodoPendiente(${argJs(lado)}, ${i}))">${g.inter ? 'Marcar '+verbo : 'Marcar todo '+verbo}</button>`;
 }
 // "Semana en curso" de las fijas: lo que llevan hasta hoy (los días que no pasaron no entran,
 // E7). No tiene botón: se paga cuando la semana cierra y pasa a la lista de arriba. El saldo
@@ -1433,36 +1523,6 @@ function cuentasPorPagarHtml(g){
     </div>`).join('');
   const link = g.ninera_id ? ` · <a href="#" onclick="abrirFichaDesdeHoy('ninera', ${argJs(g.ninera_id)});return false;">Cargarla en su ficha</a>` : '';
   return `<div class="helper fin-falta-cuenta" style="margin:4px 0 0;color:var(--clay-text);">Falta la cuenta${link}</div>`;
-}
-function renderPorPagar(lista, sueltos=[], enCurso=[]){
-  const box = document.getElementById('fin-porpagar-wrap');
-  if(!box) return;
-  if(!lista.length){ box.innerHTML = `<h2>Por pagar</h2><div class="empty">No hay pagos pendientes.</div>${porPagarEnCursoHtml(enCurso)}${saldosSueltosHtml(sueltos, 'pago')}`; return; }
-  const total = lista.reduce((s,g)=>s+montoGrupo(g, 'ninera'),0);
-  const abiertos = detallesAbiertos('pagar');
-  finPendientes.pagar = lista;
-  box.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
-      <h2 style="margin:0;">Por pagar</h2>
-      <div class="helper" style="margin:0;">${lista.length} pendiente${lista.length===1?'':'s'} · $${total.toLocaleString('es-UY')}</div>
-    </div>
-    ${lista.map((g, i)=>`
-      <div class="fin-pend">
-        <div class="agendarow" style="border-bottom:1px solid var(--line);">
-          ${cabezaPendienteHtml('pagar', i, g, `${cuentasPorPagarHtml(g)}
-            ${lineaServiciosHtml(g)}${lineasGastosHtml(g.gastos, 'Reintegro de gasto')}${lineasAjustesHtml(g.ajustes)}`)}
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--clay-text);">$${montoGrupo(g, 'ninera').toLocaleString('es-UY')}</span>
-            <button class="smallbtn fin-copiar-monto" style="min-height:36px;" onclick="copiarMontoPendiente(${i})">Copiar monto</button>
-            <button class="smallbtn" style="min-height:36px;" onclick="conGuardado(this, ()=>marcarPendiente('pagar', ${i}))">Marcar pagado</button>
-          </div>
-        </div>
-        <div class="fin-det" id="fin-det-pagar-${i}" hidden></div>
-      </div>`).join('')}
-    ${porPagarEnCursoHtml(enCurso)}
-    ${saldosSueltosHtml(sueltos, 'pago')}
-  `;
-  reabrirDetalles('pagar', abiertos);
 }
 // gastos: ids (cobro) o {id, concepto, monto} (pago, para mostrarlos en la confirmación).
 async function marcarGrupoResuelto(ids, campo, ajustes=[], gastos=[]){

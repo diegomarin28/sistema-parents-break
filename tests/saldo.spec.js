@@ -28,7 +28,7 @@ test.describe('Por pagar con saldo de la niñera', () => {
     await expect(fila).toContainText('Servicios: $750');
     await expect(fila).toContainText('Saldo: −$300 · Se le pagó un sitting que hizo otra niñera');
     await expect(fila).toContainText('$450');
-    await fila.locator('button', { hasText: 'Marcar pagado' }).click();
+    await fila.locator('button', { hasText: 'Marcar todo pagado' }).click();
     await expect(page.locator('#pago-detalle')).toContainText('Saldo a favor');
     await expect(page.locator('#pago-total')).toHaveText('$450');
     await page.locator('#pago-confirmar').click();
@@ -45,7 +45,7 @@ test.describe('Por pagar con saldo de la niñera', () => {
     await irAModulo(page, 'finanzas');
     const fila = filaDe(porPagar(page), 'Ana Ficticia');
     await expect(fila).toContainText('Saldo: −$750');
-    await fila.locator('button', { hasText: 'Marcar pagado' }).click();
+    await fila.locator('button', { hasText: 'Marcar todo pagado' }).click();
     await expect(page.locator('#pago-total')).toHaveText('$0');
     await page.locator('#pago-confirmar').click();
     await expect(page.locator('.toaststack .toast', { hasText: 'Marcado como pagado.' })).toBeVisible();
@@ -74,7 +74,7 @@ test.describe('Por cobrar con saldo a favor de la familia', () => {
     await expect(fila).toContainText('Servicios: $2.280');
     await expect(fila).toContainText('Saldo: −$917 · Pagó de más la semana del 28/09');
     await expect(fila).toContainText('$1.363');
-    await fila.locator('button', { hasText: 'Marcar cobrado' }).click();
+    await fila.locator('button', { hasText: 'Marcar todo cobrado' }).click();
     await expect(page.locator('.toaststack .toast', { hasText: 'Marcado como cobrado.' })).toBeVisible();
     expect(e.db.ajustes_saldo[0].aplicado).toBe(917);
     expect(e.db.ajustes_saldo[0].aplicaciones[0]).toMatchObject({ monto: -917, en: 'cobrado' });
@@ -155,7 +155,7 @@ test.describe('el mismo pago marcado desde dos celulares', () => {
   test('pagado: la segunda no vuelve a descontar el saldo y se entera', async ({ page }) => {
     const e = await abrirApp(page, { datos: datosCon(ajuste({ monto: -1000 })) });
     await irAModulo(page, 'finanzas');
-    await filaDe(porPagar(page), 'Ana Ficticia').locator('button', { hasText: 'Marcar pagado' }).click();
+    await filaDe(porPagar(page), 'Ana Ficticia').locator('button', { hasText: 'Marcar todo pagado' }).click();
     await expect(page.locator('#pago-total')).toHaveText('$0');
     // Mientras tanto la otra ya lo marcó pagado y se usaron $750 del saldo.
     e.db.sittings_traslados.filter(s => s.fecha === '2026-09-28').forEach(s => { s.pagado = true; });
@@ -175,7 +175,7 @@ test.describe('el mismo pago marcado desde dos celulares', () => {
     await irAModulo(page, 'finanzas');
     e.db.sittings_traslados.filter(s => s.familia_id === ID.fUno).forEach(s => { s.cobrado = true; });
     Object.assign(e.db.ajustes_saldo[0], { aplicado: 917 });
-    await filaDe(porCobrar(page), 'Familia Prueba Uno').locator('button', { hasText: 'Marcar cobrado' }).click();
+    await filaDe(porCobrar(page), 'Familia Prueba Uno').locator('button', { hasText: 'Marcar todo cobrado' }).click();
     await expect(page.locator('.toaststack .toast', { hasText: 'Ya estaba marcado como cobrado' })).toBeVisible();
     expect(e.db.ajustes_saldo[0].aplicado).toBe(917);
     expect(e.escrituras.filter(w => w.tabla === 'ajustes_saldo')).toEqual([]);

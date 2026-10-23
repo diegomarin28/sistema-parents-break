@@ -35,7 +35,11 @@ const ajuste = extra => ({ id: AJ, sujeto: 'familia', familia_id: ID.fUno, niner
 
 const porCobrar = page => page.locator('#fin-porcobrar-wrap');
 const pendiente = (box, nombre) => box.locator('.fin-pend', { hasText: nombre });
-const casilla = (p, texto) => p.locator('.fin-det-fila', { hasText: texto }).locator('input[type=checkbox]');
+// Desde el 23/10 la fecha va en el encabezado de cada día (tarjetas-pendientes.spec.js): "07/09"
+// busca el primer renglón de ese día; otro texto, el renglón que lo dice (un gasto, un saldo).
+const casilla = (p, texto) => (/^\d\d\/\d\d$/.test(texto)
+  ? p.locator('.fin-det-dia', { hasText: texto }).locator('.fin-det-fila').first()
+  : p.locator('.fin-det-fila', { hasText: texto })).locator('input[type=checkbox]');
 const cobrados = e => e.db.sittings_traslados.filter(s => s.cobrado).map(s => s.id).sort();
 
 async function abrirDetalle(page, nombre = 'Familia Prueba Uno') {
@@ -57,7 +61,7 @@ test.describe('Por cobrar: marcar solo una parte', () => {
     await expect(p.locator('.fin-pend-cabeza')).toHaveAttribute('aria-expanded', 'true');
     const filas = p.locator('.fin-det-fila');
     await expect(filas).toHaveCount(3);
-    await expect(filas.nth(0)).toContainText('07/09');
+    await expect(p.locator('.fin-det-dia').nth(0)).toContainText('07/09');
     await expect(filas.nth(0)).toContainText('16:00–18:00');
     await expect(filas.nth(0)).toContainText('Ana Ficticia');
     await expect(filas.nth(0)).toContainText('$760');
@@ -89,10 +93,10 @@ test.describe('Por cobrar: marcar solo una parte', () => {
     verificarLimpio(e);
   });
 
-  test('sin abrir el detalle, "Marcar cobrado" marca todo, como antes', async ({ page }) => {
+  test('sin abrir el detalle, "Marcar todo cobrado" marca todo, como antes', async ({ page }) => {
     const e = await abrirApp(page, { datos: datos() });
     await irAModulo(page, 'finanzas');
-    await pendiente(porCobrar(page), 'Familia Prueba Uno').locator('button', { hasText: 'Marcar cobrado' }).click();
+    await pendiente(porCobrar(page), 'Familia Prueba Uno').locator('button', { hasText: 'Marcar todo cobrado' }).click();
     await expect(page.locator('.toaststack .toast', { hasText: 'Marcado como cobrado.' })).toBeVisible();
     expect(cobrados(e)).toEqual([A, B, C]);
     verificarLimpio(e);
@@ -245,7 +249,7 @@ test('si la otra admin cambia algo (Realtime), el detalle abierto sigue abierto 
   await expect(pendiente(porCobrar(page), 'Familia Prueba Uno').locator('.agendarow').first()).toContainText('$2.700');
   const q = pendiente(porCobrar(page), 'Familia Prueba Uno');
   await expect(q.locator('.fin-pend-cabeza')).toHaveAttribute('aria-expanded', 'true');
-  await expect(q.locator('.fin-det-fila', { hasText: '21/09' })).toContainText('$800');
+  await expect(q.locator('.fin-det-dia', { hasText: '21/09' })).toContainText('$800');
   await expect(casilla(q, '07/09')).not.toBeChecked();
   await expect(casilla(q, '14/09')).toBeChecked();
   await expect(casilla(q, '21/09')).toBeChecked();
@@ -264,8 +268,8 @@ test.describe('fallas', () => {
     const p = pendiente(porCobrar(page), 'Familia Prueba Uno');
     await p.locator('.fin-pend-cabeza').click();
     await expect(p.locator('.fin-det')).toContainText('No se pudo cargar el detalle (se cayó)');
-    await p.locator('button', { hasText: 'Marcar cobrado' }).click();
-    await expect(page.locator('.toaststack .toast', { hasText: 'Todavía no cargó el detalle' })).toBeVisible();
+    // Sin el detalle no hay botones para marcar (cerrándola vuelve "Marcar todo cobrado").
+    await expect(p.locator('button', { hasText: /^Marcar/ })).toHaveCount(0);
     expect(cobrados(e)).toEqual([]);
     fallar = false;
     await p.locator('.fin-det button', { hasText: 'Reintentar' }).click();

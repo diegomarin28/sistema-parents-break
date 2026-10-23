@@ -121,7 +121,7 @@ test.describe('flujo de punta a punta', () => {
     await page.evaluate(async () => { finMes = '2026-10'; refrescarFinanzasCompleto(); });
     await esperarQuieta(page);
     await expect(page.locator('#fin-porpagar')).toHaveText('$780'); // la semana ya cerró
-    await page.locator('#fin-porpagar-wrap .agendarow', { hasText: 'Ana Ficticia' }).locator('button', { hasText: 'Marcar pagado' }).click();
+    await page.locator('#fin-porpagar-wrap .agendarow', { hasText: 'Ana Ficticia' }).locator('button', { hasText: 'Marcar todo pagado' }).click();
     await page.locator('[aria-label="Confirmar pago"] button', { hasText: 'Confirmar pago' }).click();
     await expect(page.locator('#fin-porpagar')).toHaveText('$0');
     // 7) Cuadra: resultado sobre lo facturado, sin cambiar por cobrar/pagar.

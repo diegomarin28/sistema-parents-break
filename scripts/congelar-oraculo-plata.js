@@ -27,7 +27,7 @@ const FUNCIONES = {
   'js/finanzas.js': ['construirEsTrabajoFijo', 'filtrarFijosSemanaIncompleta', 'resumenFinancieroMes',
     'resumenIntermediaciones', 'intermediacionesPendientes', 'lunesDeSemana', 'domingoDeSemana', 'finEnMinutos', 'construirFinUltimoFijo',
     'cierreSemanaFijo', 'semanaFijoCerrada', 'construirEsEnCurso', 'finDeSemanaDesde', 'bucketKeyFecha', 'bucketPagoFecha',
-    'cargarAjustesSaldo', 'pendienteAjuste', 'aplicarAjustesAGrupos', 'calcularPendientesAgrupados', 'esFaltaTabla',
+    'cargarAjustesSaldo', 'pendienteAjuste', 'aplicarAjustesAGrupos', 'calcularPendientesAgrupados', 'armarTarjetasPendientes', 'esFaltaTabla',
     'cargarGastosExtraPendientes', 'montoGrupo', 'cuentasDeFicha', 'montoParaCopiar', 'totalParcial', 'combinacionExacta'],
 };
 

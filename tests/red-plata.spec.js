@@ -254,6 +254,8 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
           cobrar: filas('#fin-porcobrar-wrap .agendarow'),
           pagar: filas('#fin-porpagar-wrap .agendarow:not(.fin-semana-en-curso)'),
           enCurso: filas('#fin-porpagar-wrap .fin-semana-en-curso'),
+          cobrarTarjetas: [...document.querySelectorAll('#fin-porcobrar-wrap .fin-pend-cabeza')].map(c => c.children[0].textContent.trim()),
+          pagarTarjetas: [...document.querySelectorAll('#fin-porpagar-wrap .fin-pend-cabeza')].map(c => c.children[0].textContent.trim()),
         };
         // Misma composición que cargarPorCobrarPorPagar (finanzas.js), con las funciones del oráculo.
         const O = ORACULO, hoyISO = todayISO();
@@ -263,11 +265,14 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
         const enCurso = g => g.frec === 'semanal' && !O.semanaFijoCerrada(g.cierre);
         const listaPagar = gruposPagar.filter(g => !enCurso(g));
         const ajustes = await O.cargarAjustesSaldo();
-        O.aplicarAjustesAGrupos(listaCobrar, ajustes, 'familia');
-        O.aplicarAjustesAGrupos(listaPagar, ajustes, 'ninera');
+        // Una tarjeta por persona (23/10/2026) y el saldo a favor sobre la tarjeta entera.
+        const tarjetasCobrar = O.armarTarjetasPendientes(listaCobrar, 'familia');
+        const tarjetasPagar = O.armarTarjetasPendientes(listaPagar, 'ninera');
+        O.aplicarAjustesAGrupos(tarjetasCobrar, ajustes, 'familia');
+        O.aplicarAjustesAGrupos(tarjetasPagar, ajustes, 'ninera');
         const oraculo = {
-          cobrar: [...listaCobrar, ...inter.cobrar].map(g => [g.nombre, O.montoGrupo(g, 'familia')]),
-          pagar: [...listaPagar, ...inter.pagar].map(g => [g.nombre, O.montoGrupo(g, 'ninera')]),
+          cobrar: [...tarjetasCobrar, ...inter.cobrar].map(g => [g.nombre, O.montoGrupo(g, 'familia')]),
+          pagar: [...tarjetasPagar, ...inter.pagar].map(g => [g.nombre, O.montoGrupo(g, 'ninera')]),
           enCurso: gruposPagar.filter(enCurso).map(g => [g.nombre, O.redondearPago(g.total)]),
         };
         return { visto, oraculo };
@@ -275,6 +280,11 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
       const ordenar = l => l.map(x => x.join(' $')).sort();
       for (const k of ['cobrar', 'pagar', 'enCurso']) {
         if (!igual(ordenar(r.visto[k]), ordenar(r.oraculo[k]))) malos.push({ escenario: i, lista: k, visto: r.visto[k], oraculo: r.oraculo[k] });
+      }
+      // La regla escrita: una sola tarjeta por familia o niñera (sin contar las intermediaciones).
+      for (const k of ['cobrar', 'pagar']) {
+        const nombres = r.visto[k + 'Tarjetas'];
+        if (new Set(nombres).size !== nombres.length) malos.push({ escenario: i, que: 'una persona en dos tarjetas', lista: k, nombres });
       }
     }
     sinDiferencias(malos, 'pantallas de Por cobrar y Por pagar');

@@ -54,8 +54,9 @@ test.describe('Por pagar: copiar cuenta y monto', () => {
     await expect(toasts(page).last()).toContainText('Monto copiado');
     const carla = porPagar(page).locator('.agendarow', { hasText: 'Carla Ejemplo' });
     await carla.locator('button', { hasText: 'Copiar monto' }).click();
-    // 600,5 se copia sin centavos con la regla del pago: ,5 baja (21/10/2026).
-    expect(await copiado(page)).toEqual(['0099887766', '750', '600']);
+    // 600,5 se copia sin centavos con la regla del pago: ,5 baja (21/10/2026). Desde el 23/10 la
+    // tarjeta de Ana junta sus dos semanas cerradas (28/09 y 12/10): $1.500.
+    expect(await copiado(page)).toEqual(['0099887766', '1500', '600']);
     // Copiar no escribe nada en la base.
     expect(e.escrituras).toHaveLength(0);
     verificarLimpio(e);
@@ -87,7 +88,7 @@ test.describe('Por pagar: copiar cuenta y monto', () => {
     const e = await abrirApp(page, { datos: datos(), ahora: AHORA });
     await irAModulo(page, 'finanzas');
     const ana = porPagar(page).locator('.agendarow', { hasText: 'Ana Ficticia' }).filter({ hasText: /Semana del 11/ });
-    for (const texto of ['Copiar', 'Copiar monto', 'Marcar pagado']) {
+    for (const texto of ['Copiar', 'Copiar monto', 'Marcar todo pagado']) {
       const box = await ana.locator('button', { hasText: new RegExp(`^${texto}$`) }).boundingBox();
       expect(box.height).toBeGreaterThanOrEqual(30);
       expect(box.x + box.width).toBeLessThanOrEqual(390);
