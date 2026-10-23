@@ -243,6 +243,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   "Vaciar"; fichas y registro de sitting que preguntan antes de cerrar y se recuperan al recargar.
 - `tests/entrevista-en-curso.spec.js`: guardar la entrevista a medias, retomarla desde
   Candidatas guardadas o desde la candidata, completarla en la misma fila, base sin migrar.
+- `tests/sin-aviso-itau.spec.js`: sin aviso del extracto (Finanzas, campanita, puntito y preferencias)
+  hasta el lector de Mercado Pago; la conciliación sigue a mano.
 - `tests/conciliacion.spec.js`: conciliación con el extracto (tildadas, dudosas, confirmar) y
   lectores por formato. Los extractos de los tests son inventados: nunca uno real, ni recortado.
 - `tests/exploratorio.spec.js`: punta a punta, celular 390px, datos raros, base vacía, navegar
@@ -618,8 +620,10 @@ descartado (19/10/2026): no proponerlo de nuevo.
 ### Plata y bancos
 - Cambio de banco: está decidido pasar de Itaú a Mercado Pago, pero por ahora se sigue con
   Itaú (13/10/2026). El día del cambio: (1) lector de Mercado Pago en `LECTORES_EXTRACTO`
-  (finanzas.js); (2) adaptar los avisos de "Falta subir el extracto de Itaú" (campanita y
-  enviar-push-urgentes); (3) cambiar la cuenta para transferir del PDF (app_config
+  (finanzas.js); (2) volver a prender el aviso de "Falta subir el extracto", con el texto de
+  Mercado Pago: está apagado desde el 23/10/2026 porque ya no usan Itaú (`AVISO_EXTRACTO_ACTIVO` en
+  app-shell.js para Finanzas, campanita, puntito y preferencias, y la misma marca en
+  enviar-push-urgentes, que hay que publicar); (3) cambiar la cuenta para transferir del PDF (app_config
   'cuenta_cobro', se edita desde la vista previa del PDF; el dato no va al repo).
 - Conciliación con el extracto + saldo a favor (B10, 06/10/2026), para cuando se retome la
   conciliación (está en pausa): hoy busca el total sin descontar el saldo a favor (un pago
@@ -629,6 +633,8 @@ descartado (19/10/2026): no proponerlo de nuevo.
 - Probar la conciliación de punta a punta con el extracto de un mes ya cerrado.
 
 ### Funciones nuevas pedidas
+- "Deshacer" al marcar cobrada o pagada una intermediación (23/10/2026, más adelante): hoy solo lo
+  tienen los sittings en Por cobrar / Por pagar (`toast` con `{deshacer}` y `deshacerMarca`, finanzas.js).
 - Guía "Cómo se hace" dentro de la app (13/10/2026), BAJA PRIORIDAD (20/10/2026: saben hacer
   todo, el problema es el tiempo; priorizar que las tareas sean más rápidas): guía de uso que
   incluya cómo activar Face ID / Touch ID (una passkey por dispositivo, en Safari).
