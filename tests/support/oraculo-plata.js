@@ -1,5 +1,5 @@
 // Oráculo de plata: copia EXACTA de las funciones que calculan plata en js/, tal como estaban el
-// 23/10/2026 (commit 6e6c0dc). La generó scripts/congelar-oraculo-plata.js: no se edita a mano.
+// 23/10/2026 (commit 821aa21). La generó scripts/congelar-oraculo-plata.js: no se edita a mano.
 // tests/red-plata.spec.js compara la app con esta copia en miles de casos (docs/rediseno-panel.md,
 // 4.10). Si una regla cambia a propósito, se vuelve a generar en el mismo PR y el PR lo dice.
 // Lo que no es plata (supabase, normaliza, todayISO, sumarDiasISO...) es el de la app.
@@ -80,23 +80,8 @@ function crearOraculoPlata(){
       return vigenteEn(normaliza(r.ninera_nombre||'')+'|'+normaliza(r.familia_nombre||''), r.fecha);
     };
   }
-  function construirTrabajaFinde(asigs){
-    const diasPorNinera = {};
-    const hoy = todayISO();
-    (asigs||[]).forEach(a=>{
-      if(asignacionTerminada(a, hoy)) return;
-      const key = normaliza(a.ninera_nombre||'');
-      if(!key) return;
-      (a.dias||[]).forEach(d=>{ (diasPorNinera[key] ||= new Set()).add(d); });
-    });
-    return function trabajaFinde(nineraNombre){
-      const set = diasPorNinera[normaliza(nineraNombre||'')];
-      return !!set && (set.has('S') || set.has('D'));
-    };
-  }
-  function filtrarFijosSemanaIncompleta(sits, esTrabajoFijo){
-    const hoy = todayISO();
-    return (sits||[]).filter(r => !esTrabajoFijo(r) || finDeSemanaDesde(lunesDeSemana(r.fecha)) < hoy);
+  function filtrarFijosSemanaIncompleta(sits, esEnCurso){
+    return (sits||[]).filter(r => !esEnCurso(r));
   }
   function resumenFinancieroMes(sitsTodos, gastosNegocio, gastosAbsorbidos=0, inter=null, esEnCurso=()=>false){
     const hoy = todayISO();
@@ -175,6 +160,9 @@ function crearOraculoPlata(){
     const dow = new Date(fechaISO+'T12:00:00').getDay();
     return sumarDiasISO(fechaISO, dow===0 ? -6 : 1-dow);
   }
+  function domingoDeSemana(fechaISO){
+    return sumarDiasISO(fechaISO, -new Date(fechaISO+'T12:00:00').getDay());
+  }
   function finEnMinutos(horaIni, horaFin, cruza){
     const aMin = h => { if(!h) return null; const [hh, mm] = String(h).split(':').map(Number); return Number.isFinite(hh) ? hh*60 + (mm||0) : null; };
     const f = aMin(horaFin);
@@ -195,8 +183,8 @@ function crearOraculoPlata(){
       return fin;
     };
   }
-  function cierreSemanaFijo(lunesISO, trabajaFinde, finUltimoFijo){
-    const dia = finDeSemanaDesde(lunesISO, trabajaFinde);
+  function cierreSemanaFijo(domingoISO, finUltimoFijo){
+    const dia = finDeSemanaDesde(domingoISO);
     const m = Math.max(Number(finUltimoFijo)||0, 0);
     return { fecha: sumarDiasISO(dia, Math.floor(m/1440)), min: m % 1440 };
   }
@@ -206,7 +194,7 @@ function crearOraculoPlata(){
     return minutosAhoraMontevideo() >= cierre.min;
   }
   function construirEsEnCurso(sits, asigs){
-    const esTrabajoFijo = construirEsTrabajoFijo(asigs), trabajaFinde = construirTrabajaFinde(asigs);
+    const esTrabajoFijo = construirEsTrabajoFijo(asigs);
     const finUltimoFijo = construirFinUltimoFijo(asigs);
     const clave = (r, fecha) => (r.ninera_id || normaliza(r.ninera_nombre||'')) + '|' + fecha;
     const registrados = {};
@@ -218,20 +206,23 @@ function crearOraculoPlata(){
     const cierres = {};
     return function esEnCurso(r){
       if(!esTrabajoFijo(r)) return false;
-      const lunes = lunesDeSemana(r.fecha), finde = trabajaFinde(r.ninera_nombre);
-      const dia = finDeSemanaDesde(lunes, finde);
+      const domingo = domingoDeSemana(r.fecha);
+      const dia = finDeSemanaDesde(domingo);
       const k = clave(r, dia);
-      cierres[k] ??= cierreSemanaFijo(lunes, finde, Math.max(finUltimoFijo(r.ninera_id, r.ninera_nombre, dia) ?? 0, registrados[k] ?? 0));
+      cierres[k] ??= cierreSemanaFijo(domingo, Math.max(finUltimoFijo(r.ninera_id, r.ninera_nombre, dia) ?? 0, registrados[k] ?? 0));
       return !semanaFijoCerrada(cierres[k]);
     };
   }
-  function finDeSemanaDesde(lunesISO, trabajaFinde=true){
-    return sumarDiasISO(lunesISO, trabajaFinde ? 6 : 5); // +6 domingo (default, sin cambios) · +5 sábado
+  function finDeSemanaDesde(inicioISO){
+    return sumarDiasISO(inicioISO, 6);
   }
   function bucketKeyFecha(fechaISO, frecuencia){
     if(frecuencia==='mensual') return fechaISO.slice(0,7);
     if(frecuencia==='semanal') return lunesDeSemana(fechaISO);
     return fechaISO;
+  }
+  function bucketPagoFecha(fechaISO, frecuencia){
+    return frecuencia==='semanal' ? domingoDeSemana(fechaISO) : bucketKeyFecha(fechaISO, frecuencia);
   }
   async function cargarAjustesSaldo(filtro){
     if(!ajustesSaldoDisponible) return [];
@@ -289,7 +280,6 @@ function crearOraculoPlata(){
     const ninInfoPorId = {}; const ninInfoPorNombre = {};
     (nins||[]).forEach(n=>{ ninInfoPorId[n.id] = n; ninInfoPorNombre[normaliza(n.nombre)] = n; });
     const esTrabajoFijo = construirEsTrabajoFijo(asigs);
-    const trabajaFinde = construirTrabajaFinde(asigs);
   
     const gruposCobrar = {};
     (pendCobrar||[]).forEach(r=>{
@@ -304,10 +294,10 @@ function crearOraculoPlata(){
     (pendPagar||[]).forEach(r=>{
       // La frecuencia depende del trabajo, no de la niñera: si es una relación fija con esa familia, se junta semanal; si es puntual, se paga aparte por día.
       const frec = esTrabajoFijo(r) ? 'semanal' : 'diario';
-      const bucket = bucketKeyFecha(r.fecha, frec);
+      const bucket = bucketPagoFecha(r.fecha, frec);
       const info = r.ninera_id ? ninInfoPorId[r.ninera_id] : ninInfoPorNombre[normaliza(r.ninera_nombre)];
       const key = (r.ninera_id||normaliza(r.ninera_nombre))+'|'+bucket;
-      if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuentas:cuentasDeFicha(info)};
+      if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], cuentas:cuentasDeFicha(info)};
       gruposPagar[key].total += Number(r.pago_ninera)||0;
       gruposPagar[key].ids.push(r.id);
       if(frec==='semanal'){
@@ -335,10 +325,10 @@ function crearOraculoPlata(){
       }
       if(!gx.reintegrado && r.fecha <= hoyG){
         const frec = esTrabajoFijo(r) ? 'semanal' : 'diario';
-        const bucket = bucketKeyFecha(r.fecha, frec);
+        const bucket = bucketPagoFecha(r.fecha, frec);
         const info = r.ninera_id ? ninInfoPorId[r.ninera_id] : ninInfoPorNombre[normaliza(r.ninera_nombre)];
         const key = (r.ninera_id||normaliza(r.ninera_nombre))+'|'+bucket;
-        if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], finde:trabajaFinde(r.ninera_nombre), cuentas:cuentasDeFicha(info)};
+        if(!gruposPagar[key]) gruposPagar[key] = {nombre:r.ninera_nombre, ninera_id:r.ninera_id||info?.id||null, frec, bucket, total:0, ids:[], cuentas:cuentasDeFicha(info)};
         (gruposPagar[key].gastos ||= []).push(item);
         gruposPagar[key].total += item.monto;
       }
@@ -348,8 +338,8 @@ function crearOraculoPlata(){
     const finUltimoFijo = construirFinUltimoFijo(asigs);
     Object.values(gruposPagar).forEach(g=>{
       if(g.frec!=='semanal') return;
-      const dia = finDeSemanaDesde(g.bucket, g.finde);
-      g.cierre = cierreSemanaFijo(g.bucket, g.finde, Math.max(finUltimoFijo(g.ninera_id, g.nombre, dia) ?? 0, g.finesPorDia?.[dia] ?? 0));
+      const dia = finDeSemanaDesde(g.bucket);
+      g.cierre = cierreSemanaFijo(g.bucket, Math.max(finUltimoFijo(g.ninera_id, g.nombre, dia) ?? 0, g.finesPorDia?.[dia] ?? 0));
     });
     return { gruposCobrar:Object.values(gruposCobrar), gruposPagar:Object.values(gruposPagar), fams:fams||[], nins:nins||[], error:e1||e2 };
   }
@@ -411,7 +401,7 @@ function crearOraculoPlata(){
     });
     return mejor;
   }
-  return { agendaMinutos, gastoACargoFamilia, redondearMonto, redondearPago, redondearCobro, asignacionVigenteEn, asignacionTerminada, redondearFinCobro, familiaRedondeaFin, cruceMedianocheMalMarcado, horasSitting, precioSegunHorario, construirEsTrabajoFijo, construirTrabajaFinde, filtrarFijosSemanaIncompleta, resumenFinancieroMes, resumenIntermediaciones, intermediacionesPendientes, lunesDeSemana, finEnMinutos, construirFinUltimoFijo, cierreSemanaFijo, semanaFijoCerrada, construirEsEnCurso, finDeSemanaDesde, bucketKeyFecha, cargarAjustesSaldo, pendienteAjuste, aplicarAjustesAGrupos, calcularPendientesAgrupados, esFaltaTabla, cargarGastosExtraPendientes, montoGrupo, cuentasDeFicha, montoParaCopiar, totalParcial, combinacionExacta };
+  return { agendaMinutos, gastoACargoFamilia, redondearMonto, redondearPago, redondearCobro, asignacionVigenteEn, asignacionTerminada, redondearFinCobro, familiaRedondeaFin, cruceMedianocheMalMarcado, horasSitting, precioSegunHorario, construirEsTrabajoFijo, filtrarFijosSemanaIncompleta, resumenFinancieroMes, resumenIntermediaciones, intermediacionesPendientes, lunesDeSemana, domingoDeSemana, finEnMinutos, construirFinUltimoFijo, cierreSemanaFijo, semanaFijoCerrada, construirEsEnCurso, finDeSemanaDesde, bucketKeyFecha, bucketPagoFecha, cargarAjustesSaldo, pendienteAjuste, aplicarAjustesAGrupos, calcularPendientesAgrupados, esFaltaTabla, cargarGastosExtraPendientes, montoGrupo, cuentasDeFicha, montoParaCopiar, totalParcial, combinacionExacta };
 }
-const ORACULO_PLATA_CONGELADO = { fecha: "23/10/2026", commit: "6e6c0dc" };
+const ORACULO_PLATA_CONGELADO = { fecha: "23/10/2026", commit: "821aa21" };
 if (typeof module !== 'undefined') module.exports = { crearOraculoPlata, ORACULO_PLATA_CONGELADO };

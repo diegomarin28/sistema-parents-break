@@ -17,8 +17,9 @@ const { generarSQL } = require('../scripts/paridad-plata-sql');
 const SEMILLA = Number(process.env.SEMILLA || SEMILLA_FIJA);
 const FUENTE_ORACULO = fs.readFileSync(path.join(__dirname, 'support', 'oraculo-plata.js'), 'utf8');
 // Fechas de "hoy" que cambian lo que se debe: un miércoles (semanas en curso), el sábado en que
-// cierran las fijas sin finde, el domingo en que cierran todas y el lunes siguiente (lo que cerró
-// ayer ya se debe). Sin el lunes, correr el cierre un día no lo atrapaba ningún caso.
+// cierran todas las fijas (23/10/2026; antes las que tenían finde cerraban el domingo), el domingo
+// (empieza otra semana de pago) y el lunes siguiente. Sin el lunes, correr el cierre un día no lo
+// atrapaba ningún caso.
 const HOYS = [['miércoles', '2026-10-21T10:00:00-03:00'], ['sábado', '2026-10-24T10:00:00-03:00'], ['domingo', '2026-10-25T10:00:00-03:00'], ['lunes', '2026-10-26T10:00:00-03:00']];
 
 async function cargarOraculo(page) {
@@ -54,6 +55,8 @@ function reglaHoras({ ini, fin, cruza, familia, fecha }) {
   }
   return { real: (mf - mi) / 60, cobro: (mc - mi) / 60, finCobro: mc !== mf ? hhmm(mc) : null };
 }
+const diaSemanaRegla = iso => new Date(iso + 'T12:00:00Z').getUTCDay(); // 0 domingo … 6 sábado
+const sumarDiasRegla = (iso, n) => new Date(Date.parse(iso + 'T12:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 // Montos sin centavos: el pago, ,5 o menos baja; el cobro, ,5 o más sube; primero a centavos.
 function reglaRedondeo(n, cobro) {
   const v = Number(n);
@@ -137,7 +140,8 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
           const inter = F.resumenIntermediaciones(esc.enrique, esc.eventos);
           return {
             resumen: F.resumenFinancieroMes(esc.sits, esc.gastosNegocio, esc.absorbidos, inter, enCurso),
-            margen: F.filtrarFijosSemanaIncompleta(esc.sits, esFijo).map(r => r.id),
+            margen: F.filtrarFijosSemanaIncompleta(esc.sits, enCurso).map(r => r.id),
+            fijos: esc.sits.filter(esFijo).map(r => r.id),
           };
         };
         return escs.map(esc => ({ app: calcular(APP, esc), oraculo: calcular(ORACULO, esc) }));
@@ -151,6 +155,16 @@ test.describe('red de plata: la app contra el oráculo y la regla escrita', () =
         if (!cerca(s.resultado, s.facturado - s.costoNinieras - s.gastos - s.absorbidos)) malos.push({ escenario: i, que: 'resultado', s });
         const sinPagar = esc.sits.filter(x => !x.pagado).reduce((t, x) => t + x.pago_ninera, 0) + it.porPagar + it.porPagarFuturo;
         if (!cerca(s.porPagar + s.porPagarEnCurso + s.porPagarFuturo, sinPagar)) malos.push({ escenario: i, que: 'por pagar + en curso + futuro', s });
+        // El margen (23/10/2026): un fijo cuenta cuando su semana de pago (domingo a sábado) cerró.
+        // Antes del sábado nunca; desde el lunes siguiente siempre (el sábado y el domingo dependen
+        // de la hora del último fijo). Lo puntual cuenta siempre.
+        for (const x of esc.sits) {
+          const enMargen = r.app.margen.includes(x.id);
+          if (!r.app.fijos.includes(x.id)) { if (!enMargen) malos.push({ escenario: i, que: 'puntual fuera del margen', x }); continue; }
+          const sabado = sumarDiasRegla(x.fecha, 6 - diaSemanaRegla(x.fecha));
+          if (hoy < sabado && enMargen) malos.push({ escenario: i, que: 'fijo en el margen antes del sábado', x, hoy });
+          if (hoy > sumarDiasRegla(sabado, 1) && !enMargen) malos.push({ escenario: i, que: 'fijo de una semana cerrada fuera del margen', x, hoy });
+        }
       });
       sinDiferencias(malos, `resúmenes (${dia})`);
       anotarCasos(escenarios.length, `meses (${dia})`);
