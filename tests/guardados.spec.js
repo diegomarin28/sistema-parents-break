@@ -213,8 +213,7 @@ test.describe('si la base falla, nunca se muestra éxito', () => {
   test('colocación de Enrique: si falla sacarla de Niñeras se avisa, no dice "listo"', async ({ page }) => {
     const e = await abrirApp(page);
     await irAModulo(page, 'intermediaciones');
-    await page.evaluate(() => setInterTab('enrique'));
-    await esperarQuieta(page);
+    await page.evaluate(() => abrirFormInterEnrique());
     await elegirAutocomplete(page, '#inter-enrique-ninera', 'Ana Ficticia');
     await page.fill('#inter-enrique-monto', '1000');
     e.fallar = ({ tabla }) => tabla === 'ninieras' ? { message: 'permiso denegado' } : undefined;

@@ -1,28 +1,39 @@
 /* ================= INTERMEDIACIONES ================= */
-let interTab = 'historial';
+/* Una sola pantalla (23/10/2026): antes las pestañas mezclaban listas (Historial, Niñeras Enrique)
+   con formularios (+ Colocación Enrique, + Evento) y no se entendía. Ahora: la lista de
+   colocaciones y eventos con chips para filtrar, "+ Nueva" que pregunta qué y abre el formulario en
+   un modal sobre la lista (como el resto de la app), y "Niñeras de Enrique" plegable debajo. */
+let interFiltro = 'todas'; // 'todas' | 'enrique' | 'evento'
+let interPoolAbierto = false;
 let interNinieras = [];
 let interNinierasPool = []; // niñeras del pool Enrique con estado 'disponible' (se sugieren primero)
 let interEmpresas = [];
 let interEnriqueSel = null;
 let interEventoFilas = [];
 let interEventoFilaSeq = 0;
+let interItems = [];
 
-function setInterTab(t){ interTab = t; renderModulo(); }
+const INTER_FILTROS = [['todas', 'Todas'], ['enrique', 'Colocaciones'], ['evento', 'Eventos']];
+function setInterFiltro(f){ interFiltro = f; pintarInterFiltros(); pintarInterLista(); }
 
 async function renderIntermediaciones(cont){
   cont.innerHTML = moduloHeader('Intermediaciones') + `
-    <div class="subnav">
-      <button class="subtab ${interTab==='historial'?'active':''}" onclick="setInterTab('historial')">Historial</button>
-      <button class="subtab ${interTab==='enrique'?'active':''}" onclick="setInterTab('enrique')">+ Colocación Enrique</button>
-      <button class="subtab ${interTab==='evento'?'active':''}" onclick="setInterTab('evento')">+ Evento</button>
-      <button class="subtab ${interTab==='pool'?'active':''}" onclick="setInterTab('pool')">Niñeras Enrique</button>
+    <div class="inter-barra">
+      <div class="inter-filtros" id="inter-filtros" role="group" aria-label="Filtrar"></div>
+      <button class="btn primary inter-nueva" onclick="elegirNuevaIntermediacion()">+ Nueva</button>
     </div>
     <div id="inter-body"><div class="empty"><span class="spinner dark"></span> Cargando…</div></div>
+    <details class="card inter-pool" id="inter-pool"${interPoolAbierto ? ' open' : ''} ontoggle="interPoolAbierto = this.open">
+      <summary>Niñeras de Enrique</summary>
+    </details>
   `;
-  const [{data:nin}, {data:emp}, {data:pool}] = await Promise.all([
+  pintarInterFiltros();
+  const [{data:nin}, {data:emp}, {data:pool}, {data:enrique, error:e1}, {data:eventos, error:e2}] = await Promise.all([
     sb.from('ninieras').select('id,nombre').eq('activa', true).order('nombre'),
     sb.from('intermediaciones_eventos').select('empresa'),
     sb.from('intermediaciones_enrique_pool').select('*').order('ninera_nombre'),
+    sb.from('intermediaciones_enrique').select('*').order('fecha', {ascending:false}),
+    sb.from('intermediaciones_eventos').select('*, intermediaciones_eventos_ninieras(*)').order('fecha', {ascending:false}),
   ]);
   const disponibles = (pool||[]).filter(p=>p.estado==='disponible').map(p=>({id:p.ninera_id, nombre:p.ninera_nombre}));
   // Las disponibles (ya pasaron por Enrique y quedaron libres) van primero en el autocompletar
@@ -32,23 +43,61 @@ async function renderIntermediaciones(cont){
   interNinierasPool = pool || [];
   const empresasUnicas = [...new Set((emp||[]).map(e=>(e.empresa||'').trim()).filter(Boolean))].sort();
   interEmpresas = empresasUnicas.map(nombre=>({nombre}));
-  if(interTab==='historial') renderInterHistorial();
-  else if(interTab==='enrique') renderInterFormEnrique();
-  else if(interTab==='evento') renderInterFormEvento();
-  else renderInterPool();
-}
-
-/* ---- Niñeras Enrique: registro propio, separado de la lista general de Niñeras ---- */
-function renderInterPool(){
   const body = document.getElementById('inter-body');
   if(!body) return;
-  if(!interNinierasPool.length){ body.innerHTML = '<div class="empty">Todavía no hay niñeras colocadas vía Agencia Enrique.</div>'; return; }
-  body.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">${interNinierasPool.map(p=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterPoolNinera(${argJs(p.id)})">
+  if(e1 || e2){ body.innerHTML = errBox(e1 || e2); return; }
+  interItems = [
+    ...(enrique||[]).map(e=>({...e, _tipo:'enrique'})),
+    ...(eventos||[]).map(e=>({...e, _tipo:'evento'})),
+  ].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  pintarInterLista();
+  renderInterPool();
+}
+function pintarInterFiltros(){
+  const cont = document.getElementById('inter-filtros');
+  if(!cont) return;
+  cont.innerHTML = INTER_FILTROS.map(([v, t])=>`<button type="button" class="filtro-chip${interFiltro===v ? ' on' : ''}" aria-pressed="${interFiltro===v}" onclick="setInterFiltro(${argJs(v)})">${t}</button>`).join('');
+}
+function pintarInterLista(){
+  const body = document.getElementById('inter-body');
+  if(!body) return;
+  const items = interItems.filter(it=>interFiltro==='todas' || it._tipo===interFiltro);
+  if(!items.length){
+    body.innerHTML = `<div class="empty">${!interItems.length ? 'Todavía no hay colocaciones ni eventos cargados.' : interFiltro==='enrique' ? 'No hay colocaciones cargadas.' : 'No hay eventos cargados.'}</div>`;
+    return;
+  }
+  body.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">${items.map(filaInterHistorial).join('')}</div>`;
+}
+
+/* "+ Nueva": pregunta qué se carga y abre ese formulario en un modal. */
+function elegirNuevaIntermediacion(){
+  abrirModal(`
+    <h2 style="margin:0 0 4px;">Nueva intermediación</h2>
+    <div class="helper" style="margin:0 0 14px;">¿Qué querés cargar?</div>
+    <div class="inter-elegir">
+      <button class="btn ghost" onclick="abrirFormInterEnrique()"><b>Colocación de Enrique</b><span class="helper">Una niñera o persona externa colocada por la agencia</span></button>
+      <button class="btn ghost" onclick="abrirFormInterEvento()"><b>Evento</b><span class="helper">Una empresa, con una o varias niñeras</span></button>
+    </div>`);
+}
+
+/* ---- Niñeras de Enrique: registro propio, separado de la lista general de Niñeras ---- */
+function renderInterPool(){
+  const det = document.getElementById('inter-pool');
+  if(!det) return;
+  const colocadas = interNinierasPool.filter(p=>p.estado==='activa').length;
+  const libres = interNinierasPool.length - colocadas;
+  const resumen = interNinierasPool.length
+    ? `${colocadas} ${colocadas===1 ? 'colocada' : 'colocadas'} · ${libres} ${libres===1 ? 'disponible' : 'disponibles'}`
+    : 'ninguna todavía';
+  det.innerHTML = `<summary><b>Niñeras de Enrique</b> <span class="helper" style="margin:0;">${resumen}</span></summary>
+    ${interNinierasPool.length ? interNinierasPool.map(p=>`
+    <div class="inter-pool-fila" onclick="abrirModalInterPoolNinera(${argJs(p.id)})">
       <span class="badge ${p.estado==='activa'?'brand':'good'}">${p.estado==='activa'?'Activa':'Disponible'}</span>
-      <div style="flex:1;min-width:0;font-weight:700;color:var(--ink);">${escaparHtml(p.ninera_nombre)}</div>
-      <div class="helper" style="margin:0;">${p.estado==='activa'?'Colocada, trabajando':'Libre para una nueva colocación'}</div>
-    </div>`).join('')}</div>`;
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;color:var(--ink);">${escaparHtml(p.ninera_nombre)}</div>
+        <div class="helper" style="margin:0;">${p.estado==='activa'?'Colocada, trabajando':'Libre para una nueva colocación'}</div>
+      </div>
+    </div>`).join('') : '<div class="empty">Todavía no hay niñeras colocadas vía Agencia Enrique.</div>'}`;
 }
 async function abrirModalInterPoolNinera(poolId){
   const p = interNinierasPool.find(x=>x.id===poolId);
@@ -73,50 +122,33 @@ async function cambiarEstadoPoolEnrique(poolId, nuevoEstado){
   renderIntermediaciones(document.getElementById('modcontent'));
 }
 
-/* ---- historial combinado (colocaciones Enrique + eventos) ---- */
-async function renderInterHistorial(){
-  const body = document.getElementById('inter-body');
-  if(!body) return;
-  const [{data:enrique}, {data:eventos}] = await Promise.all([
-    sb.from('intermediaciones_enrique').select('*').order('fecha', {ascending:false}),
-    sb.from('intermediaciones_eventos').select('*, intermediaciones_eventos_ninieras(*)').order('fecha', {ascending:false}),
-  ]);
-  const items = [
-    ...(enrique||[]).map(e=>({...e, _tipo:'enrique'})),
-    ...(eventos||[]).map(e=>({...e, _tipo:'evento'})),
-  ].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
-  if(!items.length){ body.innerHTML = '<div class="empty">Todavía no hay colocaciones ni eventos cargados.</div>'; return; }
-  body.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">${items.map(filaInterHistorial).join('')}</div>`;
-}
+/* ---- lista combinada (colocaciones Enrique + eventos) ---- */
+async function renderInterHistorial(){ return renderIntermediaciones(document.getElementById('modcontent')); }
 function filaInterHistorial(it){
   const fechaFmt = it.fecha ? new Date(it.fecha+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}) : '—';
-  if(it._tipo==='enrique'){
-    return `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterEnriqueDetalle(${argJs(it.id)})">
-      <span class="badge brand">Enrique</span>
+  const esEnrique = it._tipo==='enrique';
+  const detalle = esEnrique
+    ? `${it.ninera_id ? 'entrada única' : 'persona externa'}`
+    : escaparHtml((it.intermediaciones_eventos_ninieras||[]).map(n=>n.ninera_nombre).join(', ') || 'sin niñeras cargadas');
+  const abrir = esEnrique ? `abrirModalInterEnriqueDetalle(${argJs(it.id)})` : `abrirModalInterEventoDetalle(${argJs(it.id)})`;
+  return `<div class="inter-fila" onclick="${abrir}">
+      <span class="badge ${esEnrique ? 'brand' : 'accent'}">${esEnrique ? 'Colocación' : 'Evento'}</span>
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;color:var(--ink);">${escaparHtml(it.ninera_nombre)}</div>
-        <div class="helper" style="margin:0;">${fechaFmt} · entrada única${it.ninera_id ? '' : ' · persona externa'}</div>
+        <div style="font-weight:700;color:var(--ink);">${escaparHtml(esEnrique ? it.ninera_nombre : it.empresa)}</div>
+        <div class="helper" style="margin:0;">${fechaFmt} · ${detalle}</div>
       </div>
-      <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink);">$${Number(it.monto||0).toLocaleString('es-UY')}</div>
+      <div class="inter-fila-plata">
+        <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink);">$${Number((esEnrique ? it.monto : it.cobro_total)||0).toLocaleString('es-UY')}</div>
+        <span class="badge ${it.cobrado ? 'good' : 'warn'}">${it.cobrado ? 'Cobrada' : 'Pendiente'}</span>
+      </div>
     </div>`;
-  }
-  const ninieras = (it.intermediaciones_eventos_ninieras||[]).map(n=>n.ninera_nombre).join(', ');
-  return `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;" onclick="abrirModalInterEventoDetalle(${argJs(it.id)})">
-    <span class="badge accent">Evento</span>
-    <div style="flex:1;min-width:0;">
-      <div style="font-weight:700;color:var(--ink);">${escaparHtml(it.empresa)}</div>
-      <div class="helper" style="margin:0;">${fechaFmt} · ${escaparHtml(ninieras || 'sin niñeras cargadas')}</div>
-    </div>
-    <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink);">$${Number(it.cobro_total||0).toLocaleString('es-UY')}</div>
-  </div>`;
 }
 
 /* ---- form: colocación Agencia Enrique ---- */
-function renderInterFormEnrique(){
-  const body = document.getElementById('inter-body');
-  if(!body) return;
-  body.innerHTML = `
-    <div class="card">
+function abrirFormInterEnrique(){
+  abrirModal(`
+    <h2 style="margin:0 0 12px;">Colocación de Enrique</h2>
+    <div>
       <div class="field" style="position:relative;">
         <label>Niñera o persona externa</label>
         <input type="text" id="inter-enrique-ninera" autocomplete="off" placeholder="Buscar niñera o escribir el nombre…">
@@ -131,7 +163,7 @@ function renderInterFormEnrique(){
       <div id="inter-enrique-warn"></div>
       <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>guardarIntermediacionEnrique())">Guardar colocación</button>
     </div>
-  `;
+  `);
   interEnriqueSel = null;
   attachAutocomplete('inter-enrique-ninera', 'inter-enrique-ninera-dropdown', ()=>interNinieras, (o)=>{ interEnriqueSel = o; avisoInterEnriqueExterna(); });
   document.getElementById('inter-enrique-ninera').addEventListener('input', avisoInterEnriqueExterna);
@@ -171,7 +203,7 @@ async function guardarIntermediacionEnrique(){
   if(error){ warn.innerHTML = errBox(error); return; }
   if(!ninera){
     toast('Colocación registrada (persona externa, no se suma a Niñeras).');
-    interTab = 'historial';
+    cerrarModal();
     renderModulo();
     return;
   }
@@ -190,7 +222,7 @@ async function guardarIntermediacionEnrique(){
   } else {
     toast('Colocación registrada — la niñera ya no aparece en Niñeras.');
   }
-  interTab = 'historial';
+  cerrarModal();
   renderModulo();
 }
 async function abrirModalInterEnriqueDetalle(id){
@@ -246,13 +278,12 @@ function quitarFilaInterEvento(key){
   const el = document.getElementById('inter-evtfila-'+key);
   if(el) el.remove();
 }
-function renderInterFormEvento(){
-  const body = document.getElementById('inter-body');
-  if(!body) return;
+function abrirFormInterEvento(){
   interEventoFilas = [];
   interEventoFilaSeq = 0;
-  body.innerHTML = `
-    <div class="card">
+  abrirModal(`
+    <h2 style="margin:0 0 12px;">Evento</h2>
+    <div>
       <div class="field" style="position:relative;">
         <label>Empresa</label>
         <input type="text" id="inter-evento-empresa" autocomplete="off" placeholder="Buscar o escribir el nombre de la empresa…">
@@ -269,7 +300,7 @@ function renderInterFormEvento(){
       <div id="inter-evento-warn"></div>
       <button class="btn primary" style="width:100%;" onclick="conGuardado(this, ()=>guardarIntermediacionEvento())">Guardar evento</button>
     </div>
-  `;
+  `);
   attachAutocomplete('inter-evento-empresa', 'inter-evento-empresa-dropdown', ()=>interEmpresas, ()=>{});
   agregarFilaInterEvento();
 }
@@ -302,7 +333,7 @@ async function guardarIntermediacionEvento(){
   const { error: error2 } = await sb.from('intermediaciones_eventos_ninieras').insert(filasInsert);
   if(error2){ warn.innerHTML = errBox(error2); return; }
   toast('Evento registrado.');
-  interTab = 'historial';
+  cerrarModal();
   renderModulo();
 }
 async function abrirModalInterEventoDetalle(id){

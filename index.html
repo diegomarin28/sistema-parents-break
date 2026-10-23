@@ -403,6 +403,24 @@ details.crit ul{margin:8px 0 0;padding-left:18px;line-height:1.6;}
 .confirmbox h2,.confirmbox .helper,.confirmbox td,.person-list .name,.agendarow{overflow-wrap:anywhere;}
 .pago-fila{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
 .pago-fila .pago-monto{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+/* Intermediaciones en una sola pantalla (23/10/2026): chips para filtrar, "+ Nueva", la lista y
+   "Niñeras de Enrique" plegable. */
+.inter-barra{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:6px 0 14px;}
+.inter-filtros{display:flex;gap:6px;flex-wrap:wrap;}
+.filtro-chip{min-height:44px;padding:0 16px;border-radius:100px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
+.filtro-chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+.inter-nueva{min-height:44px;}
+.inter-fila{display:flex;align-items:center;gap:10px;min-height:44px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;}
+.inter-fila:last-child{border-bottom:none;}
+.inter-fila-plata{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none;}
+.inter-pool{margin-top:14px;padding:0;overflow:hidden;}
+.inter-pool summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;}
+.inter-pool[open] summary{border-bottom:1px solid var(--line);}
+.inter-pool-fila{display:flex;align-items:center;gap:10px;min-height:44px;padding:10px 16px;border-bottom:1px solid var(--line);cursor:pointer;flex-wrap:wrap;}
+.inter-pool-fila:last-child{border-bottom:none;}
+.inter-elegir{display:flex;flex-direction:column;gap:10px;}
+.inter-elegir button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;min-height:56px;padding:10px 14px;}
+.inter-elegir button .helper{margin:0;font-weight:400;}
 /* Por cobrar / Por pagar: una tarjeta por familia o niñera, con el detalle para marcar solo una
    parte (23/10/2026). Renglones de 44 px y casillas grandes: lo usan desde el celular. */
 .fin-pend-cabeza{cursor:pointer;min-height:44px;min-width:0;flex:1 1 230px;}

@@ -271,6 +271,8 @@ npm run test:static               # solo los chequeos estáticos (segundos)
   `ninera_id`) o con una niñera de la lista, errores, doble toque, historial y ficha.
 - `tests/finanzas-arreglos.spec.js`: copiar cuenta y monto en Por pagar, "Falta la cuenta", resumen
   sin semanas en curso y con meses anteriores, puntito rojo por eventos, error y Reintentar.
+- `tests/intermediaciones-lista.spec.js`: Intermediaciones en una pantalla (lista con tipo, fecha, monto y
+  cobrada / pendiente, chips, "+ Nueva" en un modal, base que falla, "Niñeras de Enrique" plegable, 390 y 1280 px).
 - `tests/intermediaciones-finanzas.spec.js`: intermediaciones en el resumen del mes, el balance,
   Movimientos y Por cobrar / Por pagar (confirmación, ya marcado, falla, doble toque, escape, 390px).
 - `tests/terminos.spec.js`: términos y condiciones: casilla en la ficha y en el alta, bordes del redondeo
@@ -463,6 +465,9 @@ reporte.
 - Colocaciones de Enrique (19/10/2026): `intermediaciones_enrique.ninera_id` puede venir vacío
   (persona externa, empleada de Enrique): se guarda solo `ninera_nombre`, no se crea niñera ni
   entra a `intermediaciones_enrique_pool`. Lo que lea esa tabla no puede suponer `ninera_id`.
+- Intermediaciones (23/10/2026): una sola pantalla, sin pestañas. La lista de colocaciones y eventos con
+  chips Todas / Colocaciones / Eventos; "+ Nueva" pregunta qué y abre el formulario en un modal
+  (`abrirFormInterEnrique` / `abrirFormInterEvento`); "Niñeras de Enrique" plegable debajo.
 - Intermediaciones en Finanzas (20/10/2026): suman al facturado y al resultado del mes (colocación:
   `monto`; evento: `cobro_total`, y los pagos de sus niñeras van a pagos a niñeras), con la línea
   aparte "Intermediaciones" (`resumenIntermediaciones`, finanzas.js). Se cobran y pagan desde Por
